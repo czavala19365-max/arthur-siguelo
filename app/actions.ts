@@ -44,12 +44,16 @@ export async function agregarTitulo(
 }
 
 export async function eliminarTituloAction(id: string): Promise<{ error?: string }> {
+  console.log('[server] eliminarTituloAction llamado con id:', id)
   try {
     await eliminarTitulo(id)
+    console.log('[server] eliminarTitulo completado OK')
     revalidatePath('/')
     return {}
   } catch (err) {
-    return { error: err instanceof Error ? err.message : 'Error al eliminar.' }
+    const msg = err instanceof Error ? err.message : 'Error al eliminar.'
+    console.error('[server] eliminarTitulo error:', msg)
+    return { error: msg }
   }
 }
 

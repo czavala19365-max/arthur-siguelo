@@ -45,6 +45,7 @@ export default function ConsultarButton({
   ultimoEstado: string | null
 }) {
   const [result, setResult] = useState<{ estado?: string; detalle?: string; error?: string } | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
   const [isDeleting, startDeleteTransition] = useTransition()
 
@@ -59,8 +60,15 @@ export default function ConsultarButton({
 
   const handleEliminar = () => {
     if (!confirm('¿Eliminar este título y todo su historial de estados?')) return
+    setDeleteError(null)
     startDeleteTransition(async () => {
-      await eliminarTituloAction(tituloId)
+      console.log('[eliminar] llamando eliminarTituloAction con id:', tituloId)
+      const res = await eliminarTituloAction(tituloId)
+      console.log('[eliminar] resultado:', res)
+      if (res.error) {
+        console.error('[eliminar] error:', res.error)
+        setDeleteError(res.error)
+      }
     })
   }
 
@@ -74,6 +82,9 @@ export default function ConsultarButton({
         )}
         {result?.error && (
           <span className="text-xs text-red-500 leading-tight">{result.error}</span>
+        )}
+        {deleteError && (
+          <span className="text-xs text-red-500 leading-tight">{deleteError}</span>
         )}
         <button
           onClick={handleConsultar}

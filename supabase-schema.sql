@@ -49,6 +49,9 @@ create policy "Inserción pública" on titulos
 create policy "Actualización pública" on titulos
   for update using (true);
 
+create policy "Eliminación pública" on titulos
+  for delete using (true);
+
 -- Políticas para historial_estados
 create policy "Lectura pública historial" on historial_estados
   for select using (true);
