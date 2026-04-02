@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getTitulos, actualizarEstadoTitulo, registrarCambioEstado, getUltimoEstado } from '@/lib/supabase'
 import { consultarTitulo } from '@/lib/scraper'
+import { enviarAlertaEmail, enviarAlertaWhatsApp } from '@/lib/alertas'
 import type { CronResumen, CronDetalleTitulo } from '@/types'
 
 /**
@@ -51,14 +52,38 @@ export async function GET(request: NextRequest) {
 
       // ── Comparar con estado anterior ─────────────────────────────────────
       const estadoAnterior = await getUltimoEstado(titulo.id)
-      const hayCAmbio = estadoAnterior !== null && estadoAnterior !== resultado.estado
+      const hayCambio = estadoAnterior !== null && estadoAnterior !== resultado.estado
 
-      if (hayCAmbio) {
+      if (hayCambio) {
+        const detectadoEn = new Date().toISOString()
+
+        // 1. Guardar en historial
         await registrarCambioEstado({
           titulo_id: titulo.id,
           estado_anterior: estadoAnterior!,
           estado_nuevo: resultado.estado,
         })
+
+        // 2. Enviar alertas (email + WhatsApp en paralelo, sin bloquear si una falla)
+        const datosAlerta = {
+          titulo,
+          estadoAnterior: estadoAnterior!,
+          estadoNuevo: resultado.estado,
+          detectadoEn,
+        }
+
+        const [emailResult, waResult] = await Promise.allSettled([
+          enviarAlertaEmail(datosAlerta),
+          enviarAlertaWhatsApp(datosAlerta),
+        ])
+
+        if (emailResult.status === 'rejected') {
+          console.error(`[cron] Email falló para ${titulo.numero_titulo}:`, emailResult.reason)
+        }
+        if (waResult.status === 'rejected') {
+          console.error(`[cron] WhatsApp falló para ${titulo.numero_titulo}:`, waResult.reason)
+        }
+
         resumen.conCambios++
         item.cambio = true
       }
