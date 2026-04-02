@@ -114,9 +114,15 @@ export async function enviarAlertaEmail(datos: DatosAlerta): Promise<void> {
   const resend = new Resend(apiKey)
   const from = process.env.RESEND_FROM_EMAIL ?? 'alertas@arthur-siguelo.com'
 
+  // Soporta múltiples emails separados por coma
+  const destinatarios = datos.titulo.email_cliente
+    .split(',')
+    .map(e => e.trim())
+    .filter(Boolean)
+
   const { error } = await resend.emails.send({
     from,
-    to: datos.titulo.email_cliente,
+    to: destinatarios,
     subject: `⚠️ Cambio de estado — Título ${datos.titulo.numero_titulo}`,
     html: htmlEmail(datos),
   })

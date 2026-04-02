@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { createTitulo, getTituloById, actualizarEstadoTitulo, registrarCambioEstado, getUltimoEstado } from '@/lib/supabase'
+import { createTitulo, getTituloById, actualizarEstadoTitulo, registrarCambioEstado, getUltimoEstado, eliminarTitulo } from '@/lib/supabase'
 import { consultarTitulo } from '@/lib/scraper'
 import type { TituloFormState } from '@/types'
 
@@ -40,6 +40,16 @@ export async function agregarTitulo(
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Error desconocido'
     return { error: `Error al guardar: ${message}` }
+  }
+}
+
+export async function eliminarTituloAction(id: string): Promise<{ error?: string }> {
+  try {
+    await eliminarTitulo(id)
+    revalidatePath('/')
+    return {}
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error al eliminar.' }
   }
 }
 

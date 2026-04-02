@@ -58,3 +58,9 @@ export async function getTituloById(id: string): Promise<Titulo | null> {
     .single()
   return data ?? null
 }
+
+export async function eliminarTitulo(id: string): Promise<void> {
+  // historial_estados se elimina en cascada por la FK con ON DELETE CASCADE
+  const { error } = await supabase.from('titulos').delete().eq('id', id)
+  if (error) throw new Error(error.message)
+}
