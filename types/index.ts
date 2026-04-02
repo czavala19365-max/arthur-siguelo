@@ -13,3 +13,28 @@ export type TituloFormState = {
   error?: string
   success?: boolean
 }
+
+export type HistorialEstado = {
+  id: string
+  titulo_id: string
+  estado_anterior: string
+  estado_nuevo: string
+  detectado_en: string
+}
+
+export type CronResumen = {
+  total: number
+  exitosos: number
+  conCambios: number
+  errores: number
+  detalle: CronDetalleTitulo[]
+}
+
+export type CronDetalleTitulo = {
+  id: string
+  numero_titulo: string
+  oficina_registral: string
+  estado?: string
+  cambio?: boolean
+  error?: string
+}

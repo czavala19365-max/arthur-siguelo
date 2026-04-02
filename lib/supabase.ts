@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-import type { Titulo } from '@/types'
+import type { Titulo, HistorialEstado } from '@/types'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -21,4 +21,31 @@ export async function createTitulo(
 ): Promise<void> {
   const { error } = await supabase.from('titulos').insert([titulo])
   if (error) throw new Error(error.message)
+}
+
+export async function actualizarEstadoTitulo(
+  id: string,
+  nuevoEstado: string
+): Promise<void> {
+  const { error } = await supabase
+    .from('titulos')
+    .update({ ultimo_estado: nuevoEstado, ultima_consulta: new Date().toISOString() })
+    .eq('id', id)
+  if (error) throw new Error(error.message)
+}
+
+export async function registrarCambioEstado(
+  entrada: Omit<HistorialEstado, 'id' | 'detectado_en'>
+): Promise<void> {
+  const { error } = await supabase.from('historial_estados').insert([entrada])
+  if (error) throw new Error(error.message)
+}
+
+export async function getUltimoEstado(titulo_id: string): Promise<string | null> {
+  const { data } = await supabase
+    .from('titulos')
+    .select('ultimo_estado')
+    .eq('id', titulo_id)
+    .single()
+  return data?.ultimo_estado ?? null
 }
