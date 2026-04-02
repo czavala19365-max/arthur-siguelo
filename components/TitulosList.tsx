@@ -1,5 +1,6 @@
 import { getTitulos } from '@/lib/supabase'
 import type { Titulo } from '@/types'
+import ConsultarButton from './ConsultarButton'
 
 function TituloRow({ titulo }: { titulo: Titulo }) {
   const fecha = new Date(titulo.created_at).toLocaleDateString('es-PE', {
@@ -14,17 +15,14 @@ function TituloRow({ titulo }: { titulo: Titulo }) {
         <div className="font-medium">{titulo.numero_titulo}</div>
         <div className="text-xs text-gray-500">{titulo.anio_titulo}</div>
       </td>
-      <td className="px-4 py-3 text-sm text-gray-600 max-w-48">
+      <td className="px-4 py-3 text-sm text-gray-600 max-w-36">
         <span className="truncate block" title={titulo.oficina_registral}>
           {titulo.oficina_registral}
         </span>
       </td>
       <td className="px-4 py-3 text-sm text-gray-900">{titulo.nombre_cliente}</td>
       <td className="px-4 py-3 text-sm text-gray-600">
-        <a
-          href={`mailto:${titulo.email_cliente}`}
-          className="hover:text-blue-600 transition-colors"
-        >
+        <a href={`mailto:${titulo.email_cliente}`} className="hover:text-blue-600 transition-colors">
           {titulo.email_cliente}
         </a>
       </td>
@@ -37,6 +35,12 @@ function TituloRow({ titulo }: { titulo: Titulo }) {
         >
           {titulo.whatsapp_cliente}
         </a>
+      </td>
+      <td className="px-4 py-3">
+        <ConsultarButton
+          tituloId={titulo.id}
+          ultimoEstado={titulo.ultimo_estado ?? null}
+        />
       </td>
       <td className="px-4 py-3 text-xs text-gray-400 whitespace-nowrap">{fecha}</td>
     </tr>
@@ -56,9 +60,7 @@ export default async function TitulosList() {
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
       <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-gray-900">
-          Títulos monitoreados
-        </h2>
+        <h2 className="text-lg font-semibold text-gray-900">Títulos monitoreados</h2>
         <span className="text-sm text-gray-500">
           {titulos.length} {titulos.length === 1 ? 'registro' : 'registros'}
         </span>
@@ -76,11 +78,12 @@ export default async function TitulosList() {
             <thead>
               <tr className="bg-gray-50 text-xs font-medium text-gray-500 uppercase tracking-wide">
                 <th className="px-4 py-3">Nº Título</th>
-                <th className="px-4 py-3">Oficina registral</th>
+                <th className="px-4 py-3">Oficina</th>
                 <th className="px-4 py-3">Cliente</th>
                 <th className="px-4 py-3">Email</th>
                 <th className="px-4 py-3">WhatsApp</th>
-                <th className="px-4 py-3">Fecha</th>
+                <th className="px-4 py-3">Estado</th>
+                <th className="px-4 py-3">Agregado</th>
               </tr>
             </thead>
             <tbody>

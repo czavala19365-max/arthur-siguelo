@@ -49,3 +49,12 @@ export async function getUltimoEstado(titulo_id: string): Promise<string | null>
     .single()
   return data?.ultimo_estado ?? null
 }
+
+export async function getTituloById(id: string): Promise<Titulo | null> {
+  const { data } = await supabase
+    .from('titulos')
+    .select('*')
+    .eq('id', id)
+    .single()
+  return data ?? null
+}

@@ -16,6 +16,8 @@ const tituloFake: Titulo = {
   nombre_cliente: 'Carlos Zavala',
   email_cliente: 'czavala19365@gmail.com',
   whatsapp_cliente: '+51999999999',
+  ultimo_estado: 'EN CALIFICACION',
+  ultima_consulta: null,
   created_at: new Date().toISOString(),
 }
 

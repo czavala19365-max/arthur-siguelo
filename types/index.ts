@@ -6,6 +6,8 @@ export type Titulo = {
   nombre_cliente: string
   email_cliente: string
   whatsapp_cliente: string
+  ultimo_estado: string | null
+  ultima_consulta: string | null
   created_at: string
 }
 
