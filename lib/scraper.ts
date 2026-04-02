@@ -1,4 +1,4 @@
-import chromium from '@sparticuz/chromium'
+import chromium from '@sparticuz/chromium-min'
 import puppeteer from 'puppeteer-core'
 import { Solver } from '@2captcha/captcha-solver'
 import CryptoJS from 'crypto-js'
@@ -123,7 +123,10 @@ export async function consultarTitulo(params: ScraperParams): Promise<ScraperRes
   // En producción (Vercel/Lambda) @sparticuz/chromium extrae su binario a /tmp.
   // En local se puede apuntar a Chrome instalado con CHROME_EXECUTABLE_PATH.
   const executablePath =
-    process.env.CHROME_EXECUTABLE_PATH ?? (await chromium.executablePath())
+    process.env.CHROME_EXECUTABLE_PATH ??
+    (await chromium.executablePath(
+      'https://github.com/Sparticuz/chromium/releases/download/v123.0.1/chromium-v123.0.1-pack.tar'
+    ))
 
   const browser = await puppeteer.launch({
     args: chromium.args,
