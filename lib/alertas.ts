@@ -7,11 +7,12 @@ export type DatosAlerta = {
   estadoAnterior: string
   estadoNuevo: string
   detectadoEn: string
+  detalle?: string
 }
 
 // ── Email con Resend ──────────────────────────────────────────────────────────
 
-function htmlEmail({ titulo, estadoAnterior, estadoNuevo, detectadoEn }: DatosAlerta): string {
+function htmlEmail({ titulo, estadoAnterior, estadoNuevo, detectadoEn, detalle }: DatosAlerta): string {
   const fecha = new Date(detectadoEn).toLocaleString('es-PE', {
     timeZone: 'America/Lima',
     dateStyle: 'long',
@@ -56,11 +57,17 @@ function htmlEmail({ titulo, estadoAnterior, estadoNuevo, detectadoEn }: DatosAl
                 </td>
               </tr>
               <tr>
-                <td style="padding:16px 20px">
+                <td style="padding:16px 20px${detalle ? ';border-bottom:1px solid #e2e8f0' : ''}">
                   <p style="margin:0;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.5px">Número de título</p>
                   <p style="margin:4px 0 0;font-size:14px;color:#111827;font-weight:600">${titulo.anio_titulo} — ${titulo.numero_titulo}</p>
                 </td>
               </tr>
+              ${detalle ? `<tr>
+                <td style="padding:16px 20px">
+                  <p style="margin:0;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.5px">Acto registral</p>
+                  <p style="margin:4px 0 0;font-size:14px;color:#111827;font-weight:600">${detalle}</p>
+                </td>
+              </tr>` : ''}
             </table>
           </td>
         </tr>
