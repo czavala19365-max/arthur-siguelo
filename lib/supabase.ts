@@ -18,9 +18,14 @@ export async function getTitulos(): Promise<Titulo[]> {
 
 export async function createTitulo(
   titulo: Omit<Titulo, 'id' | 'created_at'>
-): Promise<void> {
-  const { error } = await supabase.from('titulos').insert([titulo])
+): Promise<string> {
+  const { data, error } = await supabase
+    .from('titulos')
+    .insert([titulo])
+    .select('id')
+    .single()
   if (error) throw new Error(error.message)
+  return data.id as string
 }
 
 export async function actualizarEstadoTitulo(

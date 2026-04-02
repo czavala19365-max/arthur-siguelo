@@ -43,6 +43,53 @@ export async function agregarTitulo(
   }
 }
 
+export async function agregarYConsultarTitulo(
+  formData: FormData
+): Promise<{ error?: string; success?: boolean; estado?: string; detalle?: string }> {
+  const oficina_registral = formData.get('oficina_registral') as string
+  const anio_titulo = Number(formData.get('anio_titulo'))
+  const numero_titulo = formData.get('numero_titulo') as string
+  const nombre_cliente = formData.get('nombre_cliente') as string
+  const email_cliente = formData.get('email_cliente') as string
+  const whatsapp_cliente = formData.get('whatsapp_cliente') as string
+
+  if (!oficina_registral || !anio_titulo || !numero_titulo || !nombre_cliente || !email_cliente || !whatsapp_cliente) {
+    return { error: 'Todos los campos son obligatorios.' }
+  }
+
+  if (anio_titulo < 1900 || anio_titulo > new Date().getFullYear() + 1) {
+    return { error: 'El año del título no es válido.' }
+  }
+
+  let tituloId: string
+  try {
+    tituloId = await createTitulo({
+      oficina_registral,
+      anio_titulo,
+      numero_titulo,
+      nombre_cliente,
+      email_cliente,
+      whatsapp_cliente,
+      ultimo_estado: null,
+      ultima_consulta: null,
+    })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Error desconocido'
+    return { error: `Error al guardar: ${message}` }
+  }
+
+  try {
+    const resultado = await consultarTitulo({ oficina_registral, anio_titulo, numero_titulo })
+    await actualizarEstadoTitulo(tituloId, resultado.estado)
+    revalidatePath('/')
+    return { success: true, estado: resultado.estado, detalle: resultado.detalle ?? undefined }
+  } catch {
+    // El título ya fue guardado; devolvemos éxito parcial
+    revalidatePath('/')
+    return { success: true }
+  }
+}
+
 export async function eliminarTituloAction(id: string): Promise<{ error?: string }> {
   console.log('[server] eliminarTituloAction llamado con id:', id)
   try {
