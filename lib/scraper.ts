@@ -162,11 +162,14 @@ export async function consultarTitulo(params: ScraperParams): Promise<ScraperRes
   const turnstileToken = captchaResult.data
 
   // ── 3. Construir y encriptar el payload ───────────────────────────────────
+  // SUNARP almacena números con 8 dígitos rellenos con ceros (ej. "431663" → "00431663")
+  const numeroTitulo = params.numero_titulo.padStart(8, '0')
+
   const innerPayload = {
     codigoZona:    oficina.zona,
     codigoOficina: oficina.oficina,
     anioTitulo:    String(params.anio_titulo),
-    numeroTitulo:  params.numero_titulo,
+    numeroTitulo,
     ip:            ipPc,
     userApp:       'sigue+',
     userCrea:      'sigue+',
@@ -216,15 +219,20 @@ export async function consultarTitulo(params: ScraperParams): Promise<ScraperRes
   }
 
   // ── 6. Extraer estado del título ──────────────────────────────────────────
+  // La API devuelve los datos dentro de lstTitulo[0]
+  type TituloEntry = Record<string, string>
+  const lstTitulo = data.lstTitulo as TituloEntry[] | undefined
+  const tituloEntry = lstTitulo?.[0]
+
   const estado =
+    tituloEntry?.estadoActual ??
     (data.estado as string) ??
     (data.estadoTitulo as string) ??
-    (data.estadoActual as string) ??
     'Sin estado'
 
   const detalle =
+    tituloEntry?.actoRegistral ??
     (data.detalle as string) ??
-    (data.descripcion as string) ??
     null
 
   return {
