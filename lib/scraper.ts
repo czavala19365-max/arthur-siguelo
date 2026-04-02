@@ -1,4 +1,5 @@
-import puppeteer from 'puppeteer'
+import chromium from '@sparticuz/chromium'
+import puppeteer from 'puppeteer-core'
 import { Solver } from '@2captcha/captcha-solver'
 import CryptoJS from 'crypto-js'
 
@@ -119,9 +120,16 @@ export async function consultarTitulo(params: ScraperParams): Promise<ScraperRes
   const solver = new Solver(apiKey)
 
   // ── 1. Puppeteer: cookies + IP pública ────────────────────────────────────
+  // En producción (Vercel/Lambda) @sparticuz/chromium extrae su binario a /tmp.
+  // En local se puede apuntar a Chrome instalado con CHROME_EXECUTABLE_PATH.
+  const executablePath =
+    process.env.CHROME_EXECUTABLE_PATH ?? (await chromium.executablePath())
+
   const browser = await puppeteer.launch({
+    args: chromium.args,
+    executablePath,
     headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    defaultViewport: { width: 1280, height: 720 },
   })
 
   let cookies: string
