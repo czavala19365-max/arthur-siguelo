@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createTitulo, getTituloById, actualizarEstadoTitulo, registrarCambioEstado, getUltimoEstado, eliminarTitulo } from '@/lib/supabase'
 import { consultarTitulo } from '@/lib/scraper'
+import { enviarConfirmacionAgregado } from '@/lib/alertas'
 import type { TituloFormState } from '@/types'
 
 export async function agregarTitulo(
@@ -81,6 +82,18 @@ export async function agregarYConsultarTitulo(
   try {
     const resultado = await consultarTitulo({ oficina_registral, anio_titulo, numero_titulo })
     await actualizarEstadoTitulo(tituloId, resultado.estado)
+
+    // Enviar email de confirmación (no bloquea si falla)
+    const tituloGuardado = await getTituloById(tituloId)
+    if (tituloGuardado) {
+      enviarConfirmacionAgregado({
+        titulo: tituloGuardado,
+        estado: resultado.estado,
+        detalle: resultado.detalle ?? undefined,
+        registradoEn: new Date().toISOString(),
+      }).catch(() => { /* silencioso */ })
+    }
+
     revalidatePath('/')
     return { success: true, estado: resultado.estado, detalle: resultado.detalle ?? undefined }
   } catch {

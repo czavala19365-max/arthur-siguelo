@@ -130,6 +130,145 @@ export async function enviarAlertaEmail(datos: DatosAlerta): Promise<void> {
   if (error) throw new Error(`Resend error: ${error.message}`)
 }
 
+// ── Email de confirmación al agregar título ───────────────────────────────────
+
+export type DatosConfirmacion = {
+  titulo: Titulo
+  estado: string
+  detalle?: string
+  registradoEn: string
+}
+
+function htmlConfirmacion({ titulo, estado, detalle, registradoEn }: DatosConfirmacion): string {
+  const fecha = new Date(registradoEn).toLocaleString('es-PE', {
+    timeZone: 'America/Lima',
+    dateStyle: 'long',
+    timeStyle: 'short',
+  })
+
+  // Colores por estado (mismos que el badge del UI)
+  const ESTADO_COLORS: Record<string, { bg: string; text: string }> = {
+    'PRESENTADO':  { bg: '#CCFBF1', text: '#0D9488' },
+    'REINGRESADO': { bg: '#DBEAFE', text: '#2563EB' },
+    'APELADO':     { bg: '#FFEDD5', text: '#F97316' },
+    'EN PROCESO':  { bg: '#F3F4F6', text: '#6B7280' },
+    'DISTRIBUIDO': { bg: '#FCE7F3', text: '#EC4899' },
+    'LIQUIDADO':   { bg: '#DCFCE7', text: '#15803D' },
+    'PRORROGADO':  { bg: '#E0F2FE', text: '#38BDF8' },
+    'OBSERVADO':   { bg: '#FEE2E2', text: '#DC2626' },
+    'TACHADO':     { bg: '#F1F5F9', text: '#111827' },
+    'INSCRITO':    { bg: '#DCFCE7', text: '#166534' },
+  }
+  const estadoColor = ESTADO_COLORS[estado.toUpperCase()] ?? { bg: '#F3F4F6', text: '#374151' }
+
+  return `<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:Arial,Helvetica,sans-serif">
+  <table width="100%" cellpadding="0" cellspacing="0" style="padding:32px 16px">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e4e4e7">
+
+        <!-- Cabecera -->
+        <tr>
+          <td style="background:#1d4ed8;padding:24px 32px">
+            <p style="margin:0;color:#bfdbfe;font-size:12px;text-transform:uppercase;letter-spacing:1px">Arthur Síguelo</p>
+            <h1 style="margin:4px 0 0;color:#ffffff;font-size:20px;font-weight:700">
+              Título agregado a seguimiento
+            </h1>
+          </td>
+        </tr>
+
+        <!-- Saludo -->
+        <tr>
+          <td style="padding:28px 32px 0">
+            <p style="margin:0;color:#374151;font-size:15px">
+              Hola <strong>${titulo.nombre_cliente}</strong>, tu título registral ha sido agregado exitosamente al sistema de monitoreo.
+            </p>
+          </td>
+        </tr>
+
+        <!-- Datos del título -->
+        <tr>
+          <td style="padding:20px 32px">
+            <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0">
+              <tr>
+                <td style="padding:14px 20px;border-bottom:1px solid #e2e8f0">
+                  <p style="margin:0;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.5px">Oficina registral</p>
+                  <p style="margin:4px 0 0;font-size:14px;color:#111827;font-weight:600">${titulo.oficina_registral}</p>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:14px 20px;border-bottom:1px solid #e2e8f0">
+                  <p style="margin:0;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.5px">Número de título</p>
+                  <p style="margin:4px 0 0;font-size:14px;color:#111827;font-weight:600">${titulo.anio_titulo} — ${titulo.numero_titulo}</p>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:14px 20px;border-bottom:1px solid #e2e8f0">
+                  <p style="margin:0;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.5px">Estado actual</p>
+                  <p style="margin:4px 0 0">
+                    <span style="display:inline-block;padding:3px 10px;border-radius:9999px;font-size:13px;font-weight:700;background:${estadoColor.bg};color:${estadoColor.text}">
+                      ${estado}
+                    </span>
+                    ${detalle ? `<span style="font-size:13px;color:#6b7280;margin-left:8px">${detalle}</span>` : ''}
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:14px 20px;border-bottom:1px solid #e2e8f0">
+                  <p style="margin:0;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.5px">Fecha de registro</p>
+                  <p style="margin:4px 0 0;font-size:14px;color:#111827;font-weight:600">${fecha}</p>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:14px 20px">
+                  <p style="margin:0;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.5px">Próxima consulta automática</p>
+                  <p style="margin:4px 0 0;font-size:14px;color:#111827;font-weight:600">Mañana a las 8:00 am</p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- Pie -->
+        <tr>
+          <td style="background:#f8fafc;border-top:1px solid #e4e4e7;padding:16px 32px">
+            <p style="margin:0;font-size:12px;color:#9ca3af">
+              Arthur Síguelo — Monitor de títulos registrales SUNARP · Recibirás alertas automáticas ante cualquier cambio de estado.
+            </p>
+          </td>
+        </tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`
+}
+
+export async function enviarConfirmacionAgregado(datos: DatosConfirmacion): Promise<void> {
+  const apiKey = process.env.RESEND_API_KEY
+  if (!apiKey) throw new Error('RESEND_API_KEY no configurada.')
+
+  const resend = new Resend(apiKey)
+  const from = process.env.RESEND_FROM_EMAIL ?? 'alertas@arthur-siguelo.com'
+
+  const destinatarios = datos.titulo.email_cliente
+    .split(',')
+    .map(e => e.trim())
+    .filter(Boolean)
+
+  const { error } = await resend.emails.send({
+    from,
+    to: destinatarios,
+    subject: `Título ${datos.titulo.anio_titulo}-${datos.titulo.numero_titulo} agregado a seguimiento - Arthur Legal AI`,
+    html: htmlConfirmacion(datos),
+  })
+
+  if (error) throw new Error(`Resend error: ${error.message}`)
+}
+
 // ── WhatsApp con Twilio ───────────────────────────────────────────────────────
 
 export async function enviarAlertaWhatsApp(datos: DatosAlerta): Promise<void> {
