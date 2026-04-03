@@ -1,10 +1,10 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { createTitulo, getTituloById, actualizarEstadoTitulo, registrarCambioEstado, getUltimoEstado, eliminarTitulo } from '@/lib/supabase'
+import { createTitulo, getTituloById, actualizarEstadoTitulo, registrarCambioEstado, getUltimoEstado, eliminarTitulo, getHistorialByTituloId } from '@/lib/supabase'
 import { consultarTitulo, descargarEsquela, descargarAsiento } from '@/lib/scraper'
 import { enviarConfirmacionAgregado } from '@/lib/alertas'
-import type { TituloFormState } from '@/types'
+import type { TituloFormState, HistorialEstado } from '@/types'
 
 export async function agregarTitulo(
   _prevState: TituloFormState,
@@ -235,5 +235,13 @@ export async function descargarEsquelaAction(
     return { pdfs }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error al descargar esquela.' }
+  }
+}
+
+export async function getHistorialAction(id: string): Promise<HistorialEstado[]> {
+  try {
+    return await getHistorialByTituloId(id)
+  } catch {
+    return []
   }
 }

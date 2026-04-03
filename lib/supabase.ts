@@ -78,3 +78,12 @@ export async function eliminarTitulo(id: string): Promise<void> {
   const { error } = await supabase.from('titulos').delete().eq('id', id)
   if (error) throw new Error(error.message)
 }
+
+export async function getHistorialByTituloId(titulo_id: string): Promise<HistorialEstado[]> {
+  const { data } = await supabase
+    .from('historial_estados')
+    .select('*')
+    .eq('titulo_id', titulo_id)
+    .order('detectado_en', { ascending: false })
+  return data ?? []
+}

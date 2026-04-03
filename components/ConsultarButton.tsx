@@ -2,58 +2,19 @@
 
 import { useState, useTransition } from 'react'
 import { consultarAhora, eliminarTituloAction, descargarEsquelaAction, descargarAsientoAction } from '@/app/actions'
-
-// Colores exactos por estado (text + background con 15% opacidad)
-const ESTADO_STYLES: Record<string, { bg: string; text: string }> = {
-  'PRESENTADO':  { bg: '#CCFBF1', text: '#0D9488' },
-  'REINGRESADO': { bg: '#DBEAFE', text: '#2563EB' },
-  'APELADO':     { bg: '#FFEDD5', text: '#F97316' },
-  'EN PROCESO':  { bg: '#F3F4F6', text: '#6B7280' },
-  'DISTRIBUIDO': { bg: '#FCE7F3', text: '#EC4899' },
-  'LIQUIDADO':   { bg: '#DCFCE7', text: '#15803D' },
-  'PRORROGADO':  { bg: '#E0F2FE', text: '#38BDF8' },
-  'OBSERVADO':   { bg: '#FEE2E2', text: '#DC2626' },
-  'TACHADO':     { bg: '#F1F5F9', text: '#111827' },
-  'INSCRITO':    { bg: '#DCFCE7', text: '#166534' },
-}
-
-const LABEL_ESQUELA: Record<string, { singular: string; plural: string }> = {
-  'OBSERVADO': { singular: 'Observación',  plural: 'Observaciones' },
-  'LIQUIDADO': { singular: 'Liquidación',  plural: 'Liquidaciones' },
-  'TACHADO':   { singular: 'Tacha',        plural: 'Tachas'        },
-  'INSCRITO':  { singular: 'Inscripción',  plural: 'Inscripciones' },
-}
-
-function EstadoBadge({ estado }: { estado: string }) {
-  const key = estado.toUpperCase()
-  const style = ESTADO_STYLES[key]
-  if (style) {
-    return (
-      <span
-        className="inline-block rounded-full px-2 py-0.5 text-xs font-semibold whitespace-nowrap"
-        style={{ backgroundColor: style.bg, color: style.text }}
-      >
-        {estado}
-      </span>
-    )
-  }
-  return (
-    <span className="inline-block rounded-full px-2 py-0.5 text-xs font-semibold bg-gray-100 text-gray-700 whitespace-nowrap">
-      {estado}
-    </span>
-  )
-}
-
-const ESTADOS_CON_ESQUELA = new Set(['OBSERVADO', 'LIQUIDADO', 'TACHADO', 'INSCRITO'])
+import { ESTADO_STYLES, ESTADOS_CON_ESQUELA, LABEL_ESQUELA } from '@/lib/estados'
+import EstadoBadge from './EstadoBadge'
 
 export default function ConsultarButton({
   tituloId,
   ultimoEstado,
   areaRegistral,
+  onEliminar,
 }: {
   tituloId: string
   ultimoEstado: string | null
   areaRegistral: string | null
+  onEliminar?: () => void
 }) {
   const [result, setResult] = useState<{ estado?: string; detalle?: string; error?: string } | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
@@ -90,46 +51,37 @@ export default function ConsultarButton({
     setDeleteError(null)
     startDeleteTransition(async () => {
       const res = await eliminarTituloAction(tituloId)
-      if (res.error) setDeleteError(res.error)
+      if (res.error) {
+        setDeleteError(res.error)
+      } else {
+        onEliminar?.()
+      }
     })
   }
 
   const handleVerEsquelas = () => {
-    // Si ya están cargadas, solo toggle mostrar/ocultar
-    if (esquelas !== null) {
-      setMostrarEsquelas(v => !v)
-      return
-    }
+    if (esquelas !== null) { setMostrarEsquelas(v => !v); return }
     startEsquelaTransition(async () => {
       const res = await descargarEsquelaAction(tituloId)
-      if (res.error) {
-        setEsquelaError(res.error)
-        return
-      }
+      if (res.error) { setEsquelaError(res.error); return }
       setEsquelas(res.pdfs ?? [])
       setMostrarEsquelas(true)
     })
   }
 
   const handleVerAsientos = () => {
-    if (asientos !== null) {
-      setMostrarAsientos(v => !v)
-      return
-    }
+    if (asientos !== null) { setMostrarAsientos(v => !v); return }
     startAsientoTransition(async () => {
       const res = await descargarAsientoAction(tituloId)
       if (res.error) { setAsientoError(res.error); return }
-      if (res.pdf) {
-        setAsientos([res.pdf])
-        setMostrarAsientos(true)
-      }
+      if (res.pdf) { setAsientos([res.pdf]); setMostrarAsientos(true) }
     })
   }
 
-  const descargarPdf = (base64: string, index: number) => {
+  const descargarPdf = (base64: string, filename: string) => {
     const link = document.createElement('a')
     link.href = `data:application/pdf;base64,${base64}`
-    link.download = `esquela-${labelEsquela.singular.toLowerCase().replace('ó', 'o').replace('ó', 'o')}-${index + 1}-${tituloId.slice(0, 8)}.pdf`
+    link.download = filename
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -137,8 +89,7 @@ export default function ConsultarButton({
 
   return (
     <div className="flex items-start gap-3">
-      {/* Columna estado + acciones */}
-      <div className="flex flex-col gap-1 items-start min-w-[150px]">
+      <div className="flex flex-col gap-1.5 items-start min-w-[160px]">
         {estadoVisible && !result?.error && <EstadoBadge estado={estadoVisible} />}
         {result?.detalle && (
           <span className="text-xs text-gray-500 leading-tight">{result.detalle}</span>
@@ -150,16 +101,14 @@ export default function ConsultarButton({
           <span className="text-xs text-red-500 leading-tight">{deleteError}</span>
         )}
 
-        {/* Botón consultar / actualizar */}
         <button
           onClick={handleConsultar}
           disabled={isPending || isDeleting || esquelaPending}
           className="mt-0.5 text-xs text-blue-600 hover:text-blue-800 disabled:text-gray-400 disabled:cursor-not-allowed font-medium"
         >
-          {isPending ? '⏳ Consultando…' : ultimoEstado ? '↻ Actualizar' : 'Consultar ahora'}
+          {isPending ? '⏳ Consultando…' : ultimoEstado ? '↻ Actualizar estado' : 'Consultar ahora'}
         </button>
 
-        {/* Botón esquelas — solo para estados con esquela */}
         {tieneEsquela && (
           <button
             onClick={handleVerEsquelas}
@@ -169,18 +118,16 @@ export default function ConsultarButton({
             {esquelaPending
               ? '⏳ Cargando…'
               : esquelas !== null
-                ? (mostrarEsquelas ? `▲ Ocultar (${esquelas.length})` : `▼ Esquelas (${esquelas.length})`)
-                : `↓ Esquelas`
+                ? (mostrarEsquelas ? `▲ Ocultar (${esquelas.length})` : `▼ ${labelEsquela.plural} (${esquelas.length})`)
+                : `↓ ${labelEsquela.plural}`
             }
           </button>
         )}
 
-        {/* Error al cargar esquelas */}
         {esquelaError && (
           <span className="text-xs text-red-500 leading-tight">{esquelaError}</span>
         )}
 
-        {/* Botón asientos — solo para INSCRITO */}
         {tieneAsiento && (
           <button
             onClick={handleVerAsientos}
@@ -196,28 +143,16 @@ export default function ConsultarButton({
           </button>
         )}
 
-        {/* Error al cargar asientos */}
         {asientoError && (
           <span className="text-xs text-red-500 leading-tight">{asientoError}</span>
         )}
 
-        {/* Lista de asientos desplegada */}
         {mostrarAsientos && asientos && asientos.length > 0 && (
           <div className="mt-1 flex flex-col gap-0.5 w-full">
-            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-              {asientos.length > 1 ? `Asientos (${asientos.length})` : 'Asiento'}
-            </span>
             {asientos.map((pdf, i) => (
               <button
                 key={i}
-                onClick={() => {
-                  const link = document.createElement('a')
-                  link.href = `data:application/pdf;base64,${pdf}`
-                  link.download = `asiento-${i + 1}-${tituloId.slice(0, 8)}.pdf`
-                  document.body.appendChild(link)
-                  link.click()
-                  document.body.removeChild(link)
-                }}
+                onClick={() => descargarPdf(pdf, `asiento-${i + 1}-${tituloId.slice(0, 8)}.pdf`)}
                 className="text-left text-xs text-violet-700 hover:text-violet-900 font-medium flex items-center gap-1"
               >
                 <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -229,16 +164,15 @@ export default function ConsultarButton({
           </div>
         )}
 
-        {/* Lista de esquelas desplegada */}
         {mostrarEsquelas && esquelas && esquelas.length > 0 && (
           <div className="mt-1 flex flex-col gap-0.5 w-full">
-            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-              {esquelas.length > 1 ? `${labelEsquela.plural} (${esquelas.length})` : labelEsquela.singular}
-            </span>
             {esquelas.map((pdf, i) => (
               <button
                 key={i}
-                onClick={() => descargarPdf(pdf, i)}
+                onClick={() => descargarPdf(
+                  pdf,
+                  `${labelEsquela.singular.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')}-${i + 1}-${tituloId.slice(0, 8)}.pdf`
+                )}
                 className="text-left text-xs text-emerald-700 hover:text-emerald-900 font-medium flex items-center gap-1"
               >
                 <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">

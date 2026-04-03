@@ -1,65 +1,7 @@
 import { getTitulos } from '@/lib/supabase'
 import type { Titulo } from '@/types'
-import ConsultarButton from './ConsultarButton'
-
-function TituloRow({ titulo, index }: { titulo: Titulo; index: number }) {
-  const fecha = new Date(titulo.created_at).toLocaleDateString('es-PE', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  })
-
-  const rowBg = index % 2 === 0 ? 'bg-white' : 'bg-gray-50/60'
-
-  return (
-    <tr className={`${rowBg} hover:bg-blue-50/40 transition-colors`}>
-      <td className="px-4 py-3 text-sm text-gray-900">
-        <div className="font-semibold tabular-nums">{titulo.numero_titulo}</div>
-        <div className="text-xs text-gray-400">{titulo.anio_titulo}</div>
-      </td>
-      <td className="px-4 py-3 text-sm text-gray-600 max-w-[120px]">
-        <span className="truncate block" title={titulo.oficina_registral}>
-          {titulo.oficina_registral}
-        </span>
-      </td>
-      <td className="px-4 py-3 text-sm text-gray-900 font-medium">{titulo.nombre_cliente}</td>
-      <td className="px-4 py-3 text-sm text-gray-600 max-w-[120px]">
-        <span className="truncate block" title={titulo.proyecto ?? ''}>
-          {titulo.proyecto ?? <span className="text-gray-300">—</span>}
-        </span>
-      </td>
-      <td className="px-4 py-3 text-sm text-gray-600 max-w-[140px]">
-        <span className="truncate block" title={titulo.asunto ?? ''}>
-          {titulo.asunto ?? <span className="text-gray-300">—</span>}
-        </span>
-      </td>
-      <td className="px-4 py-3 text-sm text-gray-600">
-        {titulo.registro ?? <span className="text-gray-300">—</span>}
-      </td>
-      <td className="px-4 py-3 text-sm text-gray-600">
-        {titulo.abogado ?? <span className="text-gray-300">—</span>}
-      </td>
-      <td className="px-4 py-3 text-sm text-gray-600 max-w-[120px]">
-        <span className="truncate block" title={titulo.notaria ?? ''}>
-          {titulo.notaria ?? <span className="text-gray-300">—</span>}
-        </span>
-      </td>
-      <td className="px-4 py-3 text-sm text-gray-600">
-        <a href={`mailto:${titulo.email_cliente}`} className="hover:text-blue-600 transition-colors truncate block max-w-[140px]" title={titulo.email_cliente}>
-          {titulo.email_cliente}
-        </a>
-      </td>
-      <td className="px-4 py-3">
-        <ConsultarButton
-          tituloId={titulo.id}
-          ultimoEstado={titulo.ultimo_estado ?? null}
-          areaRegistral={titulo.area_registral ?? null}
-        />
-      </td>
-      <td className="px-4 py-3 text-xs text-gray-400 whitespace-nowrap">{fecha}</td>
-    </tr>
-  )
-}
+import { STATE_ORDER } from '@/lib/estados'
+import TituloSection from './TituloSection'
 
 export default async function TitulosList() {
   let titulos: Titulo[] = []
@@ -71,47 +13,62 @@ export default async function TitulosList() {
     errorMsg = err instanceof Error ? err.message : 'Error al cargar los títulos.'
   }
 
+  if (errorMsg) {
+    return (
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-6 py-8 text-center text-sm text-red-600">
+        {errorMsg}
+      </div>
+    )
+  }
+
+  if (titulos.length === 0) {
+    return (
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-6 py-12 text-center text-sm text-gray-400">
+        No hay títulos registrados aún.
+      </div>
+    )
+  }
+
+  // Agrupar por estado normalizado
+  const grouped = new Map<string, Titulo[]>()
+
+  for (const t of titulos) {
+    const key = (t.ultimo_estado ?? '').toUpperCase().trim()
+    if (!grouped.has(key)) grouped.set(key, [])
+    grouped.get(key)!.push(t)
+  }
+
+  // Secciones en el orden definido
+  const sections: { estado: string; titulos: Titulo[] }[] = []
+  for (const estado of STATE_ORDER) {
+    const items = grouped.get(estado)
+    if (items && items.length > 0) {
+      sections.push({ estado, titulos: items })
+      grouped.delete(estado)
+    }
+  }
+
+  // Resto de estados no contemplados en STATE_ORDER (Otros)
+  const otros: Titulo[] = []
+  for (const items of grouped.values()) {
+    otros.push(...items)
+  }
+  if (otros.length > 0) {
+    sections.push({ estado: 'OTROS', titulos: otros })
+  }
+
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-      <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-gray-900">Títulos monitoreados</h2>
-        <span className="text-sm text-gray-500">
-          {titulos.length} {titulos.length === 1 ? 'registro' : 'registros'}
+    <div className="space-y-4">
+      <div className="flex items-center justify-between px-1">
+        <h2 className="text-base font-semibold text-gray-700">Títulos monitoreados</h2>
+        <span className="text-sm text-gray-400">
+          {titulos.length} {titulos.length === 1 ? 'título' : 'títulos'} · {sections.length} {sections.length === 1 ? 'sección' : 'secciones'}
         </span>
       </div>
 
-      {errorMsg ? (
-        <div className="px-6 py-8 text-center text-sm text-red-600">{errorMsg}</div>
-      ) : titulos.length === 0 ? (
-        <div className="px-6 py-12 text-center text-sm text-gray-400">
-          No hay títulos registrados aún.
-        </div>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead>
-              <tr className="bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wide border-b border-gray-100">
-                <th className="px-4 py-3 whitespace-nowrap">Nº Título</th>
-                <th className="px-4 py-3">Oficina</th>
-                <th className="px-4 py-3">Cliente</th>
-                <th className="px-4 py-3">Proyecto</th>
-                <th className="px-4 py-3">Asunto</th>
-                <th className="px-4 py-3">Registro</th>
-                <th className="px-4 py-3">Abogado</th>
-                <th className="px-4 py-3 whitespace-nowrap">Notaría / Presentante</th>
-                <th className="px-4 py-3">Email</th>
-                <th className="px-4 py-3">Estado</th>
-                <th className="px-4 py-3">Agregado</th>
-              </tr>
-            </thead>
-            <tbody>
-              {titulos.map((t, i) => (
-                <TituloRow key={t.id} titulo={t} index={i} />
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      {sections.map(({ estado, titulos: items }) => (
+        <TituloSection key={estado} estado={estado} titulos={items} />
+      ))}
     </div>
   )
 }
