@@ -115,7 +115,9 @@ export async function agregarYConsultarTitulo(
         estado: resultado.estado,
         detalle: resultado.detalle ?? undefined,
         registradoEn: new Date().toISOString(),
-      }).catch(() => { /* silencioso */ })
+      }).catch((err) => {
+        console.error('[actions] Error al enviar email de confirmación:', err instanceof Error ? err.message : err)
+      })
     }
 
     revalidatePath('/')

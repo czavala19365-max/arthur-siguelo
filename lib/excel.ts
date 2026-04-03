@@ -39,5 +39,7 @@ export function generarExcelTitulos(titulos: Titulo[]): Buffer {
 
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, 'Títulos')
-  return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer
+  // XLSX puede devolver Uint8Array en entornos serverless — envolver en Buffer de Node explícitamente
+  const raw = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })
+  return Buffer.isBuffer(raw) ? raw : Buffer.from(raw)
 }

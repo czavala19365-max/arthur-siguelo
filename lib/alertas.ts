@@ -123,13 +123,14 @@ export async function enviarAlertaEmail(datos: DatosAlerta): Promise<void> {
     .filter(Boolean)
 
   // Generar Excel adjunto con todos los títulos
-  let attachments: { filename: string; content: Buffer }[] = []
+  let attachments: { filename: string; content: string }[] = []
   try {
     const todosTitulos = await getTitulos()
-    const excelBuffer = generarExcelTitulos(todosTitulos)
-    attachments = [{ filename: 'titulos-arthur-siguelo.xlsx', content: excelBuffer }]
-  } catch {
-    // Si falla la generación del Excel, enviar igual sin adjunto
+    const rawBuffer = generarExcelTitulos(todosTitulos)
+    const base64 = Buffer.from(rawBuffer).toString('base64')
+    attachments = [{ filename: 'titulos-arthur-siguelo.xlsx', content: base64 }]
+  } catch (excelErr) {
+    console.error('[alertas] Error al generar Excel para alerta:', excelErr instanceof Error ? excelErr.message : excelErr)
   }
 
   const { error } = await resend.emails.send({
@@ -272,17 +273,27 @@ export async function enviarConfirmacionAgregado(datos: DatosConfirmacion): Prom
     .map(e => e.trim())
     .filter(Boolean)
 
+  console.log('[alertas] enviarConfirmacionAgregado — destinatarios:', destinatarios)
+  console.log('[alertas] from:', from)
+
   // Generar Excel adjunto con todos los títulos
-  let attachments: { filename: string; content: Buffer }[] = []
+  let attachments: { filename: string; content: string }[] = []
   try {
+    console.log('[alertas] Generando Excel...')
     const todosTitulos = await getTitulos()
-    const excelBuffer = generarExcelTitulos(todosTitulos)
-    attachments = [{ filename: 'titulos-arthur-siguelo.xlsx', content: excelBuffer }]
-  } catch {
-    // Si falla la generación del Excel, enviar igual sin adjunto
+    console.log('[alertas] Títulos obtenidos para Excel:', todosTitulos.length)
+    const rawBuffer = generarExcelTitulos(todosTitulos)
+    // Convertir a base64 — más seguro que Buffer crudo en entornos serverless
+    const base64 = Buffer.from(rawBuffer).toString('base64')
+    console.log('[alertas] Excel generado OK — tamaño base64:', base64.length, 'chars')
+    attachments = [{ filename: 'titulos-arthur-siguelo.xlsx', content: base64 }]
+  } catch (excelErr) {
+    console.error('[alertas] Error al generar Excel:', excelErr instanceof Error ? excelErr.message : excelErr)
+    // Enviar email sin adjunto si falla el Excel
   }
 
-  const { error } = await resend.emails.send({
+  console.log('[alertas] Enviando email con', attachments.length, 'adjunto(s)...')
+  const { data, error } = await resend.emails.send({
     from,
     to: destinatarios,
     subject: `Título ${datos.titulo.anio_titulo}-${datos.titulo.numero_titulo} agregado a seguimiento - Arthur Legal AI`,
@@ -290,7 +301,11 @@ export async function enviarConfirmacionAgregado(datos: DatosConfirmacion): Prom
     attachments,
   })
 
-  if (error) throw new Error(`Resend error: ${error.message}`)
+  if (error) {
+    console.error('[alertas] Resend error:', JSON.stringify(error))
+    throw new Error(`Resend error: ${error.message}`)
+  }
+  console.log('[alertas] Email enviado OK — id:', data?.id)
 }
 
 // ── WhatsApp con Twilio ───────────────────────────────────────────────────────
