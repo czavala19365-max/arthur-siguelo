@@ -278,11 +278,12 @@ export type EsquelaParams = {
 }
 
 /**
- * Descarga la esquela (documento oficial) de un título desde SUNARP.
+ * Obtiene todas las esquelas (documentos oficiales) de un título desde SUNARP.
  * No requiere Puppeteer ni captcha — la API acepta plain JSON con la misma cabecera IBM.
- * Retorna el PDF codificado en base64.
+ * La API puede devolver múltiples esquelas del mismo tipo (ej: 2 Observaciones).
+ * Retorna un array de PDFs en base64, uno por cada esquela encontrada.
  */
-export async function descargarEsquela(params: EsquelaParams): Promise<string> {
+export async function descargarEsquela(params: EsquelaParams): Promise<string[]> {
   const key = params.oficina_registral.toUpperCase().trim()
   const oficina = OFICINAS[key]
   if (!oficina) throw new Error(`Oficina no reconocida: "${params.oficina_registral}"`)
@@ -330,10 +331,10 @@ export async function descargarEsquela(params: EsquelaParams): Promise<string> {
     throw new Error(data.descripcionRespuesta ?? `Error ${data.codigoRespuesta}`)
   }
 
-  const pdfBase64 = data.lstEsquela?.[0]?.esquela
-  if (!pdfBase64) throw new Error('SUNARP no devolvió el archivo esquela.')
+  const pdfs = (data.lstEsquela ?? []).map(e => e.esquela).filter(Boolean)
+  if (pdfs.length === 0) throw new Error('SUNARP no devolvió ninguna esquela.')
 
-  return pdfBase64
+  return pdfs
 }
 
 /** Lista de oficinas disponibles para el formulario */

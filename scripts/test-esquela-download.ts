@@ -8,9 +8,11 @@ descargarEsquela({
   area_registral: '22000',
   estado: 'OBSERVADO',
 })
-  .then(pdfBase64 => {
-    writeFileSync('esquela-test.pdf', Buffer.from(pdfBase64, 'base64'))
-    console.log(`✅ PDF descargado correctamente (${Math.round(pdfBase64.length * 3/4 / 1024)} KB)`)
-    console.log('   Guardado en esquela-test.pdf')
+  .then(pdfs => {
+    console.log(`✅ ${pdfs.length} esquela(s) descargadas`)
+    pdfs.forEach((pdfBase64, i) => {
+      writeFileSync(`esquela-test-${i + 1}.pdf`, Buffer.from(pdfBase64, 'base64'))
+      console.log(`   [${i + 1}] ${Math.round(pdfBase64.length * 3/4 / 1024)} KB → esquela-test-${i + 1}.pdf`)
+    })
   })
   .catch((err: Error) => console.error('❌ Error:', err.message))

@@ -17,6 +17,13 @@ const ESTADO_STYLES: Record<string, { bg: string; text: string }> = {
   'INSCRITO':    { bg: '#DCFCE7', text: '#166534' },
 }
 
+const LABEL_ESQUELA: Record<string, { singular: string; plural: string }> = {
+  'OBSERVADO': { singular: 'Observación',  plural: 'Observaciones' },
+  'LIQUIDADO': { singular: 'Liquidación',  plural: 'Liquidaciones' },
+  'TACHADO':   { singular: 'Tacha',        plural: 'Tachas'        },
+  'INSCRITO':  { singular: 'Inscripción',  plural: 'Inscripciones' },
+}
+
 function EstadoBadge({ estado }: { estado: string }) {
   const key = estado.toUpperCase()
   const style = ESTADO_STYLES[key]
@@ -50,16 +57,25 @@ export default function ConsultarButton({
 }) {
   const [result, setResult] = useState<{ estado?: string; detalle?: string; error?: string } | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [esquelas, setEsquelas] = useState<string[] | null>(null)   // null = no cargadas aún
+  const [esquelaError, setEsquelaError] = useState<string | null>(null)
+  const [mostrarEsquelas, setMostrarEsquelas] = useState(false)
   const [esquelaPending, startEsquelaTransition] = useTransition()
   const [isPending, startTransition] = useTransition()
   const [isDeleting, startDeleteTransition] = useTransition()
 
   const estadoVisible = result?.estado ?? ultimoEstado
+  const estadoParaEsquela = (result?.estado ?? ultimoEstado ?? '').toUpperCase()
+  const tieneEsquela = ESTADOS_CON_ESQUELA.has(estadoParaEsquela) && areaRegistral !== null
+  const labelEsquela = LABEL_ESQUELA[estadoParaEsquela] ?? { singular: 'Esquela', plural: 'Esquelas' }
 
   const handleConsultar = () => {
     startTransition(async () => {
       const res = await consultarAhora(tituloId)
       setResult(res)
+      // Si cambia el estado, resetear esquelas cargadas
+      setEsquelas(null)
+      setMostrarEsquelas(false)
     })
   }
 
@@ -67,41 +83,41 @@ export default function ConsultarButton({
     if (!confirm('¿Eliminar este título y todo su historial de estados?')) return
     setDeleteError(null)
     startDeleteTransition(async () => {
-      console.log('[eliminar] llamando eliminarTituloAction con id:', tituloId)
       const res = await eliminarTituloAction(tituloId)
-      console.log('[eliminar] resultado:', res)
-      if (res.error) {
-        console.error('[eliminar] error:', res.error)
-        setDeleteError(res.error)
-      }
+      if (res.error) setDeleteError(res.error)
     })
   }
 
-  const handleDescargarEsquela = () => {
+  const handleVerEsquelas = () => {
+    // Si ya están cargadas, solo toggle mostrar/ocultar
+    if (esquelas !== null) {
+      setMostrarEsquelas(v => !v)
+      return
+    }
     startEsquelaTransition(async () => {
       const res = await descargarEsquelaAction(tituloId)
       if (res.error) {
-        alert(`Error al descargar esquela: ${res.error}`)
+        setEsquelaError(res.error)
         return
       }
-      if (res.pdf) {
-        const link = document.createElement('a')
-        link.href = `data:application/pdf;base64,${res.pdf}`
-        link.download = `esquela-${tituloId}.pdf`
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
-      }
+      setEsquelas(res.pdfs ?? [])
+      setMostrarEsquelas(true)
     })
   }
 
-  const estadoParaEsquela = (result?.estado ?? ultimoEstado ?? '').toUpperCase()
-  const tieneEsquela = ESTADOS_CON_ESQUELA.has(estadoParaEsquela) && areaRegistral !== null
+  const descargarPdf = (base64: string, index: number) => {
+    const link = document.createElement('a')
+    link.href = `data:application/pdf;base64,${base64}`
+    link.download = `esquela-${labelEsquela.singular.toLowerCase().replace('ó', 'o').replace('ó', 'o')}-${index + 1}-${tituloId.slice(0, 8)}.pdf`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
 
   return (
     <div className="flex items-start gap-3">
-      {/* Columna estado + acción consultar */}
-      <div className="flex flex-col gap-1 items-start min-w-[130px]">
+      {/* Columna estado + acciones */}
+      <div className="flex flex-col gap-1 items-start min-w-[150px]">
         {estadoVisible && !result?.error && <EstadoBadge estado={estadoVisible} />}
         {result?.detalle && (
           <span className="text-xs text-gray-500 leading-tight">{result.detalle}</span>
@@ -112,6 +128,8 @@ export default function ConsultarButton({
         {deleteError && (
           <span className="text-xs text-red-500 leading-tight">{deleteError}</span>
         )}
+
+        {/* Botón consultar / actualizar */}
         <button
           onClick={handleConsultar}
           disabled={isPending || isDeleting || esquelaPending}
@@ -119,15 +137,47 @@ export default function ConsultarButton({
         >
           {isPending ? '⏳ Consultando…' : ultimoEstado ? '↻ Actualizar' : 'Consultar ahora'}
         </button>
+
+        {/* Botón esquelas — solo para estados con esquela */}
         {tieneEsquela && (
           <button
-            onClick={handleDescargarEsquela}
+            onClick={handleVerEsquelas}
             disabled={isPending || isDeleting || esquelaPending}
-            className="mt-0.5 text-xs text-emerald-600 hover:text-emerald-800 disabled:text-gray-400 disabled:cursor-not-allowed font-medium flex items-center gap-1"
-            title="Descargar esquela oficial SUNARP"
+            className="text-xs text-emerald-600 hover:text-emerald-800 disabled:text-gray-400 disabled:cursor-not-allowed font-medium"
           >
-            {esquelaPending ? '⏳ Descargando…' : '↓ Esquela'}
+            {esquelaPending
+              ? '⏳ Cargando…'
+              : esquelas !== null
+                ? (mostrarEsquelas ? `▲ Ocultar (${esquelas.length})` : `▼ Esquelas (${esquelas.length})`)
+                : `↓ Esquelas`
+            }
           </button>
+        )}
+
+        {/* Error al cargar esquelas */}
+        {esquelaError && (
+          <span className="text-xs text-red-500 leading-tight">{esquelaError}</span>
+        )}
+
+        {/* Lista de esquelas desplegada */}
+        {mostrarEsquelas && esquelas && esquelas.length > 0 && (
+          <div className="mt-1 flex flex-col gap-0.5 w-full">
+            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+              {esquelas.length > 1 ? `${labelEsquela.plural} (${esquelas.length})` : labelEsquela.singular}
+            </span>
+            {esquelas.map((pdf, i) => (
+              <button
+                key={i}
+                onClick={() => descargarPdf(pdf, i)}
+                className="text-left text-xs text-emerald-700 hover:text-emerald-900 font-medium flex items-center gap-1"
+              >
+                <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+                </svg>
+                {labelEsquela.singular} {esquelas.length > 1 ? i + 1 : ''}
+              </button>
+            ))}
+          </div>
         )}
       </div>
 

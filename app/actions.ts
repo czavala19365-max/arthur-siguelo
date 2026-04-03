@@ -153,21 +153,21 @@ export async function consultarAhora(
 
 export async function descargarEsquelaAction(
   id: string
-): Promise<{ pdf?: string; error?: string }> {
+): Promise<{ pdfs?: string[]; error?: string }> {
   try {
     const titulo = await getTituloById(id)
     if (!titulo) return { error: 'Título no encontrado.' }
     if (!titulo.ultimo_estado) return { error: 'El título no tiene estado registrado.' }
     if (!titulo.area_registral) return { error: 'Consulta el estado del título primero para obtener el área registral.' }
 
-    const pdf = await descargarEsquela({
+    const pdfs = await descargarEsquela({
       oficina_registral: titulo.oficina_registral,
       anio_titulo: titulo.anio_titulo,
       numero_titulo: titulo.numero_titulo,
       area_registral: titulo.area_registral,
       estado: titulo.ultimo_estado,
     })
-    return { pdf }
+    return { pdfs }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error al descargar esquela.' }
   }
