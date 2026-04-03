@@ -65,8 +65,8 @@ export default async function MetricsCards() {
       {metrics.map((m) => (
         <div
           key={m.label}
-          className="rounded-xl border border-white/60 px-4 py-3 shadow-sm"
-          style={{ backgroundColor: m.bg }}
+          className="rounded-xl px-4 py-3 shadow-sm"
+          style={{ backgroundColor: m.bg, border: '1px solid rgba(0,0,0,0.07)' }}
         >
           <p className="text-2xl font-bold leading-none" style={{ color: m.color }}>
             {m.value}

@@ -7,8 +7,7 @@ export default function SigueloPage() {
     <div
       style={{
         minHeight: '100vh',
-        backgroundColor: 'var(--paper)',
-        paddingLeft: '260px',
+        backgroundColor: 'var(--surface)',
       }}
     >
       <div style={{ padding: '48px 64px' }}>
