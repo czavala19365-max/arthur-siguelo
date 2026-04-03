@@ -11,6 +11,11 @@ type FormValues = {
   nombre_cliente: string
   email_cliente: string
   whatsapp_cliente: string
+  proyecto: string
+  asunto: string
+  registro: string
+  abogado: string
+  notaria: string
 }
 
 type Result = {
@@ -36,6 +41,11 @@ export default function TituloForm() {
       nombre_cliente: data.get('nombre_cliente') as string,
       email_cliente: data.get('email_cliente') as string,
       whatsapp_cliente: data.get('whatsapp_cliente') as string,
+      proyecto: data.get('proyecto') as string ?? '',
+      asunto: data.get('asunto') as string ?? '',
+      registro: data.get('registro') as string ?? '',
+      abogado: data.get('abogado') as string ?? '',
+      notaria: data.get('notaria') as string ?? '',
     })
   }
 
@@ -127,7 +137,7 @@ export default function TituloForm() {
         {/* Nombre cliente */}
         <div>
           <label htmlFor="nombre_cliente" className="block text-sm font-medium text-gray-700 mb-1">
-            Nombre del cliente
+            Cliente
           </label>
           <input
             id="nombre_cliente"
@@ -164,6 +174,84 @@ export default function TituloForm() {
               type="tel"
               placeholder="+51 999 999 999"
               required
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+        </div>
+
+        {/* Separador campos adicionales */}
+        <div className="pt-1 border-t border-gray-100">
+          <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-3">Información del expediente</p>
+        </div>
+
+        {/* Proyecto y Asunto en fila */}
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label htmlFor="proyecto" className="block text-sm font-medium text-gray-700 mb-1">
+              Proyecto
+            </label>
+            <input
+              id="proyecto"
+              name="proyecto"
+              type="text"
+              placeholder="Nombre del proyecto"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label htmlFor="asunto" className="block text-sm font-medium text-gray-700 mb-1">
+              Asunto
+            </label>
+            <input
+              id="asunto"
+              name="asunto"
+              type="text"
+              placeholder="Descripción del asunto"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+        </div>
+
+        {/* Registro */}
+        <div>
+          <label htmlFor="registro" className="block text-sm font-medium text-gray-700 mb-1">
+            Registro
+          </label>
+          <select
+            id="registro"
+            name="registro"
+            className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">Seleccionar registro…</option>
+            <option value="Personas Jurídicas">Personas Jurídicas</option>
+            <option value="Propiedad Inmueble">Propiedad Inmueble</option>
+            <option value="Otros">Otros</option>
+          </select>
+        </div>
+
+        {/* Abogado y Notaría en fila */}
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label htmlFor="abogado" className="block text-sm font-medium text-gray-700 mb-1">
+              Abogado
+            </label>
+            <input
+              id="abogado"
+              name="abogado"
+              type="text"
+              placeholder="Nombre del abogado"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label htmlFor="notaria" className="block text-sm font-medium text-gray-700 mb-1">
+              Notaría y/o Presentante
+            </label>
+            <input
+              id="notaria"
+              name="notaria"
+              type="text"
+              placeholder="Notaría o presentante"
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>

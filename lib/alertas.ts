@@ -1,6 +1,8 @@
 import { Resend } from 'resend'
 import twilio from 'twilio'
 import type { Titulo } from '@/types'
+import { getTitulos } from '@/lib/supabase'
+import { generarExcelTitulos } from '@/lib/excel'
 
 export type DatosAlerta = {
   titulo: Titulo
@@ -120,11 +122,22 @@ export async function enviarAlertaEmail(datos: DatosAlerta): Promise<void> {
     .map(e => e.trim())
     .filter(Boolean)
 
+  // Generar Excel adjunto con todos los títulos
+  let attachments: { filename: string; content: Buffer }[] = []
+  try {
+    const todosTitulos = await getTitulos()
+    const excelBuffer = generarExcelTitulos(todosTitulos)
+    attachments = [{ filename: 'titulos-arthur-siguelo.xlsx', content: excelBuffer }]
+  } catch {
+    // Si falla la generación del Excel, enviar igual sin adjunto
+  }
+
   const { error } = await resend.emails.send({
     from,
     to: destinatarios,
     subject: `⚠️ Cambio de estado — Título ${datos.titulo.numero_titulo}`,
     html: htmlEmail(datos),
+    attachments,
   })
 
   if (error) throw new Error(`Resend error: ${error.message}`)
@@ -259,11 +272,22 @@ export async function enviarConfirmacionAgregado(datos: DatosConfirmacion): Prom
     .map(e => e.trim())
     .filter(Boolean)
 
+  // Generar Excel adjunto con todos los títulos
+  let attachments: { filename: string; content: Buffer }[] = []
+  try {
+    const todosTitulos = await getTitulos()
+    const excelBuffer = generarExcelTitulos(todosTitulos)
+    attachments = [{ filename: 'titulos-arthur-siguelo.xlsx', content: excelBuffer }]
+  } catch {
+    // Si falla la generación del Excel, enviar igual sin adjunto
+  }
+
   const { error } = await resend.emails.send({
     from,
     to: destinatarios,
     subject: `Título ${datos.titulo.anio_titulo}-${datos.titulo.numero_titulo} agregado a seguimiento - Arthur Legal AI`,
     html: htmlConfirmacion(datos),
+    attachments,
   })
 
   if (error) throw new Error(`Resend error: ${error.message}`)

@@ -16,6 +16,11 @@ export async function agregarTitulo(
   const nombre_cliente = formData.get('nombre_cliente') as string
   const email_cliente = formData.get('email_cliente') as string
   const whatsapp_cliente = formData.get('whatsapp_cliente') as string
+  const proyecto = (formData.get('proyecto') as string) || null
+  const asunto = (formData.get('asunto') as string) || null
+  const registro = (formData.get('registro') as string) || null
+  const abogado = (formData.get('abogado') as string) || null
+  const notaria = (formData.get('notaria') as string) || null
 
   if (!oficina_registral || !anio_titulo || !numero_titulo || !nombre_cliente || !email_cliente || !whatsapp_cliente) {
     return { error: 'Todos los campos son obligatorios.' }
@@ -33,6 +38,11 @@ export async function agregarTitulo(
       nombre_cliente,
       email_cliente,
       whatsapp_cliente,
+      proyecto,
+      asunto,
+      registro,
+      abogado,
+      notaria,
       ultimo_estado: null,
       ultima_consulta: null,
       area_registral: null,
@@ -55,6 +65,11 @@ export async function agregarYConsultarTitulo(
   const nombre_cliente = formData.get('nombre_cliente') as string
   const email_cliente = formData.get('email_cliente') as string
   const whatsapp_cliente = formData.get('whatsapp_cliente') as string
+  const proyecto = (formData.get('proyecto') as string) || null
+  const asunto = (formData.get('asunto') as string) || null
+  const registro = (formData.get('registro') as string) || null
+  const abogado = (formData.get('abogado') as string) || null
+  const notaria = (formData.get('notaria') as string) || null
 
   if (!oficina_registral || !anio_titulo || !numero_titulo || !nombre_cliente || !email_cliente || !whatsapp_cliente) {
     return { error: 'Todos los campos son obligatorios.' }
@@ -73,6 +88,11 @@ export async function agregarYConsultarTitulo(
       nombre_cliente,
       email_cliente,
       whatsapp_cliente,
+      proyecto,
+      asunto,
+      registro,
+      abogado,
+      notaria,
       ultimo_estado: null,
       ultima_consulta: null,
       area_registral: null,

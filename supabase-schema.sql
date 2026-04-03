@@ -24,6 +24,11 @@ alter table titulos add column if not exists ultimo_estado text;
 alter table titulos add column if not exists ultima_consulta timestamp with time zone;
 alter table titulos add column if not exists area_registral text;
 alter table titulos add column if not exists numero_partida text;
+alter table titulos add column if not exists proyecto text;
+alter table titulos add column if not exists asunto text;
+alter table titulos add column if not exists registro text;
+alter table titulos add column if not exists abogado text;
+alter table titulos add column if not exists notaria text;
 
 -- ── Tabla de historial de cambios de estado ───────────────────
 create table if not exists historial_estados (

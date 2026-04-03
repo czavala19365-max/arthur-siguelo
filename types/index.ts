@@ -6,6 +6,11 @@ export type Titulo = {
   nombre_cliente: string
   email_cliente: string
   whatsapp_cliente: string
+  proyecto: string | null
+  asunto: string | null
+  registro: string | null
+  abogado: string | null
+  notaria: string | null
   ultimo_estado: string | null
   ultima_consulta: string | null
   area_registral: string | null

@@ -2,38 +2,51 @@ import { getTitulos } from '@/lib/supabase'
 import type { Titulo } from '@/types'
 import ConsultarButton from './ConsultarButton'
 
-function TituloRow({ titulo }: { titulo: Titulo }) {
+function TituloRow({ titulo, index }: { titulo: Titulo; index: number }) {
   const fecha = new Date(titulo.created_at).toLocaleDateString('es-PE', {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
   })
 
+  const rowBg = index % 2 === 0 ? 'bg-white' : 'bg-gray-50/60'
+
   return (
-    <tr className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+    <tr className={`${rowBg} hover:bg-blue-50/40 transition-colors`}>
       <td className="px-4 py-3 text-sm text-gray-900">
-        <div className="font-medium">{titulo.numero_titulo}</div>
-        <div className="text-xs text-gray-500">{titulo.anio_titulo}</div>
+        <div className="font-semibold tabular-nums">{titulo.numero_titulo}</div>
+        <div className="text-xs text-gray-400">{titulo.anio_titulo}</div>
       </td>
-      <td className="px-4 py-3 text-sm text-gray-600 max-w-36">
+      <td className="px-4 py-3 text-sm text-gray-600 max-w-[120px]">
         <span className="truncate block" title={titulo.oficina_registral}>
           {titulo.oficina_registral}
         </span>
       </td>
-      <td className="px-4 py-3 text-sm text-gray-900">{titulo.nombre_cliente}</td>
-      <td className="px-4 py-3 text-sm text-gray-600">
-        <a href={`mailto:${titulo.email_cliente}`} className="hover:text-blue-600 transition-colors">
-          {titulo.email_cliente}
-        </a>
+      <td className="px-4 py-3 text-sm text-gray-900 font-medium">{titulo.nombre_cliente}</td>
+      <td className="px-4 py-3 text-sm text-gray-600 max-w-[120px]">
+        <span className="truncate block" title={titulo.proyecto ?? ''}>
+          {titulo.proyecto ?? <span className="text-gray-300">—</span>}
+        </span>
+      </td>
+      <td className="px-4 py-3 text-sm text-gray-600 max-w-[140px]">
+        <span className="truncate block" title={titulo.asunto ?? ''}>
+          {titulo.asunto ?? <span className="text-gray-300">—</span>}
+        </span>
       </td>
       <td className="px-4 py-3 text-sm text-gray-600">
-        <a
-          href={`https://wa.me/${titulo.whatsapp_cliente.replace(/\D/g, '')}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="hover:text-green-600 transition-colors"
-        >
-          {titulo.whatsapp_cliente}
+        {titulo.registro ?? <span className="text-gray-300">—</span>}
+      </td>
+      <td className="px-4 py-3 text-sm text-gray-600">
+        {titulo.abogado ?? <span className="text-gray-300">—</span>}
+      </td>
+      <td className="px-4 py-3 text-sm text-gray-600 max-w-[120px]">
+        <span className="truncate block" title={titulo.notaria ?? ''}>
+          {titulo.notaria ?? <span className="text-gray-300">—</span>}
+        </span>
+      </td>
+      <td className="px-4 py-3 text-sm text-gray-600">
+        <a href={`mailto:${titulo.email_cliente}`} className="hover:text-blue-600 transition-colors truncate block max-w-[140px]" title={titulo.email_cliente}>
+          {titulo.email_cliente}
         </a>
       </td>
       <td className="px-4 py-3">
@@ -77,19 +90,23 @@ export default async function TitulosList() {
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
-              <tr className="bg-gray-50 text-xs font-medium text-gray-500 uppercase tracking-wide">
-                <th className="px-4 py-3">Nº Título</th>
+              <tr className="bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wide border-b border-gray-100">
+                <th className="px-4 py-3 whitespace-nowrap">Nº Título</th>
                 <th className="px-4 py-3">Oficina</th>
                 <th className="px-4 py-3">Cliente</th>
+                <th className="px-4 py-3">Proyecto</th>
+                <th className="px-4 py-3">Asunto</th>
+                <th className="px-4 py-3">Registro</th>
+                <th className="px-4 py-3">Abogado</th>
+                <th className="px-4 py-3 whitespace-nowrap">Notaría / Presentante</th>
                 <th className="px-4 py-3">Email</th>
-                <th className="px-4 py-3">WhatsApp</th>
                 <th className="px-4 py-3">Estado</th>
                 <th className="px-4 py-3">Agregado</th>
               </tr>
             </thead>
             <tbody>
-              {titulos.map((t) => (
-                <TituloRow key={t.id} titulo={t} />
+              {titulos.map((t, i) => (
+                <TituloRow key={t.id} titulo={t} index={i} />
               ))}
             </tbody>
           </table>
