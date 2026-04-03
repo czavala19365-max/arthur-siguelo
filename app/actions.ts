@@ -48,7 +48,7 @@ export async function agregarTitulo(
       area_registral: null,
       numero_partida: null,
     })
-    revalidatePath('/')
+    revalidatePath('/dashboard/siguelo')
     return { success: true }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Error desconocido'
@@ -120,11 +120,11 @@ export async function agregarYConsultarTitulo(
       })
     }
 
-    revalidatePath('/')
+    revalidatePath('/dashboard/siguelo')
     return { success: true, estado: resultado.estado, detalle: resultado.detalle ?? undefined }
   } catch {
     // El título ya fue guardado; devolvemos éxito parcial
-    revalidatePath('/')
+    revalidatePath('/dashboard/siguelo')
     return { success: true }
   }
 }
@@ -134,7 +134,7 @@ export async function eliminarTituloAction(id: string): Promise<{ error?: string
   try {
     await eliminarTitulo(id)
     console.log('[server] eliminarTitulo completado OK')
-    revalidatePath('/')
+    revalidatePath('/dashboard/siguelo')
     return {}
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Error al eliminar.'
@@ -167,7 +167,7 @@ export async function consultarAhora(
     }
 
     await actualizarEstadoTitulo(id, resultado.estado, resultado.areaRegistral, resultado.numeroPartida)
-    revalidatePath('/')
+    revalidatePath('/dashboard/siguelo')
 
     return { estado: resultado.estado, detalle: resultado.detalle ?? undefined }
   } catch (err) {
@@ -190,7 +190,7 @@ export async function descargarAsientoAction(
         numero_titulo: titulo.numero_titulo,
       })
       await actualizarEstadoTitulo(id, resultado.estado, resultado.areaRegistral, resultado.numeroPartida)
-      revalidatePath('/')
+      revalidatePath('/dashboard/siguelo')
       titulo = await getTituloById(id)
       if (!titulo) return { error: 'Título no encontrado.' }
     }

@@ -9,7 +9,6 @@ export default async function MetricsCards() {
     return null
   }
 
-  // Comparación normalizada: sin acentos, mayúsculas — cubre "EN CALIFICACION" y "EN CALIFICACIÓN"
   const count = (estado: string) => {
     const norm = normalizarEstado(estado)
     return titulos.filter(t => normalizarEstado(t.ultimo_estado ?? '') === norm).length
@@ -17,63 +16,85 @@ export default async function MetricsCards() {
 
   const metrics = [
     {
-      label: 'Total Títulos',
+      label: 'TOTAL',
       value: titulos.length,
-      bg: '#EFF6FF',
-      color: '#1D4ED8',
+      accentColor: '#c2a46d',
+      valueColor: 'var(--ink)',
     },
     {
-      label: 'En Calificación',
+      label: 'EN CALIFICACIÓN',
       value: count('EN CALIFICACIÓN'),
-      bg: ESTADO_STYLES['EN CALIFICACIÓN'].bg,
-      color: ESTADO_STYLES['EN CALIFICACIÓN'].text,
+      accentColor: ESTADO_STYLES['EN CALIFICACIÓN'].text,
+      valueColor: ESTADO_STYLES['EN CALIFICACIÓN'].text,
     },
     {
-      label: 'Observados',
+      label: 'OBSERVADOS',
       value: count('OBSERVADO'),
-      bg: ESTADO_STYLES['OBSERVADO'].bg,
-      color: ESTADO_STYLES['OBSERVADO'].text,
+      accentColor: ESTADO_STYLES['OBSERVADO'].text,
+      valueColor: ESTADO_STYLES['OBSERVADO'].text,
     },
     {
-      label: 'Liquidados',
+      label: 'LIQUIDADOS',
       value: count('LIQUIDADO'),
-      bg: ESTADO_STYLES['LIQUIDADO'].bg,
-      color: ESTADO_STYLES['LIQUIDADO'].text,
+      accentColor: ESTADO_STYLES['LIQUIDADO'].text,
+      valueColor: ESTADO_STYLES['LIQUIDADO'].text,
     },
     {
-      label: 'Inscritos',
+      label: 'INSCRITOS',
       value: count('INSCRITO'),
-      bg: ESTADO_STYLES['INSCRITO'].bg,
-      color: ESTADO_STYLES['INSCRITO'].text,
+      accentColor: ESTADO_STYLES['INSCRITO'].text,
+      valueColor: ESTADO_STYLES['INSCRITO'].text,
     },
     {
-      label: 'Tachados',
+      label: 'TACHADOS',
       value: count('TACHADO'),
-      bg: ESTADO_STYLES['TACHADO'].bg,
-      color: ESTADO_STYLES['TACHADO'].text,
+      accentColor: ESTADO_STYLES['TACHADO'].text,
+      valueColor: ESTADO_STYLES['TACHADO'].text,
     },
     {
-      label: 'Prorrogados',
+      label: 'PRORROGADOS',
       value: count('PRORROGADO'),
-      bg: ESTADO_STYLES['PRORROGADO'].bg,
-      color: ESTADO_STYLES['PRORROGADO'].text,
+      accentColor: ESTADO_STYLES['PRORROGADO'].text,
+      valueColor: ESTADO_STYLES['PRORROGADO'].text,
     },
   ]
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
-      {metrics.map((m) => (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: 'repeat(7, 1fr)',
+      gap: '0',
+      border: '1px solid var(--line)',
+    }}>
+      {metrics.map((m, i) => (
         <div
           key={m.label}
-          className="rounded-xl px-4 py-3 shadow-sm"
-          style={{ backgroundColor: m.bg, border: '1px solid rgba(0,0,0,0.07)' }}
+          style={{
+            background: 'var(--surface)',
+            borderRight: i < metrics.length - 1 ? '1px solid var(--line)' : 'none',
+            borderTop: `3px solid ${m.accentColor}`,
+            padding: '20px 20px 16px',
+          }}
         >
-          <p className="text-2xl font-bold leading-none" style={{ color: m.color }}>
-            {m.value}
-          </p>
-          <p className="text-xs mt-1.5 font-medium" style={{ color: m.color, opacity: 0.75 }}>
+          <div style={{
+            fontFamily: 'DM Mono, monospace',
+            fontSize: '9px',
+            textTransform: 'uppercase',
+            letterSpacing: '0.1em',
+            color: m.valueColor,
+            marginBottom: '10px',
+            opacity: 0.8,
+          }}>
             {m.label}
-          </p>
+          </div>
+          <div style={{
+            fontFamily: 'var(--font-display)',
+            fontSize: '40px',
+            color: m.valueColor,
+            lineHeight: 1,
+          }}>
+            {m.value}
+          </div>
         </div>
       ))}
     </div>
