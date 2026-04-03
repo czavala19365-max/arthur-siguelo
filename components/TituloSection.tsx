@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { descargarEsquelaAction, descargarAsientoAction } from '@/app/actions'
-import { ESTADO_STYLES, ESTADOS_CON_ESQUELA, LABEL_ESQUELA } from '@/lib/estados'
+import { getEstadoStyle, ESTADOS_CON_ESQUELA, LABEL_ESQUELA } from '@/lib/estados'
 import EstadoBadge from './EstadoBadge'
 import TituloDetailModal from './TituloDetailModal'
 import type { Titulo } from '@/types'
@@ -100,7 +100,7 @@ export default function TituloSection({
   const [expanded, setExpanded] = useState(true)
   const [selected, setSelected] = useState<Titulo | null>(null)
 
-  const style = ESTADO_STYLES[estado.toUpperCase()] ?? { bg: '#F3F4F6', text: '#374151' }
+  const style = getEstadoStyle(estado) ?? { bg: '#F3F4F6', text: '#374151' }
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">

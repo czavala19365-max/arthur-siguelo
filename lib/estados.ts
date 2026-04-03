@@ -45,3 +45,18 @@ export function normalizarEstado(estado: string): string {
     .replace(/[\u0300-\u036f]/g, '') // eliminar diacríticos (tildes, etc.)
     .trim()
 }
+
+// Mapa pre-normalizado: clave sin acentos → estilos
+// Se construye una sola vez al importar el módulo.
+const ESTADO_STYLES_NORM: Record<string, { bg: string; text: string }> = Object.fromEntries(
+  Object.entries(ESTADO_STYLES).map(([k, v]) => [normalizarEstado(k), v])
+)
+
+/**
+ * Devuelve el estilo (bg + text) para un estado, usando comparación
+ * normalizada — sin acentos, insensible a mayúsculas/minúsculas.
+ * Cubre "EN CALIFICACION" y "EN CALIFICACIÓN" por igual.
+ */
+export function getEstadoStyle(estado: string): { bg: string; text: string } | undefined {
+  return ESTADO_STYLES_NORM[normalizarEstado(estado)]
+}

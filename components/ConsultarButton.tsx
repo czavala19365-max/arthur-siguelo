@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { consultarAhora, eliminarTituloAction, descargarEsquelaAction, descargarAsientoAction } from '@/app/actions'
-import { ESTADO_STYLES, ESTADOS_CON_ESQUELA, LABEL_ESQUELA } from '@/lib/estados'
+import { ESTADOS_CON_ESQUELA, LABEL_ESQUELA } from '@/lib/estados'
 import EstadoBadge from './EstadoBadge'
 
 export default function ConsultarButton({

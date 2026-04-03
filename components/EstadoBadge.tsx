@@ -1,7 +1,7 @@
-import { ESTADO_STYLES } from '@/lib/estados'
+import { getEstadoStyle } from '@/lib/estados'
 
 export default function EstadoBadge({ estado }: { estado: string }) {
-  const style = ESTADO_STYLES[estado.toUpperCase()]
+  const style = getEstadoStyle(estado)
   if (style) {
     return (
       <span
