@@ -1,58 +1,136 @@
-import { Suspense } from 'react'
-import TituloForm from '@/components/TituloForm'
-import TitulosList from '@/components/TitulosList'
-import MetricsCards from '@/components/MetricsCards'
+'use client';
 
-export default function Home() {
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import AnimatedBackground from '@/components/AnimatedBackground';
+
+/** Misma caja para «arthur» y «Empieza Ahora»: ceñida al tamaño del logo. */
+const LOGO_BOX = {
+  width: 'min(82vw, 300px)',
+  height: '88px',
+  boxSizing: 'border-box' as const,
+};
+
+export default function LandingPage() {
+  const router = useRouter();
+  const [hoverLogo, setHoverLogo] = useState(false);
+
+  useEffect(() => {
+    if (localStorage.getItem('arthur_auth')) {
+      router.replace('/select');
+    }
+  }, [router]);
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header style={{ backgroundColor: '#1e3a5f' }}>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center flex-shrink-0">
-            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-          </div>
-          <div>
-            <h1 className="text-base font-bold text-white leading-none tracking-tight">
-              Arthur Legal AI
-            </h1>
-            <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.55)' }}>
-              Monitor de títulos registrales SUNARP
-            </p>
-          </div>
-        </div>
-      </header>
+    <div
+      style={{
+        position: 'relative',
+        width: '100%',
+        minHeight: '100vh',
+        overflow: 'hidden',
+        background: '#000000',
+      }}
+    >
+      <AnimatedBackground />
 
-      {/* Main */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-        {/* Métricas */}
-        <Suspense fallback={
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            {[...Array(4)].map((_, i) => (
-              <div key={i} className="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4 h-20 animate-pulse" />
-            ))}
-          </div>
-        }>
-          <MetricsCards />
-        </Suspense>
-
-        {/* Formulario */}
-        <TituloForm />
-
-        {/* Lista */}
-        <Suspense
-          fallback={
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-6 py-12 text-center text-sm text-gray-400">
-              Cargando títulos…
-            </div>
-          }
+      <div
+        style={{
+          position: 'relative',
+          zIndex: 2,
+          minHeight: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          padding: 'clamp(32px, 6vw, 64px)',
+          textAlign: 'center',
+        }}
+      >
+        <div
+          style={{
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
         >
-          <TitulosList />
-        </Suspense>
-      </main>
+          <button
+            type="button"
+            onClick={() => router.push('/login')}
+            onMouseEnter={() => setHoverLogo(true)}
+            onMouseLeave={() => setHoverLogo(false)}
+            aria-label={hoverLogo ? 'Empieza ahora' : 'arthur'}
+            style={{
+              ...LOGO_BOX,
+              position: 'relative',
+              background: 'transparent',
+              border: hoverLogo ? '1px solid rgba(255, 255, 255, 0.92)' : '1px solid transparent',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '0 10px',
+              transition: 'border-color 0.2s ease',
+            }}
+          >
+            <span
+              style={{
+                fontFamily: hoverLogo
+                  ? 'var(--font-body), Inter, system-ui, sans-serif'
+                  : 'var(--font-display), Georgia, serif',
+                fontSize: hoverLogo
+                  ? 'clamp(0.8rem, 2.05vw, 0.95rem)'
+                  : 'clamp(2.75rem, 7vw, 3.85rem)',
+                fontWeight: hoverLogo ? 600 : 500,
+                fontStyle: hoverLogo ? 'normal' : 'italic',
+                color: '#ffffff',
+                letterSpacing: hoverLogo ? '0.06em' : '-0.02em',
+                lineHeight: 1.05,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {hoverLogo ? 'Empieza Ahora' : 'arthur'}
+            </span>
+          </button>
+
+          <div
+            style={{
+              width: 'min(180px, 42vw)',
+              height: '1px',
+              marginTop: '10px',
+              background: 'linear-gradient(90deg, transparent, rgba(194, 164, 109, 0.55), transparent)',
+            }}
+          />
+        </div>
+
+        <p
+          style={{
+            flexShrink: 0,
+            paddingBottom: '12px',
+            fontFamily: 'var(--font-display), Georgia, serif',
+            fontSize: 'clamp(12px, 1.65vw, 15px)',
+            fontStyle: 'italic',
+            fontWeight: 500,
+            letterSpacing: '0.04em',
+            color: '#c2a46d',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexWrap: 'wrap',
+            gap: '0 10px',
+            rowGap: '6px',
+          }}
+        >
+          <span>Precisión</span>
+          <span style={{ opacity: 0.85, fontStyle: 'normal', fontSize: '0.45em', verticalAlign: 'middle' }} aria-hidden>
+            •
+          </span>
+          <span>Confianza</span>
+          <span style={{ opacity: 0.85, fontStyle: 'normal', fontSize: '0.45em', verticalAlign: 'middle' }} aria-hidden>
+            •
+          </span>
+          <span>Rapidez</span>
+        </p>
+      </div>
     </div>
-  )
+  );
 }
