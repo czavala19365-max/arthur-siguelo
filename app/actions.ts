@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createTitulo, getTituloById, actualizarEstadoTitulo, registrarCambioEstado, getUltimoEstado, eliminarTitulo } from '@/lib/supabase'
-import { consultarTitulo } from '@/lib/scraper'
+import { consultarTitulo, descargarEsquela } from '@/lib/scraper'
 import { enviarConfirmacionAgregado } from '@/lib/alertas'
 import type { TituloFormState } from '@/types'
 
@@ -35,6 +35,7 @@ export async function agregarTitulo(
       whatsapp_cliente,
       ultimo_estado: null,
       ultima_consulta: null,
+      area_registral: null,
     })
     revalidatePath('/')
     return { success: true }
@@ -73,6 +74,7 @@ export async function agregarYConsultarTitulo(
       whatsapp_cliente,
       ultimo_estado: null,
       ultima_consulta: null,
+      area_registral: null,
     })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Error desconocido'
@@ -81,7 +83,7 @@ export async function agregarYConsultarTitulo(
 
   try {
     const resultado = await consultarTitulo({ oficina_registral, anio_titulo, numero_titulo })
-    await actualizarEstadoTitulo(tituloId, resultado.estado)
+    await actualizarEstadoTitulo(tituloId, resultado.estado, resultado.areaRegistral)
 
     // Enviar email de confirmación (no bloquea si falla)
     const tituloGuardado = await getTituloById(tituloId)
@@ -140,11 +142,33 @@ export async function consultarAhora(
       })
     }
 
-    await actualizarEstadoTitulo(id, resultado.estado)
+    await actualizarEstadoTitulo(id, resultado.estado, resultado.areaRegistral)
     revalidatePath('/')
 
     return { estado: resultado.estado, detalle: resultado.detalle ?? undefined }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error al consultar.' }
+  }
+}
+
+export async function descargarEsquelaAction(
+  id: string
+): Promise<{ pdf?: string; error?: string }> {
+  try {
+    const titulo = await getTituloById(id)
+    if (!titulo) return { error: 'Título no encontrado.' }
+    if (!titulo.ultimo_estado) return { error: 'El título no tiene estado registrado.' }
+    if (!titulo.area_registral) return { error: 'Consulta el estado del título primero para obtener el área registral.' }
+
+    const pdf = await descargarEsquela({
+      oficina_registral: titulo.oficina_registral,
+      anio_titulo: titulo.anio_titulo,
+      numero_titulo: titulo.numero_titulo,
+      area_registral: titulo.area_registral,
+      estado: titulo.ultimo_estado,
+    })
+    return { pdf }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error al descargar esquela.' }
   }
 }

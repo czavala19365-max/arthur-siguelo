@@ -23,6 +23,7 @@ const titulo: Titulo = {
   whatsapp_cliente: '+51999999999',
   ultimo_estado: 'EN CALIFICACION',
   ultima_consulta: null,
+  area_registral: null,
   created_at: new Date().toISOString(),
 }
 

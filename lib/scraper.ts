@@ -5,6 +5,7 @@ import CryptoJS from 'crypto-js'
 
 const SIGUELO_URL  = 'https://siguelo.sunarp.gob.pe/siguelo/'
 const CONSULTA_API = 'https://api-gateway.sunarp.gob.pe:9443/sunarp/siguelo/siguelo-tracking/tracking/api/consultaTitulo'
+const ESQUELA_API  = 'https://api-gateway.sunarp.gob.pe:9443/sunarp/siguelo/siguelo-esquela/listarEsquela'
 
 // Extraídos del bundle main-es2015.js de SIGUELO
 const TURNSTILE_SITE_KEY = '0x4AAAAAABjHwQpFgHGVKCei'
@@ -94,6 +95,7 @@ export type ScraperParams = {
 export type ScraperResult = {
   estado: string
   detalle: string | null
+  areaRegistral: string | null
   consultadoEn: string
   rawResponse: unknown
 }
@@ -246,12 +248,92 @@ export async function consultarTitulo(params: ScraperParams): Promise<ScraperRes
     (data.detalle as string) ??
     null
 
+  const areaRegistral =
+    tituloEntry?.areaRegistral ??
+    null
+
   return {
     estado,
     detalle,
+    areaRegistral,
     consultadoEn: new Date().toISOString(),
     rawResponse: data,
   }
+}
+
+// Mapa de estado → tipoEsquela (confirmado por prueba directa contra API)
+const TIPO_ESQUELA: Record<string, string> = {
+  'OBSERVADO': 'O',
+  'LIQUIDADO': 'L',
+  'TACHADO':   'T',
+  'INSCRITO':  'I',
+}
+
+export type EsquelaParams = {
+  oficina_registral: string
+  anio_titulo: number
+  numero_titulo: string
+  area_registral: string
+  estado: string
+}
+
+/**
+ * Descarga la esquela (documento oficial) de un título desde SUNARP.
+ * No requiere Puppeteer ni captcha — la API acepta plain JSON con la misma cabecera IBM.
+ * Retorna el PDF codificado en base64.
+ */
+export async function descargarEsquela(params: EsquelaParams): Promise<string> {
+  const key = params.oficina_registral.toUpperCase().trim()
+  const oficina = OFICINAS[key]
+  if (!oficina) throw new Error(`Oficina no reconocida: "${params.oficina_registral}"`)
+
+  const tipoEsquela = TIPO_ESQUELA[params.estado.toUpperCase()]
+  if (!tipoEsquela) {
+    throw new Error(`No hay esquela disponible para el estado: ${params.estado}`)
+  }
+
+  const payload = {
+    codigoZona:     oficina.zona,
+    codigoOficina:  oficina.oficina,
+    anioTitulo:     String(params.anio_titulo),
+    numeroTitulo:   params.numero_titulo.padStart(8, '0'),
+    idAreaRegistro: params.area_registral,
+    idioma:         'es',
+    ip:             '0.0.0.0',
+    status:         'A',
+    tipoConsulta:   'E',
+    tipoEsquela,
+    userApp:        'extranet',
+    userCrea:       'Siguelo',
+  }
+
+  const response = await fetch(ESQUELA_API, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-IBM-Client-Id': IBM_CLIENT_ID,
+      Origin:  'https://siguelo.sunarp.gob.pe',
+      Referer: SIGUELO_URL,
+    },
+    body: JSON.stringify(payload),
+  })
+
+  if (!response.ok) throw new Error(`API esquela respondió HTTP ${response.status}`)
+
+  const data = await response.json() as {
+    codigoRespuesta: string
+    descripcionRespuesta: string
+    lstEsquela?: Array<{ esquela: string }>
+  }
+
+  if (data.codigoRespuesta !== '0000') {
+    throw new Error(data.descripcionRespuesta ?? `Error ${data.codigoRespuesta}`)
+  }
+
+  const pdfBase64 = data.lstEsquela?.[0]?.esquela
+  if (!pdfBase64) throw new Error('SUNARP no devolvió el archivo esquela.')
+
+  return pdfBase64
 }
 
 /** Lista de oficinas disponibles para el formulario */

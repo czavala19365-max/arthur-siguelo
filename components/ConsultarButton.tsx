@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { consultarAhora, eliminarTituloAction } from '@/app/actions'
+import { consultarAhora, eliminarTituloAction, descargarEsquelaAction } from '@/app/actions'
 
 // Colores exactos por estado (text + background con 15% opacidad)
 const ESTADO_STYLES: Record<string, { bg: string; text: string }> = {
@@ -37,15 +37,20 @@ function EstadoBadge({ estado }: { estado: string }) {
   )
 }
 
+const ESTADOS_CON_ESQUELA = new Set(['OBSERVADO', 'LIQUIDADO', 'TACHADO', 'INSCRITO'])
+
 export default function ConsultarButton({
   tituloId,
   ultimoEstado,
+  areaRegistral,
 }: {
   tituloId: string
   ultimoEstado: string | null
+  areaRegistral: string | null
 }) {
   const [result, setResult] = useState<{ estado?: string; detalle?: string; error?: string } | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [esquelaPending, startEsquelaTransition] = useTransition()
   const [isPending, startTransition] = useTransition()
   const [isDeleting, startDeleteTransition] = useTransition()
 
@@ -72,6 +77,27 @@ export default function ConsultarButton({
     })
   }
 
+  const handleDescargarEsquela = () => {
+    startEsquelaTransition(async () => {
+      const res = await descargarEsquelaAction(tituloId)
+      if (res.error) {
+        alert(`Error al descargar esquela: ${res.error}`)
+        return
+      }
+      if (res.pdf) {
+        const link = document.createElement('a')
+        link.href = `data:application/pdf;base64,${res.pdf}`
+        link.download = `esquela-${tituloId}.pdf`
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+      }
+    })
+  }
+
+  const estadoParaEsquela = (result?.estado ?? ultimoEstado ?? '').toUpperCase()
+  const tieneEsquela = ESTADOS_CON_ESQUELA.has(estadoParaEsquela) && areaRegistral !== null
+
   return (
     <div className="flex items-start gap-3">
       {/* Columna estado + acción consultar */}
@@ -88,11 +114,21 @@ export default function ConsultarButton({
         )}
         <button
           onClick={handleConsultar}
-          disabled={isPending || isDeleting}
+          disabled={isPending || isDeleting || esquelaPending}
           className="mt-0.5 text-xs text-blue-600 hover:text-blue-800 disabled:text-gray-400 disabled:cursor-not-allowed font-medium"
         >
           {isPending ? '⏳ Consultando…' : ultimoEstado ? '↻ Actualizar' : 'Consultar ahora'}
         </button>
+        {tieneEsquela && (
+          <button
+            onClick={handleDescargarEsquela}
+            disabled={isPending || isDeleting || esquelaPending}
+            className="mt-0.5 text-xs text-emerald-600 hover:text-emerald-800 disabled:text-gray-400 disabled:cursor-not-allowed font-medium flex items-center gap-1"
+            title="Descargar esquela oficial SUNARP"
+          >
+            {esquelaPending ? '⏳ Descargando…' : '↓ Esquela'}
+          </button>
+        )}
       </div>
 
       {/* Botón eliminar */}

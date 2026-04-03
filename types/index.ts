@@ -8,6 +8,7 @@ export type Titulo = {
   whatsapp_cliente: string
   ultimo_estado: string | null
   ultima_consulta: string | null
+  area_registral: string | null
   created_at: string
 }
 

@@ -40,6 +40,7 @@ function TituloRow({ titulo }: { titulo: Titulo }) {
         <ConsultarButton
           tituloId={titulo.id}
           ultimoEstado={titulo.ultimo_estado ?? null}
+          areaRegistral={titulo.area_registral ?? null}
         />
       </td>
       <td className="px-4 py-3 text-xs text-gray-400 whitespace-nowrap">{fecha}</td>

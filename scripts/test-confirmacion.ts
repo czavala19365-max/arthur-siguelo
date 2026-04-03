@@ -11,6 +11,7 @@ const titulo = {
   whatsapp_cliente: '+51999999999',
   ultimo_estado: 'OBSERVADO',
   ultima_consulta: new Date().toISOString(),
+  area_registral: '22000',
 }
 
 enviarConfirmacionAgregado({
