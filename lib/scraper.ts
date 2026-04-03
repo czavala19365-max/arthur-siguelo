@@ -264,6 +264,7 @@ export async function consultarTitulo(params: ScraperParams): Promise<ScraperRes
     tituloEntry?.nroPartida ??
     tituloEntry?.numPartida ??
     tituloEntry?.partida ??
+    tituloEntry?.partidaMatriz ??
     null
 
   return {

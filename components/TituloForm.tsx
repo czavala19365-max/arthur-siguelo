@@ -87,7 +87,7 @@ export default function TituloForm() {
         {/* Oficina registral */}
         <div>
           <label htmlFor="oficina_registral" className="block text-sm font-medium text-gray-700 mb-1">
-            Oficina registral
+            Oficina registral <span className="text-red-500">*</span>
           </label>
           <select
             id="oficina_registral"
@@ -106,7 +106,7 @@ export default function TituloForm() {
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label htmlFor="anio_titulo" className="block text-sm font-medium text-gray-700 mb-1">
-              Año del título
+              Año del título <span className="text-red-500">*</span>
             </label>
             <input
               id="anio_titulo"
@@ -121,7 +121,7 @@ export default function TituloForm() {
           </div>
           <div>
             <label htmlFor="numero_titulo" className="block text-sm font-medium text-gray-700 mb-1">
-              Número del título
+              Número del título <span className="text-red-500">*</span>
             </label>
             <input
               id="numero_titulo"
@@ -137,7 +137,7 @@ export default function TituloForm() {
         {/* Nombre cliente */}
         <div>
           <label htmlFor="nombre_cliente" className="block text-sm font-medium text-gray-700 mb-1">
-            Cliente
+            Cliente <span className="text-red-500">*</span>
           </label>
           <input
             id="nombre_cliente"
@@ -153,7 +153,7 @@ export default function TituloForm() {
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label htmlFor="email_cliente" className="block text-sm font-medium text-gray-700 mb-1">
-              Email(s) del cliente
+              Email(s) para recibir alertas de seguimiento <span className="text-red-500">*</span>
             </label>
             <input
               id="email_cliente"
@@ -166,7 +166,7 @@ export default function TituloForm() {
           </div>
           <div>
             <label htmlFor="whatsapp_cliente" className="block text-sm font-medium text-gray-700 mb-1">
-              WhatsApp del cliente
+              WhatsApp(s) para recibir alertas de seguimiento <span className="text-red-500">*</span>
             </label>
             <input
               id="whatsapp_cliente"
@@ -181,7 +181,7 @@ export default function TituloForm() {
 
         {/* Separador campos adicionales */}
         <div className="pt-1 border-t border-gray-100">
-          <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-3">Información del expediente</p>
+          <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-3">Información del Título Registral</p>
         </div>
 
         {/* Proyecto y Asunto en fila */}
@@ -223,9 +223,22 @@ export default function TituloForm() {
             className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">Seleccionar registro…</option>
-            <option value="Personas Jurídicas">Personas Jurídicas</option>
-            <option value="Propiedad Inmueble">Propiedad Inmueble</option>
-            <option value="Otros">Otros</option>
+            <option value="Registro de Personas Jurídicas">Registro de Personas Jurídicas</option>
+            <option value="Registro de Propiedad Inmueble">Registro de Propiedad Inmueble</option>
+            <option value="Registro de Propiedad Minera">Registro de Propiedad Minera</option>
+            <option value="Registro de Propiedad Vehicular">Registro de Propiedad Vehicular</option>
+            <option value="Registro de Sucesiones Intestadas">Registro de Sucesiones Intestadas</option>
+            <option value="Registro Personal">Registro Personal</option>
+            <option value="Registro de Testamentos">Registro de Testamentos</option>
+            <option value="Registro de Mandatos y Poderes">Registro de Mandatos y Poderes</option>
+            <option value="Registro de Bienes Muebles">Registro de Bienes Muebles</option>
+            <option value="Registro Mobiliario de Contratos">Registro Mobiliario de Contratos</option>
+            <option value="Registro de Garantías Mobiliarias">Registro de Garantías Mobiliarias</option>
+            <option value="Registro de Derechos Mineros">Registro de Derechos Mineros</option>
+            <option value="Registro de Concesiones para la Explotación de Servicios Públicos">Registro de Concesiones para la Explotación de Servicios Públicos</option>
+            <option value="Registro de Áreas Naturales Protegidas">Registro de Áreas Naturales Protegidas</option>
+            <option value="Registro de Predios">Registro de Predios</option>
+            <option value="Otro">Otro</option>
           </select>
         </div>
 
@@ -233,7 +246,7 @@ export default function TituloForm() {
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label htmlFor="abogado" className="block text-sm font-medium text-gray-700 mb-1">
-              Abogado
+              Abogado a cargo
             </label>
             <input
               id="abogado"

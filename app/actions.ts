@@ -23,7 +23,7 @@ export async function agregarTitulo(
   const notaria = (formData.get('notaria') as string) || null
 
   if (!oficina_registral || !anio_titulo || !numero_titulo || !nombre_cliente || !email_cliente || !whatsapp_cliente) {
-    return { error: 'Todos los campos son obligatorios.' }
+    return { error: 'Los campos Oficina, Año, Número, Cliente, Email y WhatsApp son obligatorios.' }
   }
 
   if (anio_titulo < 1900 || anio_titulo > new Date().getFullYear() + 1) {
@@ -72,7 +72,7 @@ export async function agregarYConsultarTitulo(
   const notaria = (formData.get('notaria') as string) || null
 
   if (!oficina_registral || !anio_titulo || !numero_titulo || !nombre_cliente || !email_cliente || !whatsapp_cliente) {
-    return { error: 'Todos los campos son obligatorios.' }
+    return { error: 'Los campos Oficina, Año, Número, Cliente, Email y WhatsApp son obligatorios.' }
   }
 
   if (anio_titulo < 1900 || anio_titulo > new Date().getFullYear() + 1) {
