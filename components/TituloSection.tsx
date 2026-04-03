@@ -1,90 +1,52 @@
 'use client'
 
-import { useState, useTransition } from 'react'
-import { descargarEsquelaAction, descargarAsientoAction } from '@/app/actions'
-import { getEstadoStyle, ESTADOS_CON_ESQUELA, LABEL_ESQUELA } from '@/lib/estados'
+import { useState } from 'react'
+import { getEstadoStyle, ESTADOS_CON_ESQUELA, LABEL_ESQUELA, normalizarEstado } from '@/lib/estados'
 import EstadoBadge from './EstadoBadge'
 import TituloDetailModal from './TituloDetailModal'
 import type { Titulo } from '@/types'
 
-// ── Descarga rápida en la fila ────────────────────────────────────────────────
-function RowDownloads({ titulo }: { titulo: Titulo }) {
-  const estadoUpper = (titulo.ultimo_estado ?? '').toUpperCase()
-  const tieneEsquela = ESTADOS_CON_ESQUELA.has(estadoUpper) && !!titulo.area_registral
-  const tieneAsiento = estadoUpper === 'INSCRITO' && !!titulo.area_registral
-  const label = LABEL_ESQUELA[estadoUpper]
+const DownloadIcon = () => (
+  <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+  </svg>
+)
 
-  const [error, setError] = useState<string | null>(null)
-  const [esquelaPending, startEsquela] = useTransition()
-  const [asientoPending, startAsiento] = useTransition()
+// ── Descarga rápida en la fila — links directos al API route (compatible Safari iOS) ──
+function RowDownloads({ titulo }: { titulo: Titulo }) {
+  const estadoNorm = normalizarEstado(titulo.ultimo_estado ?? '')
+  const tieneEsquela = ESTADOS_CON_ESQUELA.has(estadoNorm) && !!titulo.area_registral
+  const tieneAsiento = estadoNorm === 'INSCRITO' && !!titulo.area_registral
+  const label = LABEL_ESQUELA[estadoNorm]
 
   if (!tieneEsquela && !tieneAsiento) return null
-
-  const downloadPdf = (base64: string, filename: string) => {
-    const link = document.createElement('a')
-    link.href = `data:application/pdf;base64,${base64}`
-    link.download = filename
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-  }
 
   return (
     <div className="flex items-center gap-2">
       {tieneEsquela && label && (
-        <button
-          onClick={() => {
-            setError(null)
-            startEsquela(async () => {
-              const res = await descargarEsquelaAction(titulo.id)
-              if (res.error) { setError(res.error); return }
-              const pdfs = res.pdfs ?? []
-              pdfs.forEach((pdf, i) =>
-                downloadPdf(pdf, `${label.singular.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')}-${i + 1}-${titulo.id.slice(0, 8)}.pdf`)
-              )
-            })
-          }}
-          disabled={esquelaPending || asientoPending}
+        <a
+          href={`/api/descargar-esquela?id=${titulo.id}&index=0`}
+          target="_blank"
+          rel="noopener noreferrer"
           title={`Descargar ${label.plural}`}
-          className="inline-flex items-center gap-1 text-xs text-emerald-600 hover:text-emerald-800 disabled:text-gray-400 font-medium"
+          className="inline-flex items-center gap-1 text-xs text-emerald-600 hover:text-emerald-800 font-medium"
         >
-          {esquelaPending ? (
-            <span className="text-xs">⏳</span>
-          ) : (
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
-            </svg>
-          )}
+          <DownloadIcon />
           <span className="hidden sm:inline">{label.plural}</span>
-        </button>
+        </a>
       )}
-
       {tieneAsiento && (
-        <button
-          onClick={() => {
-            setError(null)
-            startAsiento(async () => {
-              const res = await descargarAsientoAction(titulo.id)
-              if (res.error) { setError(res.error); return }
-              if (res.pdf) downloadPdf(res.pdf, `asiento-${titulo.id.slice(0, 8)}.pdf`)
-            })
-          }}
-          disabled={esquelaPending || asientoPending}
+        <a
+          href={`/api/descargar-asiento?id=${titulo.id}`}
+          target="_blank"
+          rel="noopener noreferrer"
           title="Descargar asiento de inscripción"
-          className="inline-flex items-center gap-1 text-xs text-violet-600 hover:text-violet-800 disabled:text-gray-400 font-medium"
+          className="inline-flex items-center gap-1 text-xs text-violet-600 hover:text-violet-800 font-medium"
         >
-          {asientoPending ? (
-            <span className="text-xs">⏳</span>
-          ) : (
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
-            </svg>
-          )}
+          <DownloadIcon />
           <span className="hidden sm:inline">Asiento</span>
-        </button>
+        </a>
       )}
-
-      {error && <span className="text-xs text-red-500">{error}</span>}
     </div>
   )
 }
