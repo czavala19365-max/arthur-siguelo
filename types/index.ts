@@ -9,6 +9,7 @@ export type Titulo = {
   ultimo_estado: string | null
   ultima_consulta: string | null
   area_registral: string | null
+  numero_partida: string | null
   created_at: string
 }
 

@@ -23,6 +23,7 @@ create index if not exists titulos_numero_titulo_idx on titulos (numero_titulo);
 alter table titulos add column if not exists ultimo_estado text;
 alter table titulos add column if not exists ultima_consulta timestamp with time zone;
 alter table titulos add column if not exists area_registral text;
+alter table titulos add column if not exists numero_partida text;
 
 -- ── Tabla de historial de cambios de estado ───────────────────
 create table if not exists historial_estados (

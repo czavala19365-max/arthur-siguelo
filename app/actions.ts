@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createTitulo, getTituloById, actualizarEstadoTitulo, registrarCambioEstado, getUltimoEstado, eliminarTitulo } from '@/lib/supabase'
-import { consultarTitulo, descargarEsquela } from '@/lib/scraper'
+import { consultarTitulo, descargarEsquela, descargarAsiento } from '@/lib/scraper'
 import { enviarConfirmacionAgregado } from '@/lib/alertas'
 import type { TituloFormState } from '@/types'
 
@@ -36,6 +36,7 @@ export async function agregarTitulo(
       ultimo_estado: null,
       ultima_consulta: null,
       area_registral: null,
+      numero_partida: null,
     })
     revalidatePath('/')
     return { success: true }
@@ -75,6 +76,7 @@ export async function agregarYConsultarTitulo(
       ultimo_estado: null,
       ultima_consulta: null,
       area_registral: null,
+      numero_partida: null,
     })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Error desconocido'
@@ -83,7 +85,7 @@ export async function agregarYConsultarTitulo(
 
   try {
     const resultado = await consultarTitulo({ oficina_registral, anio_titulo, numero_titulo })
-    await actualizarEstadoTitulo(tituloId, resultado.estado, resultado.areaRegistral)
+    await actualizarEstadoTitulo(tituloId, resultado.estado, resultado.areaRegistral, resultado.numeroPartida)
 
     // Enviar email de confirmación (no bloquea si falla)
     const tituloGuardado = await getTituloById(tituloId)
@@ -142,12 +144,53 @@ export async function consultarAhora(
       })
     }
 
-    await actualizarEstadoTitulo(id, resultado.estado, resultado.areaRegistral)
+    await actualizarEstadoTitulo(id, resultado.estado, resultado.areaRegistral, resultado.numeroPartida)
     revalidatePath('/')
 
     return { estado: resultado.estado, detalle: resultado.detalle ?? undefined }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error al consultar.' }
+  }
+}
+
+export async function descargarAsientoAction(
+  id: string
+): Promise<{ pdf?: string; error?: string }> {
+  try {
+    let titulo = await getTituloById(id)
+    if (!titulo) return { error: 'Título no encontrado.' }
+
+    // Si falta area_registral, actualizar estado primero
+    if (!titulo.area_registral) {
+      const resultado = await consultarTitulo({
+        oficina_registral: titulo.oficina_registral,
+        anio_titulo: titulo.anio_titulo,
+        numero_titulo: titulo.numero_titulo,
+      })
+      await actualizarEstadoTitulo(id, resultado.estado, resultado.areaRegistral, resultado.numeroPartida)
+      revalidatePath('/')
+      titulo = await getTituloById(id)
+      if (!titulo) return { error: 'Título no encontrado.' }
+    }
+
+    if (!titulo.area_registral) return { error: 'No se pudo obtener el área registral de SUNARP.' }
+
+    // Descargar asiento — listarPartidas (paso 1) + listarAsientos (paso 2)
+    const { pdf, numeroPartida } = await descargarAsiento({
+      oficina_registral: titulo.oficina_registral,
+      anio_titulo: titulo.anio_titulo,
+      numero_titulo: titulo.numero_titulo,
+      area_registral: titulo.area_registral,
+    })
+
+    // Guardar numeroPartida si aún no estaba en la DB
+    if (numeroPartida && !titulo.numero_partida) {
+      await actualizarEstadoTitulo(id, titulo.ultimo_estado ?? '', titulo.area_registral, numeroPartida)
+    }
+
+    return { pdf }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error al descargar asiento.' }
   }
 }
 

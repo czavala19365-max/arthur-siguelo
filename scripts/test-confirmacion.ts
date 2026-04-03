@@ -12,6 +12,7 @@ const titulo = {
   ultimo_estado: 'OBSERVADO',
   ultima_consulta: new Date().toISOString(),
   area_registral: '22000',
+  numero_partida: null,
 }
 
 enviarConfirmacionAgregado({

@@ -96,6 +96,7 @@ export type ScraperResult = {
   estado: string
   detalle: string | null
   areaRegistral: string | null
+  numeroPartida: string | null
   consultadoEn: string
   rawResponse: unknown
 }
@@ -164,7 +165,8 @@ export async function consultarTitulo(params: ScraperParams): Promise<ScraperRes
     const cookieList = await page.cookies()
     cookies = cookieList.map(c => `${c.name}=${c.value}`).join('; ')
   } finally {
-    await browser.close()
+    // Ignorar errores EPERM en Windows cuando el antivirus bloquea limpieza de archivos temporales
+    await browser.close().catch(() => {})
   }
 
   // ── 2. Resolver Cloudflare Turnstile con 2captcha ─────────────────────────
@@ -248,14 +250,27 @@ export async function consultarTitulo(params: ScraperParams): Promise<ScraperRes
     (data.detalle as string) ??
     null
 
-  const areaRegistral =
-    tituloEntry?.areaRegistral ??
+  const areaRegistral  = tituloEntry?.areaRegistral  ?? null
+
+  // Log para encontrar el campo exacto de partida en la respuesta de SUNARP
+  if (tituloEntry) {
+    console.log('[scraper] tituloEntry keys:', Object.keys(tituloEntry))
+    const partidaEntry = Object.entries(tituloEntry).find(([k]) => k.toLowerCase().includes('partida'))
+    if (partidaEntry) console.log('[scraper] campo partida encontrado:', partidaEntry[0], '=', partidaEntry[1])
+  }
+
+  const numeroPartida =
+    tituloEntry?.numeroPartida ??
+    tituloEntry?.nroPartida ??
+    tituloEntry?.numPartida ??
+    tituloEntry?.partida ??
     null
 
   return {
     estado,
     detalle,
     areaRegistral,
+    numeroPartida,
     consultadoEn: new Date().toISOString(),
     rawResponse: data,
   }
@@ -335,6 +350,100 @@ export async function descargarEsquela(params: EsquelaParams): Promise<string[]>
   if (pdfs.length === 0) throw new Error('SUNARP no devolvió ninguna esquela.')
 
   return pdfs
+}
+
+const PARTIDAS_API = 'https://api-gateway.sunarp.gob.pe:9443/sunarp/siguelo/asientoinscripcion/listarPartidas'
+const ASIENTO_API  = 'https://api-gateway.sunarp.gob.pe:9443/sunarp/siguelo/asientoinscripcion/listarAsientos'
+
+export type AsientoParams = {
+  oficina_registral: string
+  anio_titulo: number
+  numero_titulo: string
+  area_registral: string
+}
+
+type PartidaEntry = {
+  numeroPartida: string
+  identificador: string
+  indiTive: boolean
+  indiOg: boolean
+}
+
+async function apiPost(url: string, payload: object): Promise<string> {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-IBM-Client-Id': IBM_CLIENT_ID,
+      Origin:  'https://siguelo.sunarp.gob.pe',
+      Referer: SIGUELO_URL,
+    },
+    body: JSON.stringify({ dmFsdWU: encrypt(JSON.stringify(payload)) }),
+  })
+  if (!response.ok) throw new Error(`HTTP ${response.status} en ${url}`)
+  const json = await response.json() as Record<string, string>
+  const raw = decrypt(json.cmVzcG9uc2U ?? '')
+  if (!raw) throw new Error('Respuesta vacía del servidor.')
+  return raw
+}
+
+/**
+ * Descarga el asiento de inscripción de un título INSCRITO desde SUNARP.
+ * Flujo de 2 pasos:
+ *   1. listarPartidas → obtiene numeroPartida
+ *   2. listarAsientos → descarga el PDF (bytes Java con signo → base64)
+ * Retorna { pdf: base64, numeroPartida } para que el caller pueda guardarlo.
+ */
+export async function descargarAsiento(
+  params: AsientoParams
+): Promise<{ pdf: string; numeroPartida: string }> {
+  const key = params.oficina_registral.toUpperCase().trim()
+  const oficina = OFICINAS[key]
+  if (!oficina) throw new Error(`Oficina no reconocida: "${params.oficina_registral}"`)
+
+  const basePayload = {
+    codigoZona:     oficina.zona,
+    codigoOficina:  oficina.oficina,
+    anioTitulo:     String(params.anio_titulo),
+    numeroTitulo:   params.numero_titulo.padStart(8, '0'),
+    idAreaRegistro: params.area_registral,
+    idioma:         'es',
+    ip:             '0.0.0.0',
+    status:         'A',
+    userApp:        'siguelo',
+    userCrea:       'siguelo',
+  }
+
+  // ── Paso 1: obtener numeroPartida ─────────────────────────────────────────
+  const rawPartidas = await apiPost(PARTIDAS_API, basePayload)
+  const dataPartidas = JSON.parse(rawPartidas) as {
+    success: number; title?: string
+    list?: PartidaEntry[]
+  }
+  if (dataPartidas.success !== 1 || !dataPartidas.list?.length) {
+    throw new Error(dataPartidas.title ?? 'No se encontró partida registral para este título.')
+  }
+  const numeroPartida = dataPartidas.list[0].numeroPartida
+
+  // ── Paso 2: descargar asiento ─────────────────────────────────────────────
+  const rawAsiento = await apiPost(ASIENTO_API, {
+    ...basePayload,
+    numeroPartida,
+    tipoEsquela: '',
+  })
+  const dataAsiento = JSON.parse(rawAsiento) as {
+    success: number; title?: string
+    list?: Array<{ numeroTotalPaginas: number; paginaAsiento: number[] }>
+  }
+  if (dataAsiento.success !== 1) {
+    throw new Error(dataAsiento.title ?? 'Error al obtener el asiento de inscripción.')
+  }
+  const paginaAsiento = dataAsiento.list?.[0]?.paginaAsiento
+  if (!paginaAsiento?.length) throw new Error('SUNARP no devolvió el asiento de inscripción.')
+
+  // La API devuelve bytes con signo Java (−128..127) → convertir a 0..255
+  const pdf = Buffer.from(paginaAsiento.map(b => b < 0 ? b + 256 : b)).toString('base64')
+  return { pdf, numeroPartida }
 }
 
 /** Lista de oficinas disponibles para el formulario */

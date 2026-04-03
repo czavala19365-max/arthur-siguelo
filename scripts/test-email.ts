@@ -24,6 +24,7 @@ const titulo: Titulo = {
   ultimo_estado: 'EN CALIFICACION',
   ultima_consulta: null,
   area_registral: null,
+  numero_partida: null,
   created_at: new Date().toISOString(),
 }
 

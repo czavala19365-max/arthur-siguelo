@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { consultarAhora, eliminarTituloAction, descargarEsquelaAction } from '@/app/actions'
+import { consultarAhora, eliminarTituloAction, descargarEsquelaAction, descargarAsientoAction } from '@/app/actions'
 
 // Colores exactos por estado (text + background con 15% opacidad)
 const ESTADO_STYLES: Record<string, { bg: string; text: string }> = {
@@ -57,25 +57,31 @@ export default function ConsultarButton({
 }) {
   const [result, setResult] = useState<{ estado?: string; detalle?: string; error?: string } | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
-  const [esquelas, setEsquelas] = useState<string[] | null>(null)   // null = no cargadas aún
+  const [esquelas, setEsquelas] = useState<string[] | null>(null)
   const [esquelaError, setEsquelaError] = useState<string | null>(null)
   const [mostrarEsquelas, setMostrarEsquelas] = useState(false)
+  const [asientos, setAsientos] = useState<string[] | null>(null)
+  const [asientoError, setAsientoError] = useState<string | null>(null)
+  const [mostrarAsientos, setMostrarAsientos] = useState(false)
   const [esquelaPending, startEsquelaTransition] = useTransition()
+  const [asientoPending, startAsientoTransition] = useTransition()
   const [isPending, startTransition] = useTransition()
   const [isDeleting, startDeleteTransition] = useTransition()
 
   const estadoVisible = result?.estado ?? ultimoEstado
   const estadoParaEsquela = (result?.estado ?? ultimoEstado ?? '').toUpperCase()
   const tieneEsquela = ESTADOS_CON_ESQUELA.has(estadoParaEsquela) && areaRegistral !== null
+  const tieneAsiento = estadoParaEsquela === 'INSCRITO' && areaRegistral !== null
   const labelEsquela = LABEL_ESQUELA[estadoParaEsquela] ?? { singular: 'Esquela', plural: 'Esquelas' }
 
   const handleConsultar = () => {
     startTransition(async () => {
       const res = await consultarAhora(tituloId)
       setResult(res)
-      // Si cambia el estado, resetear esquelas cargadas
       setEsquelas(null)
       setMostrarEsquelas(false)
+      setAsientos(null)
+      setMostrarAsientos(false)
     })
   }
 
@@ -102,6 +108,21 @@ export default function ConsultarButton({
       }
       setEsquelas(res.pdfs ?? [])
       setMostrarEsquelas(true)
+    })
+  }
+
+  const handleVerAsientos = () => {
+    if (asientos !== null) {
+      setMostrarAsientos(v => !v)
+      return
+    }
+    startAsientoTransition(async () => {
+      const res = await descargarAsientoAction(tituloId)
+      if (res.error) { setAsientoError(res.error); return }
+      if (res.pdf) {
+        setAsientos([res.pdf])
+        setMostrarAsientos(true)
+      }
     })
   }
 
@@ -157,6 +178,55 @@ export default function ConsultarButton({
         {/* Error al cargar esquelas */}
         {esquelaError && (
           <span className="text-xs text-red-500 leading-tight">{esquelaError}</span>
+        )}
+
+        {/* Botón asientos — solo para INSCRITO */}
+        {tieneAsiento && (
+          <button
+            onClick={handleVerAsientos}
+            disabled={isPending || isDeleting || esquelaPending || asientoPending}
+            className="text-xs text-violet-600 hover:text-violet-800 disabled:text-gray-400 disabled:cursor-not-allowed font-medium"
+          >
+            {asientoPending
+              ? '⏳ Obteniendo asiento…'
+              : asientos !== null
+                ? (mostrarAsientos ? `▲ Ocultar asientos (${asientos.length})` : `▼ Asientos (${asientos.length})`)
+                : '↓ Asiento'
+            }
+          </button>
+        )}
+
+        {/* Error al cargar asientos */}
+        {asientoError && (
+          <span className="text-xs text-red-500 leading-tight">{asientoError}</span>
+        )}
+
+        {/* Lista de asientos desplegada */}
+        {mostrarAsientos && asientos && asientos.length > 0 && (
+          <div className="mt-1 flex flex-col gap-0.5 w-full">
+            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+              {asientos.length > 1 ? `Asientos (${asientos.length})` : 'Asiento'}
+            </span>
+            {asientos.map((pdf, i) => (
+              <button
+                key={i}
+                onClick={() => {
+                  const link = document.createElement('a')
+                  link.href = `data:application/pdf;base64,${pdf}`
+                  link.download = `asiento-${i + 1}-${tituloId.slice(0, 8)}.pdf`
+                  document.body.appendChild(link)
+                  link.click()
+                  document.body.removeChild(link)
+                }}
+                className="text-left text-xs text-violet-700 hover:text-violet-900 font-medium flex items-center gap-1"
+              >
+                <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+                </svg>
+                Asiento {asientos.length > 1 ? i + 1 : ''}
+              </button>
+            ))}
+          </div>
         )}
 
         {/* Lista de esquelas desplegada */}

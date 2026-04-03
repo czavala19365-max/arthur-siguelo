@@ -31,13 +31,15 @@ export async function createTitulo(
 export async function actualizarEstadoTitulo(
   id: string,
   nuevoEstado: string,
-  areaRegistral?: string | null
+  areaRegistral?: string | null,
+  numeroPartida?: string | null
 ): Promise<void> {
   const updates: Record<string, unknown> = {
     ultimo_estado: nuevoEstado,
     ultima_consulta: new Date().toISOString(),
   }
   if (areaRegistral !== undefined) updates.area_registral = areaRegistral
+  if (numeroPartida !== undefined) updates.numero_partida = numeroPartida
 
   const { error } = await supabase
     .from('titulos')
