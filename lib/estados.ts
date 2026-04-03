@@ -32,3 +32,16 @@ export const STATE_ORDER = [
   'INSCRITO',
   'TACHADO',
 ]
+
+/**
+ * Normaliza un estado para comparación: mayúsculas + sin acentos.
+ * SUNARP a veces devuelve "EN CALIFICACION" (sin tilde) en lugar de "EN CALIFICACIÓN".
+ * Esta función hace que ambas variantes sean equivalentes.
+ */
+export function normalizarEstado(estado: string): string {
+  return estado
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // eliminar diacríticos (tildes, etc.)
+    .trim()
+}

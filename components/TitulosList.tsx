@@ -1,6 +1,6 @@
 import { getTitulos } from '@/lib/supabase'
 import type { Titulo } from '@/types'
-import { STATE_ORDER } from '@/lib/estados'
+import { STATE_ORDER, normalizarEstado } from '@/lib/estados'
 import TituloSection from './TituloSection'
 
 export default async function TitulosList() {
@@ -29,29 +29,36 @@ export default async function TitulosList() {
     )
   }
 
-  // Agrupar por estado normalizado
-  const grouped = new Map<string, Titulo[]>()
+  // Agrupar por estado normalizado (sin acentos, mayúsculas)
+  // Clave: estado normalizado → { titulos, etiquetaOriginal }
+  const grouped = new Map<string, { titulos: Titulo[] }>()
 
   for (const t of titulos) {
-    const key = (t.ultimo_estado ?? '').toUpperCase().trim()
-    if (!grouped.has(key)) grouped.set(key, [])
-    grouped.get(key)!.push(t)
+    const normKey = normalizarEstado(t.ultimo_estado ?? '')
+    if (!grouped.has(normKey)) grouped.set(normKey, { titulos: [] })
+    grouped.get(normKey)!.titulos.push(t)
   }
 
-  // Secciones en el orden definido
+  // Secciones en el orden canónico definido en STATE_ORDER
   const sections: { estado: string; titulos: Titulo[] }[] = []
-  for (const estado of STATE_ORDER) {
-    const items = grouped.get(estado)
-    if (items && items.length > 0) {
-      sections.push({ estado, titulos: items })
-      grouped.delete(estado)
+  const usedKeys = new Set<string>()
+
+  for (const canonico of STATE_ORDER) {
+    const normKey = normalizarEstado(canonico)
+    const entry = grouped.get(normKey)
+    if (entry && entry.titulos.length > 0) {
+      // Usar siempre el nombre canónico (con tilde) para mostrar
+      sections.push({ estado: canonico, titulos: entry.titulos })
+      usedKeys.add(normKey)
     }
   }
 
-  // Resto de estados no contemplados en STATE_ORDER (Otros)
+  // Estados no contemplados en STATE_ORDER → sección "Otros"
   const otros: Titulo[] = []
-  for (const items of grouped.values()) {
-    otros.push(...items)
+  for (const [normKey, entry] of grouped.entries()) {
+    if (!usedKeys.has(normKey)) {
+      otros.push(...entry.titulos)
+    }
   }
   if (otros.length > 0) {
     sections.push({ estado: 'OTROS', titulos: otros })

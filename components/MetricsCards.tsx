@@ -1,5 +1,5 @@
 import { getTitulos } from '@/lib/supabase'
-import { ESTADO_STYLES } from '@/lib/estados'
+import { ESTADO_STYLES, normalizarEstado } from '@/lib/estados'
 
 export default async function MetricsCards() {
   let titulos: Awaited<ReturnType<typeof getTitulos>> = []
@@ -9,8 +9,11 @@ export default async function MetricsCards() {
     return null
   }
 
-  const count = (estado: string) =>
-    titulos.filter(t => t.ultimo_estado?.toUpperCase() === estado).length
+  // Comparación normalizada: sin acentos, mayúsculas — cubre "EN CALIFICACION" y "EN CALIFICACIÓN"
+  const count = (estado: string) => {
+    const norm = normalizarEstado(estado)
+    return titulos.filter(t => normalizarEstado(t.ultimo_estado ?? '') === norm).length
+  }
 
   const metrics = [
     {
