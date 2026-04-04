@@ -42,8 +42,8 @@ export default function DashboardLayout({
     <div className="workspace-light" style={{ display: 'flex', height: '100%', minHeight: '100vh', background: 'var(--paper)', color: 'var(--ink)' }}>
       <Sidebar />
       <main
+        className="arthur-main"
         style={{
-          marginLeft: '260px',
           flex: 1,
           minHeight: '100vh',
           background: 'var(--paper)',

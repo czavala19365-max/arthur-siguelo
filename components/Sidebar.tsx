@@ -68,6 +68,12 @@ export default function Sidebar({ observadosCount = 0 }: SidebarProps) {
   const router = useRouter();
   const [count, setCount] = useState(observadosCount);
   const [userEmail, setUserEmail] = useState('');
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  // Close sidebar on route change
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
 
   useEffect(() => {
     fetch('/api/dashboard/stats')
@@ -91,185 +97,270 @@ export default function Sidebar({ observadosCount = 0 }: SidebarProps) {
   ];
 
   const isActive = (href: string) => {
-    if (href === '/dashboard') {
-      return pathname === '/dashboard';
-    }
+    if (href === '/dashboard') return pathname === '/dashboard';
     return pathname.startsWith(href);
   };
 
   return (
-    <aside
-      style={{
-        width: '260px',
-        minWidth: '260px',
-        height: '100vh',
-        backgroundColor: 'var(--sidebar-bg)',
-        borderRight: '1px solid var(--sidebar-edge)',
-        boxShadow: 'var(--sidebar-shadow)',
-        position: 'fixed',
-        left: 0,
-        top: 0,
-        display: 'flex',
-        flexDirection: 'column',
-        zIndex: 300,
-        color: 'var(--sidebar-text)',
-        overflowY: 'auto',
-      }}
-    >
-      {/* Logo */}
-      <div style={{ padding: '32px 28px 0' }}>
-        <Link href="/select" style={{ textDecoration: 'none' }}>
-          <div
-            style={{
-              fontFamily: 'var(--font-display)',
-              fontSize: '36px',
-              color: 'var(--sidebar-text)',
-              fontStyle: 'italic',
-              lineHeight: 1,
-              letterSpacing: '0.5px',
-            }}
-          >
-            arthur
-          </div>
-        </Link>
-        <div
-          style={{
-            width: '60px',
-            height: '2px',
-            background: 'rgba(194, 164, 109, 0.35)',
-            marginTop: '16px',
-          }}
-        />
-        <div
-          style={{
-            marginTop: '10px',
-            fontFamily: 'DM Mono, monospace',
-            fontSize: '10px',
-            textTransform: 'uppercase',
-            letterSpacing: '0.12em',
-            color: 'var(--sidebar-module-label)',
-          }}
-        >
-          registral
-        </div>
-      </div>
+    <>
+      {/* Responsive CSS — injected once with the sidebar */}
+      <style>{`
+        .arthur-sidebar {
+          transform: none;
+          transition: none;
+        }
+        .arthur-hamburger {
+          display: none;
+        }
+        .arthur-overlay {
+          display: none;
+        }
+        .arthur-main {
+          margin-left: 260px;
+        }
+        @media (max-width: 767px) {
+          .arthur-sidebar {
+            transform: translateX(-260px);
+            transition: transform 200ms ease;
+            box-shadow: none !important;
+          }
+          .arthur-sidebar.is-open {
+            transform: translateX(0);
+            box-shadow: 8px 0 32px rgba(0,0,0,0.35) !important;
+          }
+          .arthur-hamburger {
+            display: flex;
+          }
+          .arthur-overlay.is-open {
+            display: block;
+          }
+          .arthur-main {
+            margin-left: 0 !important;
+          }
+        }
+      `}</style>
 
-      {/* Navigation */}
-      <nav style={{ marginTop: '36px', padding: '0 16px', flex: 1 }}>
-        {links.map(link => (
-          <Link
-            key={link.href}
-            href={link.href}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '10px 16px',
-              fontFamily: 'Inter, sans-serif',
-              fontSize: '13px',
-              color: isActive(link.href) ? 'var(--sidebar-text)' : 'var(--sidebar-muted)',
-              background: isActive(link.href) ? 'var(--sidebar-active-bg)' : 'transparent',
-              borderRadius: '4px',
-              marginBottom: '4px',
-              transition: 'color 0.15s, background 0.15s',
-              textDecoration: 'none',
-            }}
-          >
-            <span style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <link.Icon />
-              {link.label}
-            </span>
-            {link.hasAlert && (
-              <span
-                style={{
-                  width: '8px',
-                  height: '8px',
-                  borderRadius: '50%',
-                  background: '#ef4444',
-                  display: 'inline-block',
-                  flexShrink: 0,
-                }}
-              />
-            )}
-          </Link>
-        ))}
-      </nav>
-
-      {/* User section */}
-      <div
+      {/* Hamburger button — mobile only */}
+      <button
+        className="arthur-hamburger"
+        onClick={() => setMobileOpen(v => !v)}
+        aria-label={mobileOpen ? 'Cerrar menú' : 'Abrir menú'}
         style={{
-          padding: '0 28px 24px',
-          position: 'absolute',
-          bottom: 0,
-          left: 0,
-          right: 0,
+          position: 'fixed',
+          top: '14px',
+          left: '14px',
+          zIndex: 400,
+          width: '38px',
+          height: '38px',
+          backgroundColor: 'var(--sidebar-bg)',
+          border: '1px solid var(--sidebar-edge)',
+          borderRadius: '4px',
+          cursor: 'pointer',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: 'var(--sidebar-text)',
+          flexShrink: 0,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-          <div
-            style={{
-              width: '32px',
-              height: '32px',
-              borderRadius: '50%',
-              background: 'var(--sidebar-avatar-bg)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontFamily: 'DM Mono, monospace',
-              fontSize: '12px',
-              color: 'var(--sidebar-text)',
-              flexShrink: 0,
-            }}
-          >
-            {userEmail ? userEmail.charAt(0).toUpperCase() : 'U'}
-          </div>
-          <div style={{ flex: 1, overflow: 'hidden' }}>
+        {mobileOpen ? (
+          <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" viewBox="0 0 24 24">
+            <path d="M18 6L6 18M6 6l12 12" />
+          </svg>
+        ) : (
+          <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" viewBox="0 0 24 24">
+            <path d="M3 6h18M3 12h18M3 18h18" />
+          </svg>
+        )}
+      </button>
+
+      {/* Overlay — mobile only, visible when open */}
+      <div
+        className={`arthur-overlay${mobileOpen ? ' is-open' : ''}`}
+        onClick={() => setMobileOpen(false)}
+        style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 250,
+          background: 'rgba(0,0,0,0.55)',
+        }}
+      />
+
+      {/* Sidebar */}
+      <aside
+        className={`arthur-sidebar${mobileOpen ? ' is-open' : ''}`}
+        style={{
+          width: '260px',
+          minWidth: '260px',
+          height: '100vh',
+          backgroundColor: 'var(--sidebar-bg)',
+          borderRight: '1px solid var(--sidebar-edge)',
+          boxShadow: 'var(--sidebar-shadow)',
+          position: 'fixed',
+          left: 0,
+          top: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          zIndex: 300,
+          color: 'var(--sidebar-text)',
+          overflowY: 'auto',
+        }}
+      >
+        {/* Logo */}
+        <div style={{ padding: '32px 28px 0' }}>
+          <Link href="/select" style={{ textDecoration: 'none' }}>
             <div
               style={{
-                fontFamily: 'Inter, sans-serif',
-                fontSize: '12px',
-              color: 'var(--sidebar-text)',
-              lineHeight: 1.3,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
+                fontFamily: 'var(--font-display)',
+                fontSize: '36px',
+                color: 'var(--sidebar-text)',
+                fontStyle: 'italic',
+                lineHeight: 1,
+                letterSpacing: '0.5px',
               }}
             >
-              {userEmail || 'Usuario'}
+              arthur
             </div>
+          </Link>
+          <div
+            style={{
+              width: '60px',
+              height: '2px',
+              background: 'rgba(194, 164, 109, 0.35)',
+              marginTop: '16px',
+            }}
+          />
+          <div
+            style={{
+              marginTop: '10px',
+              fontFamily: 'DM Mono, monospace',
+              fontSize: '10px',
+              textTransform: 'uppercase',
+              letterSpacing: '0.12em',
+              color: 'var(--sidebar-module-label)',
+            }}
+          >
+            registral
           </div>
         </div>
-        <button
-          onClick={() => {
-            localStorage.removeItem('arthur_auth');
-            router.push('/');
-          }}
+
+        {/* Navigation */}
+        <nav style={{ marginTop: '36px', padding: '0 16px', flex: 1 }}>
+          {links.map(link => (
+            <Link
+              key={link.href}
+              href={link.href}
+              onClick={() => setMobileOpen(false)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '10px 16px',
+                fontFamily: 'Inter, sans-serif',
+                fontSize: '13px',
+                color: isActive(link.href) ? 'var(--sidebar-text)' : 'var(--sidebar-muted)',
+                background: isActive(link.href) ? 'var(--sidebar-active-bg)' : 'transparent',
+                borderRadius: '4px',
+                marginBottom: '4px',
+                transition: 'color 0.15s, background 0.15s',
+                textDecoration: 'none',
+              }}
+            >
+              <span style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <link.Icon />
+                {link.label}
+              </span>
+              {link.hasAlert && (
+                <span
+                  style={{
+                    width: '8px',
+                    height: '8px',
+                    borderRadius: '50%',
+                    background: '#ef4444',
+                    display: 'inline-block',
+                    flexShrink: 0,
+                  }}
+                />
+              )}
+            </Link>
+          ))}
+        </nav>
+
+        {/* User section */}
+        <div
           style={{
-            width: '100%',
-            fontFamily: 'DM Mono, monospace',
-            fontSize: '10px',
-            textTransform: 'uppercase',
-            letterSpacing: '0.06em',
-            padding: '8px',
-            background: 'var(--sidebar-btn-bg)',
-            border: '1px solid var(--sidebar-btn-border)',
-            color: 'var(--sidebar-btn-fg)',
-            cursor: 'pointer',
-            transition: 'all 0.15s',
-            borderRadius: '2px',
-          }}
-          onMouseOver={e => {
-            e.currentTarget.style.background = 'var(--sidebar-hover-bg)';
-            e.currentTarget.style.color = 'var(--sidebar-text)';
-          }}
-          onMouseOut={e => {
-            e.currentTarget.style.background = 'var(--sidebar-btn-bg)';
-            e.currentTarget.style.color = 'var(--sidebar-btn-fg)';
+            padding: '0 28px 24px',
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
           }}
         >
-          Cerrar sesión
-        </button>
-      </div>
-    </aside>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+            <div
+              style={{
+                width: '32px',
+                height: '32px',
+                borderRadius: '50%',
+                background: 'var(--sidebar-avatar-bg)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontFamily: 'DM Mono, monospace',
+                fontSize: '12px',
+                color: 'var(--sidebar-text)',
+                flexShrink: 0,
+              }}
+            >
+              {userEmail ? userEmail.charAt(0).toUpperCase() : 'U'}
+            </div>
+            <div style={{ flex: 1, overflow: 'hidden' }}>
+              <div
+                style={{
+                  fontFamily: 'Inter, sans-serif',
+                  fontSize: '12px',
+                  color: 'var(--sidebar-text)',
+                  lineHeight: 1.3,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {userEmail || 'Usuario'}
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              localStorage.removeItem('arthur_auth');
+              router.push('/');
+            }}
+            style={{
+              width: '100%',
+              fontFamily: 'DM Mono, monospace',
+              fontSize: '10px',
+              textTransform: 'uppercase',
+              letterSpacing: '0.06em',
+              padding: '8px',
+              background: 'var(--sidebar-btn-bg)',
+              border: '1px solid var(--sidebar-btn-border)',
+              color: 'var(--sidebar-btn-fg)',
+              cursor: 'pointer',
+              transition: 'all 0.15s',
+              borderRadius: '2px',
+            }}
+            onMouseOver={e => {
+              e.currentTarget.style.background = 'var(--sidebar-hover-bg)';
+              e.currentTarget.style.color = 'var(--sidebar-text)';
+            }}
+            onMouseOut={e => {
+              e.currentTarget.style.background = 'var(--sidebar-btn-bg)';
+              e.currentTarget.style.color = 'var(--sidebar-btn-fg)';
+            }}
+          >
+            Cerrar sesión
+          </button>
+        </div>
+      </aside>
+    </>
   );
 }
