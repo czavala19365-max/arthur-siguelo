@@ -10,9 +10,10 @@ export async function POST(request: Request) {
     const result = await chatWithProvider(body.messages, body.provider);
     return Response.json(result);
   } catch (error) {
-    console.error('[API] POST /chat error:', error instanceof Error ? error.message : error);
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('[API] POST /chat error inesperado:', msg);
     return Response.json(
-      { error: 'Error al procesar la consulta. Intenta de nuevo.' },
+      { error: 'Consulta Legal no disponible temporalmente. Por favor intenta más tarde.' },
       { status: 500 }
     );
   }

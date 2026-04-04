@@ -87,16 +87,19 @@ export async function chatWithProvider(
   preferredProvider?: Provider
 ): Promise<ProviderResponse> {
   const available = getAvailableProviders();
+
   if (available.length === 0) {
+    console.error('[LLM] No hay proveedores configurados. Define ANTHROPIC_API_KEY, GEMINI_API_KEY u OPENAI_API_KEY en las variables de entorno.');
     return {
-      text: 'No hay ningún proveedor de IA configurado. Añade al menos una API key (ANTHROPIC_API_KEY, OPENAI_API_KEY o GEMINI_API_KEY) en las variables de entorno.',
-      provider: 'anthropic',
+      text: 'Consulta Legal no disponible temporalmente. Por favor intenta más tarde.',
+      provider: 'gemini',
     };
   }
 
-  const provider = preferredProvider && available.includes(preferredProvider)
-    ? preferredProvider
-    : available[0];
+  // Preferred provider va primero; el resto en orden de disponibilidad
+  const ordered: Provider[] = preferredProvider && available.includes(preferredProvider)
+    ? [preferredProvider, ...available.filter(p => p !== preferredProvider)]
+    : available;
 
   const callers: Record<Provider, (msgs: ChatMsg[]) => Promise<string>> = {
     anthropic: callAnthropic,
@@ -104,16 +107,25 @@ export async function chatWithProvider(
     gemini: callGemini,
   };
 
-  try {
-    const text = await callers[provider](messages);
-    return { text, provider };
-  } catch (error) {
-    const fallback = available.find(p => p !== provider);
-    if (fallback) {
-      console.warn(`[LLM] ${provider} failed, falling back to ${fallback}`);
-      const text = await callers[fallback](messages);
-      return { text, provider: fallback };
+  const errors: string[] = [];
+
+  for (const provider of ordered) {
+    try {
+      const text = await callers[provider](messages);
+      if (provider !== ordered[0]) {
+        console.warn(`[LLM] Usando proveedor de respaldo: ${provider}`);
+      }
+      return { text, provider };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error(`[LLM] Proveedor "${provider}" falló: ${msg}`);
+      errors.push(`${provider}: ${msg}`);
     }
-    throw error;
   }
+
+  console.error(`[LLM] Todos los proveedores fallaron. Detalle: ${errors.join(' | ')}`);
+  return {
+    text: 'Consulta Legal no disponible temporalmente. Por favor intenta más tarde.',
+    provider: available[0],
+  };
 }
