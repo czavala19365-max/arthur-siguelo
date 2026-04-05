@@ -31,7 +31,7 @@ export default function JudicialAlertasPage() {
 
   return (
     <div style={{ padding: '48px 64px', background: 'var(--paper)', minHeight: '100vh' }}>
-      <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.15em', color: 'var(--muted)', marginBottom: '8px' }}>ALERTAS JUDICIALES</div>
+      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.15em', color: 'var(--muted)', marginBottom: '8px' }}>ALERTAS JUDICIALES</div>
       <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(32px, 4vw, 48px)', fontWeight: 400 }}>Alertas</h1>
       <div style={{ width: '60px', height: '2px', background: 'var(--accent)', marginTop: '16px', marginBottom: '24px' }} />
 
@@ -41,10 +41,10 @@ export default function JudicialAlertasPage() {
         ) : rows.map(r => (
           <div key={r.id} style={{ padding: '14px 18px', borderBottom: '1px solid var(--line-faint)', display: 'flex', justifyContent: 'space-between' }}>
             <div>
-              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: '14px', fontWeight: 600 }}>{r.canal.toUpperCase()} · {r.urgencia || 'info'}</div>
-              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: '13px', color: 'var(--muted)' }}>{r.movimiento_descripcion}</div>
+              <div style={{ fontFamily: 'var(--font-body)', fontSize: '14px', fontWeight: 600 }}>{r.canal.toUpperCase()} · {r.urgencia || 'info'}</div>
+              <div style={{ fontFamily: 'var(--font-body)', fontSize: '13px', color: 'var(--muted)' }}>{r.movimiento_descripcion}</div>
             </div>
-            <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '10px', color: 'var(--muted)' }}>{new Date(r.enviado_at).toLocaleString('es-PE')}</div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--muted)' }}>{new Date(r.enviado_at).toLocaleString('es-PE')}</div>
           </div>
         ))}
       </div>

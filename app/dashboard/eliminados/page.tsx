@@ -90,7 +90,7 @@ export default function EliminadosPage() {
   if (loading) {
     return (
       <div style={{ padding: '48px 64px' }}>
-        <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.15em', color: 'var(--muted)' }}>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.15em', color: 'var(--muted)' }}>
           Cargando...
         </div>
       </div>
@@ -100,13 +100,13 @@ export default function EliminadosPage() {
   return (
     <div style={{ padding: '48px 64px', background: 'var(--paper)', minHeight: '100vh' }}>
       <div style={{ animation: 'fadeUp 0.4s ease forwards' }}>
-        <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.15em', color: 'var(--muted)', marginBottom: '8px' }}>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.15em', color: 'var(--muted)', marginBottom: '8px' }}>
           ELIMINADOS
         </div>
         <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(32px, 4vw, 48px)', color: 'var(--ink)', fontWeight: 400, lineHeight: 1.1 }}>
           Trámites Eliminados
         </h1>
-        <p style={{ fontFamily: 'Inter, sans-serif', fontSize: '14px', color: 'var(--muted)', marginTop: '8px' }}>
+        <p style={{ fontFamily: 'var(--font-body)', fontSize: '14px', color: 'var(--muted)', marginTop: '8px' }}>
           Los trámites eliminados se borran permanentemente del sistema después de 30 días.
         </p>
       </div>
@@ -117,7 +117,7 @@ export default function EliminadosPage() {
           gridTemplateColumns: '140px 100px 1fr 130px 100px 220px',
           background: 'var(--paper-dark)',
           padding: '12px 24px',
-          fontFamily: 'DM Mono, monospace',
+          fontFamily: 'var(--font-mono)',
           fontSize: '10px',
           textTransform: 'uppercase',
           letterSpacing: '0.12em',
@@ -137,7 +137,7 @@ export default function EliminadosPage() {
             <div style={{ fontFamily: 'var(--font-display)', fontSize: '24px', color: 'var(--ink)', marginBottom: '12px' }}>
               No hay trámites eliminados
             </div>
-            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: '15px', color: 'var(--muted)' }}>
+            <div style={{ fontFamily: 'var(--font-body)', fontSize: '15px', color: 'var(--muted)' }}>
               Los trámites que elimines aparecerán aquí por 30 días antes de borrarse definitivamente
             </div>
           </div>
@@ -159,17 +159,17 @@ export default function EliminadosPage() {
                 }}
               >
                 <div><StatusBadge estado={t.estado_actual} /></div>
-                <div style={{ fontFamily: 'Inter, sans-serif', fontSize: '13px', color: 'var(--muted)' }}>
+                <div style={{ fontFamily: 'var(--font-body)', fontSize: '13px', color: 'var(--muted)' }}>
                   {tipoText(t.tipo)}
                 </div>
-                <div style={{ fontFamily: 'Inter, sans-serif', fontSize: '14px', fontWeight: 600, color: 'var(--ink)' }}>
+                <div style={{ fontFamily: 'var(--font-body)', fontSize: '14px', fontWeight: 600, color: 'var(--ink)' }}>
                   {t.alias}
                 </div>
-                <div style={{ fontFamily: 'Inter, sans-serif', fontSize: '12px', color: 'var(--muted)' }}>
+                <div style={{ fontFamily: 'var(--font-body)', fontSize: '12px', color: 'var(--muted)' }}>
                   {formatDate(t.deleted_at)}
                 </div>
                 <div style={{
-                  fontFamily: 'DM Mono, monospace',
+                  fontFamily: 'var(--font-mono)',
                   fontSize: '12px',
                   color: daysLeft <= 7 ? '#991b1b' : 'var(--muted)',
                   fontWeight: daysLeft <= 7 ? 600 : 400,
@@ -184,7 +184,7 @@ export default function EliminadosPage() {
                       border: '1px solid var(--line-strong)',
                       borderRadius: 0,
                       padding: '6px 12px',
-                      fontFamily: 'DM Mono, monospace',
+                      fontFamily: 'var(--font-mono)',
                       fontSize: '10px',
                       textTransform: 'uppercase',
                       letterSpacing: '0.06em',
@@ -206,7 +206,7 @@ export default function EliminadosPage() {
                           border: 'none',
                           borderRadius: 0,
                           padding: '6px 10px',
-                          fontFamily: 'DM Mono, monospace',
+                          fontFamily: 'var(--font-mono)',
                           fontSize: '10px',
                           textTransform: 'uppercase',
                           color: 'white',
@@ -222,7 +222,7 @@ export default function EliminadosPage() {
                           border: '1px solid var(--line-strong)',
                           borderRadius: 0,
                           padding: '6px 10px',
-                          fontFamily: 'DM Mono, monospace',
+                          fontFamily: 'var(--font-mono)',
                           fontSize: '10px',
                           textTransform: 'uppercase',
                           color: 'var(--muted)',
@@ -240,7 +240,7 @@ export default function EliminadosPage() {
                         border: '1px solid rgba(153,27,27,0.2)',
                         borderRadius: 0,
                         padding: '6px 12px',
-                        fontFamily: 'DM Mono, monospace',
+                        fontFamily: 'var(--font-mono)',
                         fontSize: '10px',
                         textTransform: 'uppercase',
                         letterSpacing: '0.06em',

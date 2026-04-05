@@ -247,7 +247,7 @@ export default function TramiteDetailPage({ params }: { params: Promise<{ id: st
     border: '1px solid var(--line-strong)',
     borderRadius: 0,
     padding: '10px 20px',
-    fontFamily: 'DM Mono, monospace',
+    fontFamily: 'var(--font-mono)',
     fontSize: '10px',
     textTransform: 'uppercase',
     letterSpacing: '0.08em',
@@ -257,7 +257,7 @@ export default function TramiteDetailPage({ params }: { params: Promise<{ id: st
   if (loading) {
     return (
       <div style={{ padding: '48px 64px' }}>
-        <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.15em', color: 'var(--muted)' }}>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.15em', color: 'var(--muted)' }}>
           Cargando...
         </div>
       </div>
@@ -271,18 +271,18 @@ export default function TramiteDetailPage({ params }: { params: Promise<{ id: st
           Trámite no encontrado
         </div>
         {fetchError && (
-          <p style={{ fontFamily: 'Inter, sans-serif', fontSize: '14px', color: 'var(--muted)', marginTop: '12px', maxWidth: '520px', lineHeight: 1.6 }}>
+          <p style={{ fontFamily: 'var(--font-body)', fontSize: '14px', color: 'var(--muted)', marginTop: '12px', maxWidth: '520px', lineHeight: 1.6 }}>
             {fetchError}. Puede que el enlace sea antiguo, el caso se haya purgado o —en un servidor nuevo— la base de datos esté vacía.
           </p>
         )}
         <div style={{ marginTop: '20px', display: 'flex', flexWrap: 'wrap', gap: '16px' }}>
-          <Link href="/dashboard" style={{ fontFamily: 'DM Mono, monospace', fontSize: '11px', textTransform: 'uppercase', color: 'var(--muted)' }}>
+          <Link href="/dashboard" style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', textTransform: 'uppercase', color: 'var(--muted)' }}>
             ← Mis trámites
           </Link>
-          <Link href="/dashboard/archivados" style={{ fontFamily: 'DM Mono, monospace', fontSize: '11px', textTransform: 'uppercase', color: 'var(--muted)' }}>
+          <Link href="/dashboard/archivados" style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', textTransform: 'uppercase', color: 'var(--muted)' }}>
             Archivados
           </Link>
-          <Link href="/dashboard/eliminados" style={{ fontFamily: 'DM Mono, monospace', fontSize: '11px', textTransform: 'uppercase', color: 'var(--muted)' }}>
+          <Link href="/dashboard/eliminados" style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', textTransform: 'uppercase', color: 'var(--muted)' }}>
             Eliminados
           </Link>
         </div>
@@ -300,7 +300,7 @@ export default function TramiteDetailPage({ params }: { params: Promise<{ id: st
       {/* Back link */}
       <Link
         href="/dashboard"
-        style={{ fontFamily: 'DM Mono, monospace', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.15em', color: 'var(--muted)', display: 'inline-block', marginBottom: '8px' }}
+        style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.15em', color: 'var(--muted)', display: 'inline-block', marginBottom: '8px' }}
       >
         ← Mis Trámites
       </Link>
@@ -311,7 +311,7 @@ export default function TramiteDetailPage({ params }: { params: Promise<{ id: st
           border: '1px solid rgba(153,27,27,0.25)',
           padding: '14px 20px',
           marginBottom: '16px',
-          fontFamily: 'Inter, sans-serif',
+          fontFamily: 'var(--font-body)',
           fontSize: '14px',
           color: 'var(--ink)',
         }}>
@@ -327,7 +327,7 @@ export default function TramiteDetailPage({ params }: { params: Promise<{ id: st
           border: '1px solid rgba(26,61,43,0.2)',
           padding: '14px 20px',
           marginBottom: '16px',
-          fontFamily: 'Inter, sans-serif',
+          fontFamily: 'var(--font-body)',
           fontSize: '14px',
           color: 'var(--ink)',
         }}>
@@ -344,10 +344,10 @@ export default function TramiteDetailPage({ params }: { params: Promise<{ id: st
           border: '1px solid var(--line-mid)',
           background: 'rgba(15,15,15,0.02)',
         }}>
-          <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--muted)', marginBottom: '10px' }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--muted)', marginBottom: '10px' }}>
             Cloudflare Turnstile (misma verificación que en Síguelo Plus)
           </div>
-          <p style={{ fontFamily: 'Inter, sans-serif', fontSize: '12px', color: 'var(--muted)', margin: '0 0 10px', lineHeight: 1.55 }}>
+          <p style={{ fontFamily: 'var(--font-body)', fontSize: '12px', color: 'var(--muted)', margin: '0 0 10px', lineHeight: 1.55 }}>
             Si ves «No es posible conectarse», tu navegador no llega a <strong>challenges.cloudflare.com</strong> (antivirus, VPN, DNS, red corporativa o bloqueador). Nuestra consulta a SUNARP puede seguir intentándose igual; con verificación activa coincidimos mejor con la web oficial.
           </p>
           <Turnstile
@@ -372,11 +372,11 @@ export default function TramiteDetailPage({ params }: { params: Promise<{ id: st
             }}
           />
           {turnstileError && (
-            <p style={{ fontFamily: 'Inter, sans-serif', fontSize: '12px', color: '#991b1b', margin: '10px 0 0', lineHeight: 1.5 }}>
+            <p style={{ fontFamily: 'var(--font-body)', fontSize: '12px', color: '#991b1b', margin: '10px 0 0', lineHeight: 1.5 }}>
               {turnstileError}
             </p>
           )}
-          <p style={{ fontFamily: 'Inter, sans-serif', fontSize: '12px', color: 'var(--muted)', margin: '10px 0 0', lineHeight: 1.5 }}>
+          <p style={{ fontFamily: 'var(--font-body)', fontSize: '12px', color: 'var(--muted)', margin: '10px 0 0', lineHeight: 1.5 }}>
             {turnstileToken
               ? 'Verificación completada. Pulsa Revisar ahora (el token es de un solo uso).'
               : 'Sin recuadro verde: igual puedes usar Revisar ahora; el backend prueba varias rutas y tipos de registro en la API SUNARP.'}
@@ -468,7 +468,7 @@ export default function TramiteDetailPage({ params }: { params: Promise<{ id: st
                       padding: '10px 16px',
                       background: 'none',
                       border: 'none',
-                      fontFamily: 'DM Mono, monospace',
+                      fontFamily: 'var(--font-mono)',
                       fontSize: '10px',
                       textTransform: 'uppercase',
                       letterSpacing: '0.08em',
@@ -491,7 +491,7 @@ export default function TramiteDetailPage({ params }: { params: Promise<{ id: st
                       background: 'none',
                       border: 'none',
                       borderTop: '1px solid var(--line-faint)',
-                      fontFamily: 'DM Mono, monospace',
+                      fontFamily: 'var(--font-mono)',
                       fontSize: '10px',
                       textTransform: 'uppercase',
                       letterSpacing: '0.08em',
@@ -521,7 +521,7 @@ export default function TramiteDetailPage({ params }: { params: Promise<{ id: st
         marginBottom: '24px',
         animation: 'fadeUp 0.4s ease forwards',
       }}>
-        <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--muted)', marginBottom: '8px' }}>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--muted)', marginBottom: '8px' }}>
           ESTADO ACTUAL
         </div>
         <div style={{ fontFamily: 'var(--font-display)', fontSize: '32px', color: statusColor, marginBottom: '20px' }}>
@@ -534,17 +534,17 @@ export default function TramiteDetailPage({ params }: { params: Promise<{ id: st
             { label: 'FRECUENCIA', value: `Cada ${tramite.polling_frequency_hours}h` },
           ].map(item => (
             <div key={item.label}>
-              <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--muted)', marginBottom: '4px' }}>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--muted)', marginBottom: '4px' }}>
                 {item.label}
               </div>
-              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: '13px', color: 'var(--ink)' }}>
+              <div style={{ fontFamily: 'var(--font-body)', fontSize: '13px', color: 'var(--ink)' }}>
                 {item.value}
               </div>
             </div>
           ))}
         </div>
         <div style={{ marginTop: '24px', paddingTop: '24px', borderTop: '1px solid var(--line)' }}>
-          <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--muted)', marginBottom: '8px' }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--muted)', marginBottom: '8px' }}>
             Tipo de registro (como en Síguelo Plus)
           </div>
           <select
@@ -552,7 +552,7 @@ export default function TramiteDetailPage({ params }: { params: Promise<{ id: st
             onChange={e => { void handleTipoChange(e.target.value); }}
             disabled={isDeleted}
             style={{
-              fontFamily: 'Inter, sans-serif',
+              fontFamily: 'var(--font-body)',
               fontSize: '13px',
               padding: '10px 12px',
               border: '1px solid var(--line-strong)',
@@ -566,7 +566,7 @@ export default function TramiteDetailPage({ params }: { params: Promise<{ id: st
               <option key={o.value} value={o.value}>{o.label}</option>
             ))}
           </select>
-          <p style={{ fontFamily: 'Inter, sans-serif', fontSize: '12px', color: 'var(--muted)', marginTop: '10px', maxWidth: '560px', lineHeight: 1.55 }}>
+          <p style={{ fontFamily: 'var(--font-body)', fontSize: '12px', color: 'var(--muted)', marginTop: '10px', maxWidth: '560px', lineHeight: 1.55 }}>
             Debe coincidir con «Tipo de registro» en la ficha oficial (p. ej. poderes en registro de personas suelen figurar como <strong>Personas naturales</strong>).
             Tras cambiarlo, usa <strong>Revisar ahora</strong>.
           </p>
@@ -583,7 +583,7 @@ export default function TramiteDetailPage({ params }: { params: Promise<{ id: st
             border: `1px solid ${demoResult.error ? '#991b1b' : demoResult.changed ? '#166534' : 'rgba(136,136,136,0.2)'}`,
             color: demoResult.error ? 'white' : 'var(--ink)',
             animation: 'fadeUp 0.4s ease forwards',
-            fontFamily: 'Inter, sans-serif',
+            fontFamily: 'var(--font-body)',
             fontSize: '14px',
           }}
         >
@@ -609,14 +609,14 @@ export default function TramiteDetailPage({ params }: { params: Promise<{ id: st
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <span style={{ fontFamily: 'var(--font-display)', fontSize: '22px', color: 'white' }}>Qué hacer ahora</span>
             </div>
-            <span style={{ fontFamily: 'DM Mono, monospace', fontSize: '10px', background: 'rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.7)', padding: '4px 10px', borderRadius: '2px' }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', background: 'rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.7)', padding: '4px 10px', borderRadius: '2px' }}>
               Claude AI
             </span>
           </div>
-          <p style={{ fontFamily: 'Inter, sans-serif', fontSize: '16px', lineHeight: '1.75', color: 'rgba(255,255,255,0.85)', margin: 0 }}>
+          <p style={{ fontFamily: 'var(--font-body)', fontSize: '16px', lineHeight: '1.75', color: 'rgba(255,255,255,0.85)', margin: 0 }}>
             {suggestion || 'Haz clic en "Revisar ahora" para obtener una sugerencia personalizada de Arthur-IA.'}
           </p>
-          <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '10px', fontStyle: 'italic', color: 'rgba(255,255,255,0.35)', marginTop: '16px' }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', fontStyle: 'italic', color: 'rgba(255,255,255,0.35)', marginTop: '16px' }}>
             Siempre consulta con tu abogado antes de actuar
           </div>
         </div>
@@ -637,10 +637,10 @@ export default function TramiteDetailPage({ params }: { params: Promise<{ id: st
           opacity: 0,
         }}>
           <div>
-            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: '15px', fontWeight: 600, color: 'var(--ink)', marginBottom: '4px' }}>
+            <div style={{ fontFamily: 'var(--font-body)', fontSize: '15px', fontWeight: 600, color: 'var(--ink)', marginBottom: '4px' }}>
               Arthur-IA puede redactar tu escrito
             </div>
-            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: '13px', color: 'var(--muted)' }}>
+            <div style={{ fontFamily: 'var(--font-body)', fontSize: '13px', color: 'var(--muted)' }}>
               Basado en la esquela · 5 min con asistencia IA
             </div>
           </div>
@@ -652,7 +652,7 @@ export default function TramiteDetailPage({ params }: { params: Promise<{ id: st
               border: 'none',
               borderRadius: 0,
               padding: '10px 20px',
-              fontFamily: 'Inter, sans-serif',
+              fontFamily: 'var(--font-body)',
               fontSize: '13px',
               fontWeight: 500,
               cursor: 'pointer',
@@ -676,14 +676,14 @@ export default function TramiteDetailPage({ params }: { params: Promise<{ id: st
           animationDelay: '200ms',
           opacity: 0,
         }}>
-          <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#b8860b', marginBottom: '12px' }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#b8860b', marginBottom: '12px' }}>
             ESQUELA DE OBSERVACIÓN
           </div>
-          <p style={{ fontFamily: 'Inter, sans-serif', fontSize: '14px', lineHeight: '1.7', color: 'var(--ink)', margin: 0 }}>
+          <p style={{ fontFamily: 'var(--font-body)', fontSize: '14px', lineHeight: '1.7', color: 'var(--ink)', margin: 0 }}>
             {tramite.observacion_texto}
           </p>
           {(tramite.estado_actual === 'SIN DATOS' || (tramite.observacion_texto && /no existe el titulo/i.test(tramite.observacion_texto))) && (
-            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: '13px', lineHeight: 1.65, color: 'var(--muted)', margin: '16px 0 0' }}>
+            <div style={{ fontFamily: 'var(--font-body)', fontSize: '13px', lineHeight: 1.65, color: 'var(--muted)', margin: '16px 0 0' }}>
               <p style={{ margin: '0 0 12px' }}>
                 Si en el <strong>portal oficial</strong> el mismo número, año y oficina sí aparecen, comprueba arriba el <strong>tipo de registro</strong> (por ejemplo <strong>Personas naturales</strong> para muchos poderes).
               </p>
@@ -710,7 +710,7 @@ export default function TramiteDetailPage({ params }: { params: Promise<{ id: st
         <div style={{ marginBottom: '40px' }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '12px', marginBottom: '16px' }}>
             <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '24px', color: 'var(--ink)', fontWeight: 400 }}>Plazos</h2>
-            <span style={{ fontFamily: 'DM Mono, monospace', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--muted)' }}>FECHAS IMPORTANTES</span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--muted)' }}>FECHAS IMPORTANTES</span>
           </div>
           <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
             {tramite.plazos.map(plazo => {
@@ -732,15 +732,15 @@ export default function TramiteDetailPage({ params }: { params: Promise<{ id: st
                     <div style={{ fontFamily: 'var(--font-display)', fontSize: '48px', color: getDaysColor(days), lineHeight: 1 }}>
                       {days}
                     </div>
-                    <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase' }}>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase' }}>
                       días
                     </div>
                   </div>
                   <div>
-                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: '14px', fontWeight: 600, color: 'var(--ink)', marginBottom: '4px' }}>
+                    <div style={{ fontFamily: 'var(--font-body)', fontSize: '14px', fontWeight: 600, color: 'var(--ink)', marginBottom: '4px' }}>
                       {plazo.descripcion}
                     </div>
-                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: '13px', color: 'var(--muted)', marginBottom: '6px' }}>
+                    <div style={{ fontFamily: 'var(--font-body)', fontSize: '13px', color: 'var(--muted)', marginBottom: '6px' }}>
                       {formatDate(plazo.fecha_vencimiento)}
                     </div>
                     <CalendarButtons
@@ -775,12 +775,12 @@ export default function TramiteDetailPage({ params }: { params: Promise<{ id: st
                   borderRadius: '50%',
                   background: getStatusColor(item.estado),
                 }} />
-                <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '11px', color: 'var(--muted)', marginBottom: '4px' }}>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--muted)', marginBottom: '4px' }}>
                   {new Date(item.scraped_at).toLocaleString('es-PE')}
                 </div>
                 <StatusBadge estado={item.estado} />
                 {item.observacion && (
-                  <p style={{ fontFamily: 'Inter, sans-serif', fontSize: '13px', color: 'var(--muted)', lineHeight: '1.5', marginTop: '6px' }}>
+                  <p style={{ fontFamily: 'var(--font-body)', fontSize: '13px', color: 'var(--muted)', lineHeight: '1.5', marginTop: '6px' }}>
                     {item.observacion.substring(0, 150)}{item.observacion.length > 150 ? '...' : ''}
                   </p>
                 )}
@@ -793,11 +793,11 @@ export default function TramiteDetailPage({ params }: { params: Promise<{ id: st
       {/* Notifications */}
       {tramite.notifications.length > 0 && (
         <div style={{ marginBottom: '40px' }}>
-          <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--muted)', marginBottom: '12px' }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--muted)', marginBottom: '12px' }}>
             ALERTAS ENVIADAS
           </div>
           {tramite.notifications.map(n => (
-            <div key={n.id} style={{ fontFamily: 'Inter, sans-serif', fontSize: '13px', color: 'var(--muted)', marginBottom: '6px' }}>
+            <div key={n.id} style={{ fontFamily: 'var(--font-body)', fontSize: '13px', color: 'var(--muted)', marginBottom: '6px' }}>
               <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: n.success ? '#166534' : '#991b1b', marginRight: '6px', verticalAlign: 'middle' }} />
               {n.success ? 'Enviado' : 'Error'} · {n.canal === 'whatsapp' ? 'WhatsApp' : 'Email'} · {n.estado} · {new Date(n.enviado_at).toLocaleString('es-PE')}
             </div>

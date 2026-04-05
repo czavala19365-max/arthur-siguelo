@@ -21,9 +21,9 @@
   --line-mid: rgba(255, 255, 255, 0.1);
   --line-strong: rgba(255, 255, 255, 0.15);
   --overlay-scrim: rgba(0, 0, 0, 0.55);
-  --font-display: "Playfair Display", Georgia, serif;
-  --font-body: "Inter", system-ui, sans-serif;
-  --font-mono: "DM Mono", ui-monospace, monospace;
+  --font-display: "Syne", sans-serif;
+  --font-body: "Outfit", sans-serif;
+  --font-mono: "Outfit", sans-serif;
   /* App workspace (registral / judicial): light surfaces */
   --sidebar-text: #f5f5f5;
   --sidebar-muted: rgba(255, 255, 255, 0.45);
@@ -100,9 +100,15 @@ textarea {
   font-family: var(--font-display);
 }
 
+h1, h2, h3 {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+}
+
 .badge {
-  font-family: var(--font-mono);
+  font-family: var(--font-body);
   font-size: 10px;
+  font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   padding: 4px 10px;

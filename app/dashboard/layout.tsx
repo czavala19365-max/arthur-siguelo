@@ -28,7 +28,7 @@ export default function DashboardLayout({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        fontFamily: 'DM Mono, monospace',
+        fontFamily: 'var(--font-mono)',
         fontSize: '11px',
         color: 'var(--muted)',
         textTransform: 'uppercase',

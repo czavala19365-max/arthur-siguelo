@@ -87,7 +87,7 @@ export default function JudicialSidebar() {
         <div
           style={{
             marginTop: '10px',
-            fontFamily: 'DM Mono, monospace',
+            fontFamily: 'var(--font-mono)',
             fontSize: '10px',
             textTransform: 'uppercase',
             letterSpacing: '0.12em',
@@ -107,7 +107,7 @@ export default function JudicialSidebar() {
               display: 'flex',
               alignItems: 'center',
               padding: '10px 16px',
-              fontFamily: 'Inter, sans-serif',
+              fontFamily: 'var(--font-body)',
               fontSize: '13px',
               color: isActive(link.href) ? 'var(--sidebar-text)' : 'var(--sidebar-muted)',
               background: isActive(link.href) ? 'var(--sidebar-active-bg)' : 'transparent',
@@ -136,7 +136,7 @@ export default function JudicialSidebar() {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontFamily: 'DM Mono, monospace',
+              fontFamily: 'var(--font-mono)',
               fontSize: '12px',
               color: 'var(--sidebar-text)',
               flexShrink: 0,
@@ -146,7 +146,7 @@ export default function JudicialSidebar() {
           </div>
           <div
             style={{
-              fontFamily: 'Inter, sans-serif',
+              fontFamily: 'var(--font-body)',
               fontSize: '12px',
               color: 'var(--sidebar-text)',
               overflow: 'hidden',
@@ -164,7 +164,7 @@ export default function JudicialSidebar() {
           }}
           style={{
             width: '100%',
-            fontFamily: 'DM Mono, monospace',
+            fontFamily: 'var(--font-mono)',
             fontSize: '10px',
             textTransform: 'uppercase',
             letterSpacing: '0.06em',

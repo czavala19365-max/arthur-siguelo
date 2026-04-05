@@ -160,7 +160,7 @@ export default function AddTramiteDrawer({ open, onClose, onSuccess }: AddTramit
     border: '1px solid var(--line-strong)',
     borderRadius: 0,
     padding: '12px 16px',
-    fontFamily: 'Inter, sans-serif',
+    fontFamily: 'var(--font-body)',
     fontSize: '14px',
     color: 'var(--ink)',
     width: '100%',
@@ -168,7 +168,7 @@ export default function AddTramiteDrawer({ open, onClose, onSuccess }: AddTramit
   };
 
   const labelStyle: React.CSSProperties = {
-    fontFamily: 'DM Mono, monospace',
+    fontFamily: 'var(--font-mono)',
     fontSize: '10px',
     textTransform: 'uppercase' as const,
     letterSpacing: '0.1em',
@@ -254,7 +254,7 @@ export default function AddTramiteDrawer({ open, onClose, onSuccess }: AddTramit
                 <span style={{ position: 'absolute', top: '6px', right: '8px', color: 'var(--accent)', fontSize: '12px', fontWeight: 700 }}>✓</span>
               )}
               <div style={{ fontSize: '28px', marginBottom: '6px' }}>{opt.emoji}</div>
-              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: '13px', fontWeight: 500, color: 'var(--ink)' }}>{opt.label}</div>
+              <div style={{ fontFamily: 'var(--font-body)', fontSize: '13px', fontWeight: 500, color: 'var(--ink)' }}>{opt.label}</div>
             </button>
           ))}
         </div>
@@ -336,7 +336,7 @@ export default function AddTramiteDrawer({ open, onClose, onSuccess }: AddTramit
           {/* WhatsApp toggle */}
           <div style={{ marginBottom: '16px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-              <span style={{ fontFamily: 'Inter, sans-serif', fontSize: '14px', fontWeight: 500, color: 'var(--ink)' }}>
+              <span style={{ fontFamily: 'var(--font-body)', fontSize: '14px', fontWeight: 500, color: 'var(--ink)' }}>
                 WhatsApp
               </span>
               <div
@@ -366,7 +366,7 @@ export default function AddTramiteDrawer({ open, onClose, onSuccess }: AddTramit
             {whatsappEnabled && (
               <div style={{ display: 'flex', gap: '8px' }}>
                 <div style={{ ...inputStyle, width: 'auto', padding: '12px 14px', background: 'var(--paper-dark)', flexShrink: 0, display: 'flex', alignItems: 'center' }}>
-                  <span style={{ fontFamily: 'DM Mono, monospace', fontSize: '13px', color: 'var(--muted)' }}>+51</span>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', color: 'var(--muted)' }}>+51</span>
                 </div>
                 <input
                   type="tel"
@@ -384,7 +384,7 @@ export default function AddTramiteDrawer({ open, onClose, onSuccess }: AddTramit
           {/* Email toggle */}
           <div style={{ marginBottom: '16px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-              <span style={{ fontFamily: 'Inter, sans-serif', fontSize: '14px', fontWeight: 500, color: 'var(--ink)' }}>
+              <span style={{ fontFamily: 'var(--font-body)', fontSize: '14px', fontWeight: 500, color: 'var(--ink)' }}>
                 Email
               </span>
               <div
@@ -439,7 +439,7 @@ export default function AddTramiteDrawer({ open, onClose, onSuccess }: AddTramit
                   border: '1px solid var(--line-strong)',
                   borderRadius: 0,
                   padding: '8px 14px',
-                  fontFamily: 'Inter, sans-serif',
+                  fontFamily: 'var(--font-body)',
                   fontSize: '13px',
                   cursor: 'pointer',
                   transition: 'background 0.15s, color 0.15s',
@@ -462,7 +462,7 @@ export default function AddTramiteDrawer({ open, onClose, onSuccess }: AddTramit
             border: 'none',
             borderRadius: 0,
             padding: '16px',
-            fontFamily: 'Inter, sans-serif',
+            fontFamily: 'var(--font-body)',
             fontSize: '14px',
             fontWeight: 500,
             cursor: submitting || !numero || !alias ? 'not-allowed' : 'pointer',

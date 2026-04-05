@@ -153,7 +153,7 @@ export default function RedactarPage({ params }: { params: Promise<{ id: string 
   if (!tramite) {
     return (
       <div style={{ padding: '48px 64px' }}>
-        <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '11px', textTransform: 'uppercase', color: 'var(--muted)' }}>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', textTransform: 'uppercase', color: 'var(--muted)' }}>
           Cargando...
         </div>
       </div>
@@ -176,7 +176,7 @@ export default function RedactarPage({ params }: { params: Promise<{ id: string 
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
                 <Link
                   href={`/dashboard/tramites/${id}`}
-                  style={{ fontFamily: 'DM Mono, monospace', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--muted)' }}
+                  style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--muted)' }}
                 >
                   ← Volver
                 </Link>
@@ -184,12 +184,12 @@ export default function RedactarPage({ params }: { params: Promise<{ id: string 
               <div style={{ fontFamily: 'var(--font-display)', fontSize: '20px', color: 'var(--ink)' }}>
                 Redactor IA
               </div>
-              <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                 Escrito {documentType} · {tramite.alias}
               </div>
             </div>
             <span style={{
-              fontFamily: 'DM Mono, monospace',
+              fontFamily: 'var(--font-mono)',
               fontSize: '10px',
               background: 'var(--accent-navy)',
               color: 'white',
@@ -215,7 +215,7 @@ export default function RedactarPage({ params }: { params: Promise<{ id: string 
                     border: '1px solid var(--line-strong)',
                     borderRadius: '2px',
                     padding: '6px 14px',
-                    fontFamily: 'DM Mono, monospace',
+                    fontFamily: 'var(--font-mono)',
                     fontSize: '11px',
                     cursor: 'pointer',
                     transition: 'background 0.15s, color 0.15s',
@@ -247,10 +247,10 @@ export default function RedactarPage({ params }: { params: Promise<{ id: string 
                   border: '1px solid var(--line)',
                   borderLeftColor: 'var(--accent)',
                 }}>
-                  <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '10px', color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '6px' }}>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '6px' }}>
                     Arthur-IA
                   </div>
-                  <div style={{ fontFamily: 'Inter, sans-serif', fontSize: '14px', lineHeight: '1.7', color: 'var(--ink)', whiteSpace: 'pre-wrap' }}>
+                  <div style={{ fontFamily: 'var(--font-body)', fontSize: '14px', lineHeight: '1.7', color: 'var(--ink)', whiteSpace: 'pre-wrap' }}>
                     {renderMessage(msg.content)}
                   </div>
                 </div>
@@ -261,7 +261,7 @@ export default function RedactarPage({ params }: { params: Promise<{ id: string 
                   padding: '14px 18px',
                   borderRadius: '2px',
                 }}>
-                  <div style={{ fontFamily: 'Inter, sans-serif', fontSize: '14px', whiteSpace: 'pre-wrap' }}>
+                  <div style={{ fontFamily: 'var(--font-body)', fontSize: '14px', whiteSpace: 'pre-wrap' }}>
                     {msg.content}
                   </div>
                 </div>
@@ -311,7 +311,7 @@ export default function RedactarPage({ params }: { params: Promise<{ id: string 
               border: '1px solid var(--line-strong)',
               borderRadius: 0,
               padding: '12px 16px',
-              fontFamily: 'Inter, sans-serif',
+              fontFamily: 'var(--font-body)',
               fontSize: '14px',
               color: 'var(--ink)',
               resize: 'none',
@@ -331,7 +331,7 @@ export default function RedactarPage({ params }: { params: Promise<{ id: string 
               border: 'none',
               borderRadius: 0,
               padding: '12px 20px',
-              fontFamily: 'DM Mono, monospace',
+              fontFamily: 'var(--font-mono)',
               fontSize: '10px',
               textTransform: 'uppercase',
               letterSpacing: '0.08em',
@@ -361,7 +361,7 @@ export default function RedactarPage({ params }: { params: Promise<{ id: string 
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             {savedTime && (
-              <span style={{ fontFamily: 'DM Mono, monospace', fontSize: '10px', color: 'var(--muted)' }}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--muted)' }}>
                 Guardado · {savedTime}
               </span>
             )}
@@ -373,7 +373,7 @@ export default function RedactarPage({ params }: { params: Promise<{ id: string 
                 border: '1px solid var(--line-strong)',
                 borderRadius: 0,
                 padding: '8px 16px',
-                fontFamily: 'DM Mono, monospace',
+                fontFamily: 'var(--font-mono)',
                 fontSize: '10px',
                 textTransform: 'uppercase',
                 letterSpacing: '0.08em',
@@ -401,7 +401,7 @@ export default function RedactarPage({ params }: { params: Promise<{ id: string 
                 {renderDocument(documentContent)}
               </div>
               <div style={{
-                fontFamily: 'DM Mono, monospace',
+                fontFamily: 'var(--font-mono)',
                 fontSize: '10px',
                 fontStyle: 'italic',
                 color: 'var(--muted)',
@@ -417,7 +417,7 @@ export default function RedactarPage({ params }: { params: Promise<{ id: string 
               <div style={{ fontFamily: 'var(--font-display)', fontSize: '24px', color: 'var(--ink)' }}>
                 El escrito aparecerá aquí
               </div>
-              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: '14px', color: 'var(--muted)', textAlign: 'center', maxWidth: '300px' }}>
+              <div style={{ fontFamily: 'var(--font-body)', fontSize: '14px', color: 'var(--muted)', textAlign: 'center', maxWidth: '300px' }}>
                 Responde las preguntas de Arthur-IA y el documento se generará automáticamente
               </div>
             </div>

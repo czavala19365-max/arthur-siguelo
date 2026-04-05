@@ -46,7 +46,7 @@ function getTipoPill(tipo: string | null): React.ReactNode {
   if (!config) return null;
   return (
     <span style={{
-      fontFamily: 'DM Mono, monospace',
+      fontFamily: 'var(--font-mono)',
       fontSize: '10px',
       textTransform: 'uppercase',
       letterSpacing: '0.08em',
@@ -87,7 +87,7 @@ export default function AgendaPage() {
   if (loading) {
     return (
       <div style={{ padding: '48px 64px' }}>
-        <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '11px', textTransform: 'uppercase', color: 'var(--muted)' }}>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', textTransform: 'uppercase', color: 'var(--muted)' }}>
           Cargando agenda...
         </div>
       </div>
@@ -108,7 +108,7 @@ export default function AgendaPage() {
     <div style={{ padding: '48px 64px', background: 'var(--paper)', minHeight: '100vh' }}>
       {/* Header */}
       <div style={{ animation: 'fadeUp 0.4s ease forwards' }}>
-        <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.15em', color: 'var(--muted)', marginBottom: '8px' }}>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.15em', color: 'var(--muted)', marginBottom: '8px' }}>
           AGENDA DE PLAZOS
         </div>
         <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(32px, 4vw, 48px)', color: 'var(--ink)', fontWeight: 400 }}>
@@ -122,7 +122,7 @@ export default function AgendaPage() {
           <div style={{ fontFamily: 'var(--font-display)', fontSize: '24px', color: 'var(--ink)', marginBottom: '8px' }}>
             No hay plazos próximos. Todo al día. ✓
           </div>
-          <div style={{ fontFamily: 'Inter, sans-serif', fontSize: '14px', color: 'var(--muted)' }}>
+          <div style={{ fontFamily: 'var(--font-body)', fontSize: '14px', color: 'var(--muted)' }}>
             Los plazos aparecerán aquí cuando tengas trámites OBSERVADO o TACHA.
           </div>
         </div>
@@ -132,7 +132,7 @@ export default function AgendaPage() {
             section.items.length > 0 && (
               <div key={section.label}>
                 <div style={{
-                  fontFamily: 'DM Mono, monospace',
+                  fontFamily: 'var(--font-mono)',
                   fontSize: '11px',
                   textTransform: 'uppercase',
                   letterSpacing: '0.12em',
@@ -169,24 +169,24 @@ export default function AgendaPage() {
                           <div style={{ fontFamily: 'var(--font-display)', fontSize: '40px', color: getDaysColor(days), lineHeight: 1 }}>
                             {days}
                           </div>
-                          <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase' }}>
+                          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase' }}>
                             días
                           </div>
                         </div>
 
                         {/* Details */}
                         <div style={{ flex: 1 }}>
-                          <div style={{ fontFamily: 'Inter, sans-serif', fontSize: '14px', fontWeight: 600, color: 'var(--ink)', marginBottom: '4px' }}>
+                          <div style={{ fontFamily: 'var(--font-body)', fontSize: '14px', fontWeight: 600, color: 'var(--ink)', marginBottom: '4px' }}>
                             {plazo.descripcion}
                           </div>
-                          <div style={{ fontFamily: 'Inter, sans-serif', fontSize: '13px', color: 'var(--muted)' }}>
+                          <div style={{ fontFamily: 'var(--font-body)', fontSize: '13px', color: 'var(--muted)' }}>
                             {plazo.alias}
                           </div>
                         </div>
 
                         {/* Right side */}
                         <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                          <div style={{ fontFamily: 'Inter, sans-serif', fontSize: '13px', color: 'var(--ink)', marginBottom: '6px' }}>
+                          <div style={{ fontFamily: 'var(--font-body)', fontSize: '13px', color: 'var(--ink)', marginBottom: '6px' }}>
                             {formatDate(plazo.fecha_vencimiento)}
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px', marginBottom: '6px' }}>

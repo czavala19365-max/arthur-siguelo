@@ -36,7 +36,7 @@ function toOutlookUrl(title: string, date: string, description: string): string 
 
 export default function CalendarButtons({ title, date, description = '' }: CalendarButtonsProps) {
   const btnStyle: React.CSSProperties = {
-    fontFamily: 'DM Mono, monospace',
+    fontFamily: 'var(--font-mono)',
     fontSize: '9px',
     textTransform: 'uppercase',
     letterSpacing: '0.06em',

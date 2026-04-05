@@ -113,7 +113,7 @@ export default function ChatPage() {
         }}>
           <div>
             <div style={{
-              fontFamily: 'DM Mono, monospace',
+              fontFamily: 'var(--font-mono)',
               fontSize: '11px',
               textTransform: 'uppercase',
               letterSpacing: '0.15em',
@@ -141,7 +141,7 @@ export default function ChatPage() {
                   key={p}
                   onClick={() => setSelectedProvider(p)}
                   style={{
-                    fontFamily: 'DM Mono, monospace',
+                    fontFamily: 'var(--font-mono)',
                     fontSize: '10px',
                     textTransform: 'uppercase',
                     letterSpacing: '0.05em',
@@ -187,7 +187,7 @@ export default function ChatPage() {
                 arthur
               </div>
               <div style={{
-                fontFamily: 'Inter, sans-serif',
+                fontFamily: 'var(--font-body)',
                 fontSize: '14px',
                 color: 'var(--muted)',
                 maxWidth: '400px',
@@ -207,7 +207,7 @@ export default function ChatPage() {
                   key={i}
                   onClick={() => sendMessage(q)}
                   style={{
-                    fontFamily: 'Inter, sans-serif',
+                    fontFamily: 'var(--font-body)',
                     fontSize: '13px',
                     color: 'var(--ink)',
                     background: 'var(--surface)',
@@ -236,7 +236,7 @@ export default function ChatPage() {
               }}>
                 {msg.role === 'assistant' && msg.provider && (
                   <div style={{
-                    fontFamily: 'DM Mono, monospace',
+                    fontFamily: 'var(--font-mono)',
                     fontSize: '9px',
                     textTransform: 'uppercase',
                     letterSpacing: '0.08em',
@@ -253,7 +253,7 @@ export default function ChatPage() {
                   border: msg.role === 'user' ? 'none' : '1px solid var(--line)',
                   padding: '16px 20px',
                   maxWidth: '85%',
-                  fontFamily: 'Inter, sans-serif',
+                  fontFamily: 'var(--font-body)',
                   fontSize: '14px',
                   lineHeight: '1.7',
                   whiteSpace: 'pre-wrap',
@@ -264,7 +264,7 @@ export default function ChatPage() {
             ))}
             {loading && (
               <div style={{
-                fontFamily: 'DM Mono, monospace',
+                fontFamily: 'var(--font-mono)',
                 fontSize: '11px',
                 color: 'var(--muted)',
                 padding: '8px 0',
@@ -298,7 +298,7 @@ export default function ChatPage() {
             rows={1}
             style={{
               flex: 1,
-              fontFamily: 'Inter, sans-serif',
+              fontFamily: 'var(--font-body)',
               fontSize: '14px',
               padding: '14px 18px',
               border: '1px solid var(--line-mid)',
@@ -320,7 +320,7 @@ export default function ChatPage() {
             onClick={() => sendMessage()}
             disabled={!input.trim() || loading}
             style={{
-              fontFamily: 'DM Mono, monospace',
+              fontFamily: 'var(--font-mono)',
               fontSize: '11px',
               textTransform: 'uppercase',
               letterSpacing: '0.08em',
@@ -337,7 +337,7 @@ export default function ChatPage() {
           </button>
         </div>
         <div style={{
-          fontFamily: 'DM Mono, monospace',
+          fontFamily: 'var(--font-mono)',
           fontSize: '9px',
           color: 'var(--muted)',
           marginTop: '8px',

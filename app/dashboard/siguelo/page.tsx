@@ -17,7 +17,7 @@ export default function SigueloPage() {
       }}>
         <div>
           <div style={{
-            fontFamily: 'DM Mono, monospace',
+            fontFamily: 'var(--font-mono)',
             fontSize: '11px',
             textTransform: 'uppercase',
             letterSpacing: '0.15em',
@@ -47,7 +47,7 @@ export default function SigueloPage() {
           textAlign: 'center',
           background: 'var(--surface)',
           border: '1px solid var(--line)',
-          fontFamily: 'DM Mono, monospace',
+          fontFamily: 'var(--font-mono)',
           fontSize: '11px',
           textTransform: 'uppercase',
           letterSpacing: '0.12em',
