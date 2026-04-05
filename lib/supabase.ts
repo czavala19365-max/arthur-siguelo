@@ -87,3 +87,46 @@ export async function getHistorialByTituloId(titulo_id: string): Promise<Histori
     .order('detectado_en', { ascending: false })
   return data ?? []
 }
+
+export type MovimientoReciente = {
+  id: string
+  estado_anterior: string
+  estado_nuevo: string
+  detectado_en: string
+  numero_titulo: string
+  oficina_registral: string
+  nombre_cliente: string
+  asunto: string | null
+}
+
+export async function getUltimosMovimientos(limit = 5): Promise<MovimientoReciente[]> {
+  const { data, error } = await supabase
+    .from('historial_estados')
+    .select(`
+      id,
+      estado_anterior,
+      estado_nuevo,
+      detectado_en,
+      titulos ( numero_titulo, oficina_registral, nombre_cliente, asunto )
+    `)
+    .order('detectado_en', { ascending: false })
+    .limit(limit)
+
+  if (error) throw new Error(error.message)
+  if (!data) return []
+
+  return data.flatMap(row => {
+    const t = Array.isArray(row.titulos) ? row.titulos[0] : row.titulos
+    if (!t) return []
+    return [{
+      id: row.id as string,
+      estado_anterior: row.estado_anterior as string,
+      estado_nuevo: row.estado_nuevo as string,
+      detectado_en: row.detectado_en as string,
+      numero_titulo: (t as { numero_titulo: string }).numero_titulo,
+      oficina_registral: (t as { oficina_registral: string }).oficina_registral,
+      nombre_cliente: (t as { nombre_cliente: string }).nombre_cliente,
+      asunto: (t as { asunto: string | null }).asunto ?? null,
+    }]
+  })
+}

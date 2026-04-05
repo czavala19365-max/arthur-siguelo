@@ -2,15 +2,19 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { getEstadoStyle } from '@/lib/estados'
+import type { MovimientoReciente } from '@/lib/supabase'
 
-type TituloPill = { label: string; count: number; color: string; bg: string }
-type UltimoTitulo = { numero: string; estado: string; color: string; bg: string } | null
-type PlazoItem = { id: number; descripcion: string; fecha_vencimiento: string; alias: string | null; tipo: string | null }
+type PlazoItem = {
+  id: number
+  descripcion: string
+  fecha_vencimiento: string
+  alias: string | null
+  tipo: string | null
+}
 
 interface Props {
-  titulosTotal: number
-  titulosPills: TituloPill[]
-  ultimoTitulo: UltimoTitulo
+  movimientos: MovimientoReciente[]
   plazosProximos: PlazoItem[]
   plazosVencidos: number
 }
@@ -33,10 +37,40 @@ function getName(email: string): string {
   return prefix.charAt(0).toUpperCase() + prefix.slice(1)
 }
 
+function tiempoRelativo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'ahora mismo'
+  if (mins < 60) return `hace ${mins} min`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `hace ${hrs}h`
+  const days = Math.floor(hrs / 24)
+  return `hace ${days}d`
+}
+
 function daysUntil(dateStr: string): number {
   const today = new Date(); today.setHours(0, 0, 0, 0)
   const target = new Date(dateStr + 'T00:00:00')
   return Math.round((target.getTime() - today.getTime()) / 86400000)
+}
+
+function EstadoBadgeSmall({ estado }: { estado: string }) {
+  const style = getEstadoStyle(estado)
+  return (
+    <span style={{
+      display: 'inline-block',
+      padding: '2px 7px',
+      background: style?.bg ?? '#F3F4F6',
+      color: style?.text ?? '#6B7280',
+      fontFamily: 'var(--font-mono)',
+      fontSize: '9px',
+      textTransform: 'uppercase',
+      letterSpacing: '0.06em',
+      whiteSpace: 'nowrap',
+    }}>
+      {estado}
+    </span>
+  )
 }
 
 const cardBase: React.CSSProperties = {
@@ -47,7 +81,7 @@ const cardBase: React.CSSProperties = {
   transition: 'box-shadow 0.2s ease, transform 0.2s ease',
 }
 
-export default function HomeDashboard({ titulosTotal, titulosPills, ultimoTitulo, plazosProximos, plazosVencidos }: Props) {
+export default function HomeDashboard({ movimientos, plazosProximos, plazosVencidos }: Props) {
   const [name, setName] = useState('')
   const [greeting, setGreeting] = useState('')
   const [date, setDate] = useState('')
@@ -74,7 +108,18 @@ export default function HomeDashboard({ titulosTotal, titulosPills, ultimoTitulo
           box-shadow: 0 4px 24px rgba(0,0,0,0.08);
           transform: translateY(-1px);
         }
-        .home-cta:hover { opacity: 0.75; }
+        .mov-item {
+          padding: 12px 14px;
+          border: 1px solid var(--line-faint);
+          background: var(--paper);
+          transition: background 0.15s, border-color 0.15s;
+          cursor: default;
+        }
+        .mov-item:hover {
+          background: rgba(194,164,109,0.04);
+          border-color: var(--line-mid);
+        }
+        .home-cta:hover { opacity: 0.7; }
       `}</style>
 
       <div style={{
@@ -131,72 +176,89 @@ export default function HomeDashboard({ titulosTotal, titulosPills, ultimoTitulo
           gap: '20px',
         }}>
 
-          {/* Card 1 — Títulos Registrales */}
-          <div
-            className="home-card"
-            style={{ ...cardBase, animation: 'fadeUp 0.4s ease 0.05s both' }}
-          >
+          {/* Card 1 — Últimos movimientos de títulos */}
+          <div className="home-card" style={{ ...cardBase, animation: 'fadeUp 0.4s ease 0.05s both' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
-              <div>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--accent)', marginBottom: '6px' }}>
-                  Títulos Registrales
-                </div>
-                <div style={{ fontFamily: 'var(--font-display)', fontSize: '48px', color: 'var(--ink)', lineHeight: 1, fontWeight: 700 }}>
-                  {titulosTotal}
-                </div>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--muted)', marginTop: '4px' }}>
-                  monitoreados
-                </div>
+              <div style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: '10px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.12em',
+                color: 'var(--accent)',
+              }}>
+                Títulos Registrales
               </div>
-              <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="var(--accent)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginTop: '4px', opacity: 0.7 }}>
+              <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="var(--accent)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.7, flexShrink: 0 }}>
                 <circle cx="6.5" cy="6.5" r="4.5" /><path d="M10 10l4 4" />
               </svg>
             </div>
 
-            {/* Pills de estado */}
-            {titulosPills.length > 0 && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '20px' }}>
-                {titulosPills.map(p => (
-                  <span key={p.label} style={{
-                    display: 'inline-flex', alignItems: 'center', gap: '6px',
-                    padding: '4px 10px',
-                    background: p.bg,
-                    borderLeft: `2px solid ${p.color}`,
-                    fontFamily: 'var(--font-mono)', fontSize: '10px',
-                    textTransform: 'uppercase', letterSpacing: '0.06em',
-                    color: p.color,
-                  }}>
-                    <strong style={{ fontSize: '12px' }}>{p.count}</strong>
-                    {p.label}
-                  </span>
-                ))}
-              </div>
-            )}
-
-            {/* Último título */}
-            {ultimoTitulo && (
+            {movimientos.length === 0 ? (
               <div style={{
-                borderTop: '1px solid var(--line-faint)',
-                paddingTop: '14px',
-                marginBottom: '18px',
+                padding: '24px 0',
+                fontFamily: 'var(--font-body)',
+                fontSize: '13px',
+                color: 'var(--muted)',
+                lineHeight: 1.6,
+                marginBottom: '20px',
               }}>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--muted)', marginBottom: '6px' }}>
-                  Último consultado
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--ink)' }}>
-                    {ultimoTitulo.numero}
-                  </span>
-                  <span style={{
-                    padding: '2px 8px',
-                    background: ultimoTitulo.bg,
-                    color: ultimoTitulo.color,
-                    fontFamily: 'var(--font-mono)', fontSize: '9px',
-                    textTransform: 'uppercase', letterSpacing: '0.06em',
-                  }}>
-                    {ultimoTitulo.estado}
-                  </span>
-                </div>
+                Sin movimientos recientes — el sistema consulta automáticamente 3 veces al día.
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '20px' }}>
+                {movimientos.map((m, i) => (
+                  <div
+                    key={m.id}
+                    className="mov-item"
+                    style={{ animation: `fadeUp 0.3s ease ${0.05 + i * 0.06}s both` }}
+                  >
+                    {/* Número + oficina */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '5px' }}>
+                      <span style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: '11px',
+                        color: 'var(--ink)',
+                        fontWeight: 600,
+                      }}>
+                        {m.numero_titulo}
+                      </span>
+                      <span style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: '9px',
+                        color: 'var(--muted)',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.06em',
+                        whiteSpace: 'nowrap',
+                        marginLeft: '8px',
+                      }}>
+                        {tiempoRelativo(m.detectado_en)}
+                      </span>
+                    </div>
+
+                    {/* Cliente + asunto */}
+                    <div style={{
+                      fontFamily: 'var(--font-body)',
+                      fontSize: '12px',
+                      color: 'var(--muted)',
+                      marginBottom: '8px',
+                      lineHeight: 1.4,
+                    }}>
+                      {m.nombre_cliente}
+                      {m.asunto && (
+                        <span style={{ opacity: 0.7 }}> · {m.asunto}</span>
+                      )}
+                    </div>
+
+                    {/* Badges de cambio de estado */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                      <EstadoBadgeSmall estado={m.estado_anterior} />
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" strokeWidth="2" strokeLinecap="round">
+                        <path d="M5 12h14M13 6l6 6-6 6" />
+                      </svg>
+                      <EstadoBadgeSmall estado={m.estado_nuevo} />
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
 
@@ -207,7 +269,7 @@ export default function HomeDashboard({ titulosTotal, titulosPills, ultimoTitulo
               color: 'var(--ink)', textDecoration: 'none',
               transition: 'opacity 0.15s',
             }}>
-              Ver todos →
+              Ver todos los títulos →
             </Link>
           </div>
 
@@ -225,7 +287,7 @@ export default function HomeDashboard({ titulosTotal, titulosPills, ultimoTitulo
                   <div style={{
                     display: 'inline-flex', alignItems: 'center', gap: '6px',
                     background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)',
-                    padding: '4px 10px', marginBottom: '12px',
+                    padding: '4px 10px',
                     fontFamily: 'var(--font-mono)', fontSize: '10px',
                     textTransform: 'uppercase', letterSpacing: '0.06em', color: '#dc2626',
                   }}>
@@ -244,7 +306,7 @@ export default function HomeDashboard({ titulosTotal, titulosPills, ultimoTitulo
                 Sin vencimientos próximos.
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '20px' }}>
                 {plazosProximos.map(p => {
                   const days = daysUntil(p.fecha_vencimiento)
                   const urgent = days <= 3
@@ -291,10 +353,7 @@ export default function HomeDashboard({ titulosTotal, titulosPills, ultimoTitulo
           </div>
 
           {/* Card 3 — Consulta Legal IA */}
-          <div
-            className="home-card"
-            style={{ ...cardBase, animation: 'fadeUp 0.4s ease 0.19s both' }}
-          >
+          <div className="home-card" style={{ ...cardBase, animation: 'fadeUp 0.4s ease 0.19s both' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--accent)' }}>
                 Consulta Legal IA
