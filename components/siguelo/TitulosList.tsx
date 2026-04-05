@@ -1,11 +1,9 @@
 import { getTitulos } from '@/lib/supabase'
-import type { Titulo } from '@/types'
-import { STATE_ORDER, normalizarEstado } from '@/lib/estados'
-import TituloSection from './TituloSection'
+import TitulosClientView from './TitulosClientView'
 
 export default async function TitulosList() {
-  let titulos: Titulo[] = []
   let errorMsg: string | null = null
+  let titulos: Awaited<ReturnType<typeof getTitulos>> = []
 
   try {
     titulos = await getTitulos()
@@ -15,7 +13,15 @@ export default async function TitulosList() {
 
   if (errorMsg) {
     return (
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-6 py-8 text-center text-sm text-red-600">
+      <div style={{
+        padding: '32px 24px',
+        textAlign: 'center',
+        border: '1px solid var(--line)',
+        background: 'var(--surface)',
+        fontFamily: 'var(--font-body)',
+        fontSize: '13px',
+        color: '#dc2626',
+      }}>
         {errorMsg}
       </div>
     )
@@ -23,59 +29,19 @@ export default async function TitulosList() {
 
   if (titulos.length === 0) {
     return (
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-6 py-12 text-center text-sm text-gray-400">
+      <div style={{
+        padding: '48px 24px',
+        textAlign: 'center',
+        border: '1px solid var(--line)',
+        background: 'var(--surface)',
+        fontFamily: 'var(--font-body)',
+        fontSize: '13px',
+        color: 'var(--muted)',
+      }}>
         No hay títulos registrados aún.
       </div>
     )
   }
 
-  // Agrupar por estado normalizado (sin acentos, mayúsculas)
-  // Clave: estado normalizado → { titulos, etiquetaOriginal }
-  const grouped = new Map<string, { titulos: Titulo[] }>()
-
-  for (const t of titulos) {
-    const normKey = normalizarEstado(t.ultimo_estado ?? '')
-    if (!grouped.has(normKey)) grouped.set(normKey, { titulos: [] })
-    grouped.get(normKey)!.titulos.push(t)
-  }
-
-  // Secciones en el orden canónico definido en STATE_ORDER
-  const sections: { estado: string; titulos: Titulo[] }[] = []
-  const usedKeys = new Set<string>()
-
-  for (const canonico of STATE_ORDER) {
-    const normKey = normalizarEstado(canonico)
-    const entry = grouped.get(normKey)
-    if (entry && entry.titulos.length > 0) {
-      // Usar siempre el nombre canónico (con tilde) para mostrar
-      sections.push({ estado: canonico, titulos: entry.titulos })
-      usedKeys.add(normKey)
-    }
-  }
-
-  // Estados no contemplados en STATE_ORDER → sección "Otros"
-  const otros: Titulo[] = []
-  for (const [normKey, entry] of grouped.entries()) {
-    if (!usedKeys.has(normKey)) {
-      otros.push(...entry.titulos)
-    }
-  }
-  if (otros.length > 0) {
-    sections.push({ estado: 'OTROS', titulos: otros })
-  }
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between px-1">
-        <h2 className="text-base font-semibold text-gray-700">Títulos monitoreados</h2>
-        <span className="text-sm text-gray-400">
-          {titulos.length} {titulos.length === 1 ? 'título' : 'títulos'} · {sections.length} {sections.length === 1 ? 'sección' : 'secciones'}
-        </span>
-      </div>
-
-      {sections.map(({ estado, titulos: items }) => (
-        <TituloSection key={estado} estado={estado} titulos={items} />
-      ))}
-    </div>
-  )
+  return <TitulosClientView titulos={titulos} />
 }
