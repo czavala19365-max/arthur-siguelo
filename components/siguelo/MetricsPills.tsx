@@ -66,7 +66,7 @@ export default function MetricsPills({ pills }: { pills: PillData[] }) {
             <span style={{
               fontFamily: 'var(--font-display)',
               fontSize: '22px',
-              fontWeight: 700,
+              fontWeight: 600,
               color: pill.color,
               lineHeight: 1,
               minWidth: '1ch',
