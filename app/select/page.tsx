@@ -53,9 +53,11 @@ export default function SelectModulePage() {
       >
         <div
           style={{
-            fontFamily: 'var(--font-display), Georgia, serif',
-            fontStyle: 'italic',
+            fontFamily: 'var(--font-display)',
             fontSize: '28px',
+            fontWeight: 700,
+            letterSpacing: '-0.02em',
+            lineHeight: 1.2,
             color: '#ffffff',
           }}
         >
@@ -115,18 +117,19 @@ export default function SelectModulePage() {
             </div>
             <div
               style={{
-                fontFamily: 'var(--font-display), Georgia, serif',
-                fontStyle: 'italic',
+                fontFamily: 'var(--font-display)',
                 fontSize: '42px',
+                fontWeight: 800,
+                letterSpacing: '-0.03em',
                 color: '#ffffff',
-                lineHeight: 1.1,
+                lineHeight: 1.25,
               }}
             >
               registral
             </div>
             <p
               style={{
-                fontFamily: 'var(--font-body), Inter, sans-serif',
+                fontFamily: 'var(--font-body)',
                 fontSize: '14px',
                 color: 'rgba(248,248,248,0.62)',
                 lineHeight: 1.6,
@@ -178,18 +181,19 @@ export default function SelectModulePage() {
             </div>
             <div
               style={{
-                fontFamily: 'var(--font-display), Georgia, serif',
-                fontStyle: 'italic',
+                fontFamily: 'var(--font-display)',
                 fontSize: '42px',
+                fontWeight: 800,
+                letterSpacing: '-0.03em',
                 color: '#ffffff',
-                lineHeight: 1.1,
+                lineHeight: 1.25,
               }}
             >
               judicial
             </div>
             <p
               style={{
-                fontFamily: 'var(--font-body), Inter, sans-serif',
+                fontFamily: 'var(--font-body)',
                 fontSize: '14px',
                 color: 'rgba(248,248,248,0.62)',
                 lineHeight: 1.6,
