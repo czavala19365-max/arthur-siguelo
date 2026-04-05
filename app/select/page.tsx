@@ -123,6 +123,7 @@ export default function SelectModulePage() {
                 letterSpacing: '-0.02em',
                 color: '#ffffff',
                 lineHeight: 1.3,
+                paddingBottom: '6px',
               }}
             >
               registral
@@ -187,6 +188,7 @@ export default function SelectModulePage() {
                 letterSpacing: '-0.02em',
                 color: '#ffffff',
                 lineHeight: 1.3,
+                paddingBottom: '6px',
               }}
             >
               judicial
