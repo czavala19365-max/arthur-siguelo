@@ -25,10 +25,39 @@ type Result = {
   detalle?: string
 }
 
+const labelStyle: React.CSSProperties = {
+  display: 'block',
+  fontFamily: 'var(--font-mono)',
+  fontSize: '10px',
+  textTransform: 'uppercase',
+  letterSpacing: '0.1em',
+  color: 'var(--muted)',
+  marginBottom: '8px',
+}
+
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  fontFamily: 'var(--font-body)',
+  fontSize: '14px',
+  color: 'var(--ink)',
+  background: 'var(--surface)',
+  border: '1px solid var(--line-mid)',
+  borderRadius: '4px',
+  padding: '10px 12px',
+  outline: 'none',
+  boxSizing: 'border-box',
+  transition: 'border-color 0.15s',
+}
+
+const requiredMark = (
+  <span style={{ color: 'var(--accent)', marginLeft: '2px' }}>*</span>
+)
+
 export default function TituloForm() {
   const [pendingValues, setPendingValues] = useState<FormValues | null>(null)
   const [result, setResult] = useState<Result | null>(null)
   const [isPending, startTransition] = useTransition()
+  const [showOptional, setShowOptional] = useState(false)
   const formRef = useRef<HTMLFormElement>(null)
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -41,11 +70,11 @@ export default function TituloForm() {
       nombre_cliente: data.get('nombre_cliente') as string,
       email_cliente: data.get('email_cliente') as string,
       whatsapp_cliente: data.get('whatsapp_cliente') as string,
-      proyecto: data.get('proyecto') as string ?? '',
-      asunto: data.get('asunto') as string ?? '',
-      registro: data.get('registro') as string ?? '',
-      abogado: data.get('abogado') as string ?? '',
-      notaria: data.get('notaria') as string ?? '',
+      proyecto: (data.get('proyecto') as string) ?? '',
+      asunto: (data.get('asunto') as string) ?? '',
+      registro: (data.get('registro') as string) ?? '',
+      abogado: (data.get('abogado') as string) ?? '',
+      notaria: (data.get('notaria') as string) ?? '',
     })
   }
 
@@ -64,18 +93,19 @@ export default function TituloForm() {
   }
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 relative">
-      <h2 className="text-lg font-semibold text-gray-900 mb-5">
+    <div style={{ background: 'var(--paper)', border: '1px solid var(--line)', borderRadius: '6px', padding: '32px', position: 'relative' }}>
+
+      <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '20px', fontWeight: 600, color: 'var(--ink)', marginBottom: '28px', fontStyle: 'italic' }}>
         Agregar título registral
       </h2>
 
       {result?.error && (
-        <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+        <div style={{ marginBottom: '20px', borderRadius: '4px', border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.06)', padding: '12px 16px', fontFamily: 'var(--font-body)', fontSize: '13px', color: '#dc2626' }}>
           {result.error}
         </div>
       )}
       {result?.success && (
-        <div className="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">
+        <div style={{ marginBottom: '20px', borderRadius: '4px', border: '1px solid rgba(34,197,94,0.3)', background: 'rgba(34,197,94,0.06)', padding: '12px 16px', fontFamily: 'var(--font-body)', fontSize: '13px', color: '#16a34a' }}>
           Título agregado correctamente.
           {result.estado && (
             <> Estado actual: <strong>{result.estado}</strong>{result.detalle ? ` — ${result.detalle}` : ''}.</>
@@ -83,77 +113,86 @@ export default function TituloForm() {
         </div>
       )}
 
-      <form ref={formRef} onSubmit={handleSubmit} className="space-y-4">
-        {/* Oficina registral */}
-        <div>
-          <label htmlFor="oficina_registral" className="block text-sm font-medium text-gray-700 mb-1">
-            Oficina registral <span className="text-red-500">*</span>
-          </label>
-          <select
-            id="oficina_registral"
-            name="oficina_registral"
-            required
-            className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">Seleccionar oficina…</option>
-            {OFICINAS_SUNARP.map((o) => (
-              <option key={o} value={o}>{o}</option>
-            ))}
-          </select>
-        </div>
+      <form ref={formRef} onSubmit={handleSubmit}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
-        {/* Año y número en fila */}
-        <div className="grid grid-cols-2 gap-4">
+          {/* Oficina registral */}
           <div>
-            <label htmlFor="anio_titulo" className="block text-sm font-medium text-gray-700 mb-1">
-              Año del título <span className="text-red-500">*</span>
+            <label htmlFor="oficina_registral" style={labelStyle}>
+              Oficina registral {requiredMark}
             </label>
-            <input
-              id="anio_titulo"
-              name="anio_titulo"
-              type="number"
-              min={1900}
-              max={new Date().getFullYear() + 1}
-              placeholder={String(new Date().getFullYear())}
+            <select
+              id="oficina_registral"
+              name="oficina_registral"
               required
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+              style={inputStyle}
+              onFocus={e => (e.currentTarget.style.borderColor = 'var(--accent)')}
+              onBlur={e => (e.currentTarget.style.borderColor = 'var(--line-mid)')}
+            >
+              <option value="">Seleccionar oficina…</option>
+              {OFICINAS_SUNARP.map((o) => (
+                <option key={o} value={o}>{o}</option>
+              ))}
+            </select>
           </div>
+
+          {/* Año y número */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <div>
+              <label htmlFor="anio_titulo" style={labelStyle}>
+                Año del título {requiredMark}
+              </label>
+              <input
+                id="anio_titulo"
+                name="anio_titulo"
+                type="number"
+                min={1900}
+                max={new Date().getFullYear() + 1}
+                placeholder={String(new Date().getFullYear())}
+                required
+                style={inputStyle}
+                onFocus={e => (e.currentTarget.style.borderColor = 'var(--accent)')}
+                onBlur={e => (e.currentTarget.style.borderColor = 'var(--line-mid)')}
+              />
+            </div>
+            <div>
+              <label htmlFor="numero_titulo" style={labelStyle}>
+                Número del título {requiredMark}
+              </label>
+              <input
+                id="numero_titulo"
+                name="numero_titulo"
+                type="text"
+                placeholder="Ej. 431663"
+                required
+                style={inputStyle}
+                onFocus={e => (e.currentTarget.style.borderColor = 'var(--accent)')}
+                onBlur={e => (e.currentTarget.style.borderColor = 'var(--line-mid)')}
+              />
+            </div>
+          </div>
+
+          {/* Cliente */}
           <div>
-            <label htmlFor="numero_titulo" className="block text-sm font-medium text-gray-700 mb-1">
-              Número del título <span className="text-red-500">*</span>
+            <label htmlFor="nombre_cliente" style={labelStyle}>
+              Cliente {requiredMark}
             </label>
             <input
-              id="numero_titulo"
-              name="numero_titulo"
+              id="nombre_cliente"
+              name="nombre_cliente"
               type="text"
-              placeholder="Ej. 431663"
+              placeholder="Nombre completo"
               required
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+              style={inputStyle}
+              onFocus={e => (e.currentTarget.style.borderColor = 'var(--accent)')}
+              onBlur={e => (e.currentTarget.style.borderColor = 'var(--line-mid)')}
             />
           </div>
-        </div>
 
-        {/* Nombre cliente */}
-        <div>
-          <label htmlFor="nombre_cliente" className="block text-sm font-medium text-gray-700 mb-1">
-            Cliente <span className="text-red-500">*</span>
-          </label>
-          <input
-            id="nombre_cliente"
-            name="nombre_cliente"
-            type="text"
-            placeholder="Nombre completo"
-            required
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-
-        {/* Email y WhatsApp en fila */}
-        <div className="grid grid-cols-2 gap-4">
+          {/* Email */}
           <div>
-            <label htmlFor="email_cliente" className="block text-sm font-medium text-gray-700 mb-1">
-              Email(s) para recibir alertas de seguimiento <span className="text-red-500">*</span>
+            <label htmlFor="email_cliente" style={labelStyle}>
+              Email(s) para recibir alertas {requiredMark}
             </label>
             <input
               id="email_cliente"
@@ -161,12 +200,16 @@ export default function TituloForm() {
               type="text"
               placeholder="correo1@gmail.com, correo2@gmail.com"
               required
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+              style={inputStyle}
+              onFocus={e => (e.currentTarget.style.borderColor = 'var(--accent)')}
+              onBlur={e => (e.currentTarget.style.borderColor = 'var(--line-mid)')}
             />
           </div>
+
+          {/* WhatsApp */}
           <div>
-            <label htmlFor="whatsapp_cliente" className="block text-sm font-medium text-gray-700 mb-1">
-              WhatsApp(s) para recibir alertas de seguimiento <span className="text-red-500">*</span>
+            <label htmlFor="whatsapp_cliente" style={labelStyle}>
+              WhatsApp(s) para recibir alertas {requiredMark}
             </label>
             <input
               id="whatsapp_cliente"
@@ -174,148 +217,285 @@ export default function TituloForm() {
               type="tel"
               placeholder="+51 999 999 999"
               required
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+              style={inputStyle}
+              onFocus={e => (e.currentTarget.style.borderColor = 'var(--accent)')}
+              onBlur={e => (e.currentTarget.style.borderColor = 'var(--line-mid)')}
             />
           </div>
-        </div>
 
-        {/* Separador campos adicionales */}
-        <div className="pt-1 border-t border-gray-100">
-          <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-3">Información del Título Registral</p>
-        </div>
-
-        {/* Proyecto y Asunto en fila */}
-        <div className="grid grid-cols-2 gap-4">
+          {/* Toggle opcional */}
           <div>
-            <label htmlFor="proyecto" className="block text-sm font-medium text-gray-700 mb-1">
-              Proyecto
-            </label>
-            <input
-              id="proyecto"
-              name="proyecto"
-              type="text"
-              placeholder="Nombre del proyecto"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+            <button
+              type="button"
+              onClick={() => setShowOptional(v => !v)}
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                fontFamily: 'var(--font-mono)',
+                fontSize: '11px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.08em',
+                color: 'var(--accent)',
+                padding: '0',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}
+            >
+              {showOptional ? '− Menos detalles' : '+ Más detalles (Opcional)'}
+            </button>
           </div>
-          <div>
-            <label htmlFor="asunto" className="block text-sm font-medium text-gray-700 mb-1">
-              Asunto
-            </label>
-            <input
-              id="asunto"
-              name="asunto"
-              type="text"
-              placeholder="Descripción del asunto"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-        </div>
 
-        {/* Registro */}
-        <div>
-          <label htmlFor="registro" className="block text-sm font-medium text-gray-700 mb-1">
-            Registro
-          </label>
-          <select
-            id="registro"
-            name="registro"
-            className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">Seleccionar registro…</option>
-            <option value="Registro de Personas Jurídicas">Registro de Personas Jurídicas</option>
-            <option value="Registro de Propiedad Inmueble">Registro de Propiedad Inmueble</option>
-            <option value="Registro de Propiedad Minera">Registro de Propiedad Minera</option>
-            <option value="Registro de Propiedad Vehicular">Registro de Propiedad Vehicular</option>
-            <option value="Registro de Sucesiones Intestadas">Registro de Sucesiones Intestadas</option>
-            <option value="Registro Personal">Registro Personal</option>
-            <option value="Registro de Testamentos">Registro de Testamentos</option>
-            <option value="Registro de Mandatos y Poderes">Registro de Mandatos y Poderes</option>
-            <option value="Registro de Bienes Muebles">Registro de Bienes Muebles</option>
-            <option value="Registro Mobiliario de Contratos">Registro Mobiliario de Contratos</option>
-            <option value="Registro de Garantías Mobiliarias">Registro de Garantías Mobiliarias</option>
-            <option value="Registro de Derechos Mineros">Registro de Derechos Mineros</option>
-            <option value="Registro de Concesiones para la Explotación de Servicios Públicos">Registro de Concesiones para la Explotación de Servicios Públicos</option>
-            <option value="Registro de Áreas Naturales Protegidas">Registro de Áreas Naturales Protegidas</option>
-            <option value="Registro de Predios">Registro de Predios</option>
-            <option value="Otro">Otro</option>
-          </select>
-        </div>
+          {/* Campos opcionales */}
+          <div style={{
+            display: 'grid',
+            gridTemplateRows: showOptional ? '1fr' : '0fr',
+            transition: 'grid-template-rows 0.25s ease',
+          }}>
+            <div style={{ overflow: 'hidden' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', paddingTop: '4px' }}>
 
-        {/* Abogado y Notaría en fila */}
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label htmlFor="abogado" className="block text-sm font-medium text-gray-700 mb-1">
-              Abogado a cargo
-            </label>
-            <input
-              id="abogado"
-              name="abogado"
-              type="text"
-              placeholder="Nombre del abogado"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div>
-            <label htmlFor="notaria" className="block text-sm font-medium text-gray-700 mb-1">
-              Notaría y/o Presentante
-            </label>
-            <input
-              id="notaria"
-              name="notaria"
-              type="text"
-              placeholder="Notaría o presentante"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-        </div>
+                <div style={{ borderTop: '1px solid var(--line-faint)', paddingTop: '20px' }}>
+                  <p style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--muted)', marginBottom: '20px' }}>
+                    Información del título registral
+                  </p>
 
-        <button
-          type="submit"
-          disabled={isPending}
-          className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          Agregar título
-        </button>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                    {/* Proyecto y Asunto */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                      <div>
+                        <label htmlFor="proyecto" style={labelStyle}>Proyecto</label>
+                        <input
+                          id="proyecto"
+                          name="proyecto"
+                          type="text"
+                          placeholder="Nombre del proyecto"
+                          style={inputStyle}
+                          onFocus={e => (e.currentTarget.style.borderColor = 'var(--accent)')}
+                          onBlur={e => (e.currentTarget.style.borderColor = 'var(--line-mid)')}
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="asunto" style={labelStyle}>Asunto</label>
+                        <input
+                          id="asunto"
+                          name="asunto"
+                          type="text"
+                          placeholder="Descripción del asunto"
+                          style={inputStyle}
+                          onFocus={e => (e.currentTarget.style.borderColor = 'var(--accent)')}
+                          onBlur={e => (e.currentTarget.style.borderColor = 'var(--line-mid)')}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Registro */}
+                    <div>
+                      <label htmlFor="registro" style={labelStyle}>Registro</label>
+                      <select
+                        id="registro"
+                        name="registro"
+                        style={inputStyle}
+                        onFocus={e => (e.currentTarget.style.borderColor = 'var(--accent)')}
+                        onBlur={e => (e.currentTarget.style.borderColor = 'var(--line-mid)')}
+                      >
+                        <option value="">Seleccionar registro…</option>
+                        <option value="Registro de Personas Jurídicas">Registro de Personas Jurídicas</option>
+                        <option value="Registro de Propiedad Inmueble">Registro de Propiedad Inmueble</option>
+                        <option value="Registro de Propiedad Minera">Registro de Propiedad Minera</option>
+                        <option value="Registro de Propiedad Vehicular">Registro de Propiedad Vehicular</option>
+                        <option value="Registro de Sucesiones Intestadas">Registro de Sucesiones Intestadas</option>
+                        <option value="Registro Personal">Registro Personal</option>
+                        <option value="Registro de Testamentos">Registro de Testamentos</option>
+                        <option value="Registro de Mandatos y Poderes">Registro de Mandatos y Poderes</option>
+                        <option value="Registro de Bienes Muebles">Registro de Bienes Muebles</option>
+                        <option value="Registro Mobiliario de Contratos">Registro Mobiliario de Contratos</option>
+                        <option value="Registro de Garantías Mobiliarias">Registro de Garantías Mobiliarias</option>
+                        <option value="Registro de Derechos Mineros">Registro de Derechos Mineros</option>
+                        <option value="Registro de Concesiones para la Explotación de Servicios Públicos">Registro de Concesiones para la Explotación de Servicios Públicos</option>
+                        <option value="Registro de Áreas Naturales Protegidas">Registro de Áreas Naturales Protegidas</option>
+                        <option value="Registro de Predios">Registro de Predios</option>
+                        <option value="Otro">Otro</option>
+                      </select>
+                    </div>
+
+                    {/* Abogado y Notaría */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                      <div>
+                        <label htmlFor="abogado" style={labelStyle}>Abogado a cargo</label>
+                        <input
+                          id="abogado"
+                          name="abogado"
+                          type="text"
+                          placeholder="Nombre del abogado"
+                          style={inputStyle}
+                          onFocus={e => (e.currentTarget.style.borderColor = 'var(--accent)')}
+                          onBlur={e => (e.currentTarget.style.borderColor = 'var(--line-mid)')}
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="notaria" style={labelStyle}>Notaría y/o Presentante</label>
+                        <input
+                          id="notaria"
+                          name="notaria"
+                          type="text"
+                          placeholder="Notaría o presentante"
+                          style={inputStyle}
+                          onFocus={e => (e.currentTarget.style.borderColor = 'var(--accent)')}
+                          onBlur={e => (e.currentTarget.style.borderColor = 'var(--line-mid)')}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          </div>
+
+          {/* Botón submit */}
+          <div style={{ paddingTop: '8px' }}>
+            <button
+              type="submit"
+              disabled={isPending}
+              style={{
+                width: '100%',
+                fontFamily: 'var(--font-mono)',
+                fontSize: '11px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.1em',
+                background: 'var(--ink)',
+                color: 'var(--paper)',
+                border: 'none',
+                borderRadius: '4px',
+                padding: '13px 24px',
+                cursor: isPending ? 'not-allowed' : 'pointer',
+                opacity: isPending ? 0.5 : 1,
+                transition: 'opacity 0.15s',
+              }}
+            >
+              Agregar título
+            </button>
+          </div>
+
+        </div>
       </form>
 
-      {/* Spinner overlay — visible mientras consulta SUNARP (~19s) */}
+      {/* Spinner overlay */}
       {isPending && (
-        <div className="absolute inset-0 rounded-2xl bg-white/90 flex flex-col items-center justify-center gap-3 z-10">
-          <svg className="animate-spin w-8 h-8 text-blue-600" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+        <div style={{
+          position: 'absolute',
+          inset: 0,
+          borderRadius: '6px',
+          background: 'rgba(var(--paper), 0.92)',
+          backdropFilter: 'blur(2px)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '12px',
+          zIndex: 10,
+          backgroundColor: 'color-mix(in srgb, var(--paper) 92%, transparent)',
+        }}>
+          <svg style={{ width: '28px', height: '28px', color: 'var(--accent)', animation: 'spin 1s linear infinite' }} fill="none" viewBox="0 0 24 24">
+            <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+            <circle style={{ opacity: 0.25 }} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path style={{ opacity: 0.85 }} fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
           </svg>
-          <p className="text-sm font-medium text-gray-700">Consultando estado en SUNARP…</p>
-          <p className="text-xs text-gray-400">Esto toma aproximadamente 20 segundos</p>
+          <p style={{ fontFamily: 'var(--font-body)', fontSize: '14px', color: 'var(--ink)', fontWeight: 500 }}>
+            Consultando estado en SUNARP…
+          </p>
+          <p style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            Aproximadamente 20 segundos
+          </p>
         </div>
       )}
 
       {/* Modal de confirmación */}
       {pendingValues && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-6 w-full max-w-sm mx-4">
-            <h3 className="text-base font-semibold text-gray-900 mb-4">
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 50,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'var(--overlay-scrim)',
+        }}>
+          <div style={{
+            background: 'var(--paper)',
+            border: '1px solid var(--line-mid)',
+            borderRadius: '6px',
+            padding: '32px',
+            width: '100%',
+            maxWidth: '420px',
+            margin: '0 16px',
+            boxShadow: '0 24px 64px rgba(0,0,0,0.2)',
+          }}>
+            <h3 style={{ fontFamily: 'var(--font-display)', fontSize: '18px', fontWeight: 600, color: 'var(--ink)', marginBottom: '20px', fontStyle: 'italic' }}>
               ¿Confirmar agregar título?
             </h3>
-            <div className="rounded-lg bg-gray-50 border border-gray-200 px-4 py-3 mb-5 space-y-1 text-sm text-gray-700">
-              <div><span className="font-medium">Oficina:</span> {pendingValues.oficina_registral}</div>
-              <div><span className="font-medium">Título:</span> {pendingValues.anio_titulo} — {pendingValues.numero_titulo}</div>
-              <div><span className="font-medium">Cliente:</span> {pendingValues.nombre_cliente}</div>
+
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: '4px', padding: '16px', marginBottom: '16px' }}>
+              {[
+                { label: 'Oficina', value: pendingValues.oficina_registral },
+                { label: 'Título', value: `${pendingValues.anio_titulo} — ${pendingValues.numero_titulo}` },
+                { label: 'Cliente', value: pendingValues.nombre_cliente },
+              ].map(({ label, value }) => (
+                <div key={label} style={{ display: 'flex', gap: '12px', marginBottom: '8px', fontFamily: 'var(--font-body)', fontSize: '13px' }}>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--muted)', paddingTop: '2px', minWidth: '52px' }}>
+                    {label}
+                  </span>
+                  <span style={{ color: 'var(--ink)' }}>{value}</span>
+                </div>
+              ))}
             </div>
-            <p className="text-xs text-gray-500 mb-5">
-              Al confirmar, se guardará el título y se consultará automáticamente su estado en SUNARP.
+
+            <p style={{ fontFamily: 'var(--font-body)', fontSize: '12px', color: 'var(--muted)', marginBottom: '24px', lineHeight: 1.6 }}>
+              Se guardará el título y se consultará automáticamente su estado en SUNARP.
             </p>
-            <div className="flex gap-3">
+
+            <div style={{ display: 'flex', gap: '10px' }}>
               <button
                 onClick={() => setPendingValues(null)}
-                className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                style={{
+                  flex: 1,
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '11px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.08em',
+                  background: 'transparent',
+                  border: '1px solid var(--line-mid)',
+                  color: 'var(--ink)',
+                  borderRadius: '4px',
+                  padding: '11px 16px',
+                  cursor: 'pointer',
+                  transition: 'border-color 0.15s',
+                }}
+                onMouseOver={e => (e.currentTarget.style.borderColor = 'var(--accent)')}
+                onMouseOut={e => (e.currentTarget.style.borderColor = 'var(--line-mid)')}
               >
                 Cancelar
               </button>
               <button
                 onClick={handleConfirm}
-                className="flex-1 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 transition-colors"
+                style={{
+                  flex: 1,
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '11px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.08em',
+                  background: 'var(--ink)',
+                  border: '1px solid transparent',
+                  color: 'var(--paper)',
+                  borderRadius: '4px',
+                  padding: '11px 16px',
+                  cursor: 'pointer',
+                  transition: 'opacity 0.15s',
+                }}
+                onMouseOver={e => (e.currentTarget.style.opacity = '0.85')}
+                onMouseOut={e => (e.currentTarget.style.opacity = '1')}
               >
                 Confirmar
               </button>
