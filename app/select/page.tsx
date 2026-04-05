@@ -122,12 +122,10 @@ export default function SelectModulePage() {
                 fontWeight: 600,
                 letterSpacing: '-0.02em',
                 color: '#ffffff',
-                lineHeight: 1.3,
-                paddingBottom: '14px',
-                overflow: 'visible',
+                lineHeight: 1,
               }}
             >
-              registral
+              <span style={{ display: 'inline-block', paddingBottom: '0.2em' }}>registral</span>
             </div>
             <p
               style={{
@@ -188,12 +186,10 @@ export default function SelectModulePage() {
                 fontWeight: 600,
                 letterSpacing: '-0.02em',
                 color: '#ffffff',
-                lineHeight: 1.3,
-                paddingBottom: '14px',
-                overflow: 'visible',
+                lineHeight: 1,
               }}
             >
-              judicial
+              <span style={{ display: 'inline-block', paddingBottom: '0.2em' }}>judicial</span>
             </div>
             <p
               style={{
