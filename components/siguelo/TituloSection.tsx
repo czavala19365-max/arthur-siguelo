@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import { getEstadoStyle, ESTADOS_CON_ESQUELA, LABEL_ESQUELA, normalizarEstado } from '@/lib/estados'
-import EstadoBadge from './EstadoBadge'
 import TituloDetailModal from './TituloDetailModal'
 import type { Titulo } from '@/types'
 
@@ -179,7 +178,6 @@ export default function TituloSection({
                 <th style={{ padding: '10px 16px', fontWeight: 500, textAlign: 'left' }}>Oficina</th>
                 <th style={{ padding: '10px 16px', fontWeight: 500, textAlign: 'left' }}>Cliente</th>
                 <th style={{ padding: '10px 16px', fontWeight: 500, textAlign: 'left' }}>Asunto</th>
-                <th style={{ padding: '10px 16px', fontWeight: 500, textAlign: 'left', whiteSpace: 'nowrap' }}>Estado</th>
                 <th style={{ padding: '10px 16px', fontWeight: 500, textAlign: 'left' }}>Descargas</th>
                 <th style={{ padding: '10px 24px', fontWeight: 500, textAlign: 'left' }}></th>
               </tr>
@@ -235,12 +233,6 @@ export default function TituloSection({
                     }} title={t.asunto ?? ''}>
                       {t.asunto ?? <span style={{ color: 'var(--line-strong)' }}>—</span>}
                     </span>
-                  </td>
-                  <td style={{ padding: '14px 16px' }}>
-                    {t.ultimo_estado
-                      ? <EstadoBadge estado={t.ultimo_estado} />
-                      : <span style={{ fontFamily: 'DM Mono, monospace', fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Sin consultar</span>
-                    }
                   </td>
                   <td style={{ padding: '14px 16px' }}>
                     <RowDownloads titulo={t} />
