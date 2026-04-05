@@ -82,47 +82,47 @@ PRIMER OTROSÍ DIGO:`,
     }
   }
 
-  if (!caso) return <div style={{ padding: '48px 64px', fontFamily: 'DM Mono, monospace', fontSize: '11px', textTransform: 'uppercase', color: 'var(--muted)' }}>Cargando...</div>;
+  if (!caso) return <div style={{ padding: '48px 64px', fontFamily: 'var(--font-mono)', fontSize: '11px', textTransform: 'uppercase', color: 'var(--muted)' }}>Cargando...</div>;
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', height: '100vh' }}>
       <div style={{ display: 'flex', flexDirection: 'column', borderRight: '1px solid var(--line)' }}>
         <div style={{ background: 'var(--surface)', borderBottom: '1px solid var(--line)', padding: '20px 28px' }}>
-          <Link href={`/judicial/${id}`} style={{ fontFamily: 'DM Mono, monospace', fontSize: '10px', textTransform: 'uppercase', color: 'var(--muted)' }}>← Volver</Link>
+          <Link href={`/judicial/${id}`} style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', color: 'var(--muted)' }}>← Volver</Link>
           <div style={{ fontFamily: 'var(--font-display)', fontSize: '20px', marginTop: '6px' }}>Arthur IA Judicial</div>
           <div style={{ marginTop: '10px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             {DOC_TYPES.map(t => (
-              <button key={t.value} onClick={() => setTipo(t.value)} style={{ background: tipo === t.value ? 'var(--ink)' : 'var(--surface)', color: tipo === t.value ? 'var(--paper)' : 'var(--ink)', border: '1px solid var(--line-strong)', padding: '6px 12px', fontFamily: 'DM Mono, monospace', fontSize: '10px', cursor: 'pointer' }}>{t.label}</button>
+              <button key={t.value} onClick={() => setTipo(t.value)} style={{ background: tipo === t.value ? 'var(--ink)' : 'var(--surface)', color: tipo === t.value ? 'var(--paper)' : 'var(--ink)', border: '1px solid var(--line-strong)', padding: '6px 12px', fontFamily: 'var(--font-mono)', fontSize: '10px', cursor: 'pointer' }}>{t.label}</button>
             ))}
           </div>
         </div>
         <div style={{ flex: 1, overflowY: 'auto', padding: '24px', background: 'var(--paper)' }}>
           {messages.map((m, i) => (
             <div key={i} style={{ marginBottom: '12px', display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
-              <div style={{ maxWidth: '84%', background: m.role === 'user' ? 'var(--accent-navy)' : 'var(--surface)', color: 'var(--ink)', border: m.role === 'user' ? 'none' : '1px solid var(--line)', padding: '12px 14px', fontFamily: 'Inter, sans-serif', fontSize: '14px', whiteSpace: 'pre-wrap' }}>
+              <div style={{ maxWidth: '84%', background: m.role === 'user' ? 'var(--accent-navy)' : 'var(--surface)', color: 'var(--ink)', border: m.role === 'user' ? 'none' : '1px solid var(--line)', padding: '12px 14px', fontFamily: 'var(--font-body)', fontSize: '14px', whiteSpace: 'pre-wrap' }}>
                 {m.content}
               </div>
             </div>
           ))}
-          {isTyping && <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '10px', color: 'var(--muted)' }}>Arthur está redactando...</div>}
+          {isTyping && <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--muted)' }}>Arthur está redactando...</div>}
           <div ref={endRef} />
         </div>
         <div style={{ borderTop: '1px solid var(--line)', padding: '14px', display: 'flex', gap: '8px' }}>
           <textarea value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send(); } }} style={{ flex: 1, border: '1px solid var(--line-strong)', padding: '12px', minHeight: 48 }} placeholder="Escribe tu instrucción..." />
-          <button onClick={() => void send()} style={{ border: 'none', background: 'var(--ink)', color: 'white', padding: '0 18px', fontFamily: 'DM Mono, monospace', fontSize: '10px', textTransform: 'uppercase', cursor: 'pointer' }}>Enviar</button>
+          <button onClick={() => void send()} style={{ border: 'none', background: 'var(--ink)', color: 'white', padding: '0 18px', fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', cursor: 'pointer' }}>Enviar</button>
         </div>
       </div>
 
       <div style={{ background: 'var(--paper)', display: 'flex', flexDirection: 'column' }}>
         <div style={{ background: 'var(--surface)', borderBottom: '1px solid var(--line)', padding: '20px 28px', display: 'flex', justifyContent: 'space-between' }}>
           <div style={{ fontFamily: 'var(--font-display)', fontSize: '20px' }}>Documento judicial</div>
-          <button onClick={() => navigator.clipboard.writeText(documentContent).catch(() => {})} style={{ border: '1px solid var(--line-strong)', background: 'transparent', padding: '8px 12px', fontFamily: 'DM Mono, monospace', fontSize: '10px', textTransform: 'uppercase', cursor: 'pointer' }}>Copiar</button>
+          <button onClick={() => navigator.clipboard.writeText(documentContent).catch(() => {})} style={{ border: '1px solid var(--line-strong)', background: 'transparent', padding: '8px 12px', fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', cursor: 'pointer' }}>Copiar</button>
         </div>
         <div style={{ flex: 1, overflowY: 'auto', padding: '32px 40px' }}>
           {documentContent ? (
             <div style={{ maxWidth: '560px', margin: '0 auto', fontFamily: "'Times New Roman', Times, serif", fontSize: '13px', lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>{documentContent}</div>
           ) : (
-            <div style={{ color: 'var(--muted)', fontFamily: 'Inter, sans-serif' }}>El borrador aparecerá aquí cuando Arthur complete la redacción.</div>
+            <div style={{ color: 'var(--muted)', fontFamily: 'var(--font-body)' }}>El borrador aparecerá aquí cuando Arthur complete la redacción.</div>
           )}
         </div>
       </div>

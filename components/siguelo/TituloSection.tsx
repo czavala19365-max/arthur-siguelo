@@ -31,7 +31,7 @@ function RowDownloads({ titulo }: { titulo: Titulo }) {
             display: 'inline-flex',
             alignItems: 'center',
             gap: '4px',
-            fontFamily: 'DM Mono, monospace',
+            fontFamily: 'var(--font-mono)',
             fontSize: '10px',
             textTransform: 'uppercase',
             letterSpacing: '0.06em',
@@ -53,7 +53,7 @@ function RowDownloads({ titulo }: { titulo: Titulo }) {
             display: 'inline-flex',
             alignItems: 'center',
             gap: '4px',
-            fontFamily: 'DM Mono, monospace',
+            fontFamily: 'var(--font-mono)',
             fontSize: '10px',
             textTransform: 'uppercase',
             letterSpacing: '0.06em',
@@ -86,7 +86,7 @@ export default function TituloSection({
     border: '1px solid var(--line-strong)',
     borderRadius: 0,
     padding: '5px 12px',
-    fontFamily: 'DM Mono, monospace',
+    fontFamily: 'var(--font-mono)',
     fontSize: '10px',
     textTransform: 'uppercase',
     letterSpacing: '0.08em',
@@ -125,7 +125,7 @@ export default function TituloSection({
             style={{
               display: 'inline-block',
               padding: '3px 10px',
-              fontFamily: 'DM Mono, monospace',
+              fontFamily: 'var(--font-mono)',
               fontSize: '10px',
               textTransform: 'uppercase',
               letterSpacing: '0.08em',
@@ -137,7 +137,7 @@ export default function TituloSection({
             {estado}
           </span>
           <span style={{
-            fontFamily: 'DM Mono, monospace',
+            fontFamily: 'var(--font-mono)',
             fontSize: '10px',
             textTransform: 'uppercase',
             letterSpacing: '0.08em',
@@ -168,7 +168,7 @@ export default function TituloSection({
             <thead>
               <tr style={{
                 background: 'var(--paper-dark)',
-                fontFamily: 'DM Mono, monospace',
+                fontFamily: 'var(--font-mono)',
                 fontSize: '10px',
                 textTransform: 'uppercase',
                 letterSpacing: '0.12em',
@@ -195,21 +195,21 @@ export default function TituloSection({
                   onMouseOut={e => { (e.currentTarget as HTMLElement).style.background = i % 2 === 1 ? 'var(--paper-dark)' : 'var(--surface)' }}
                 >
                   <td style={{ padding: '14px 24px' }}>
-                    <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '13px', color: 'var(--ink)', fontWeight: 500 }}>{t.numero_titulo}</div>
-                    <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '10px', color: 'var(--muted)', marginTop: '2px' }}>{t.anio_titulo}</div>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', color: 'var(--ink)', fontWeight: 500 }}>{t.numero_titulo}</div>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--muted)', marginTop: '2px' }}>{t.anio_titulo}</div>
                   </td>
                   <td style={{ padding: '14px 16px' }}>
-                    <span style={{ fontFamily: 'Inter, sans-serif', fontSize: '13px', color: 'var(--muted)' }}>
+                    <span style={{ fontFamily: 'var(--font-body)', fontSize: '13px', color: 'var(--muted)' }}>
                       {t.oficina_registral}
                     </span>
                   </td>
                   <td style={{ padding: '14px 16px' }}>
-                    <span style={{ fontFamily: 'Inter, sans-serif', fontSize: '13px', fontWeight: 500, color: 'var(--ink)' }}>
+                    <span style={{ fontFamily: 'var(--font-body)', fontSize: '13px', fontWeight: 500, color: 'var(--ink)' }}>
                       {t.nombre_cliente}
                     </span>
                   </td>
                   <td style={{ padding: '14px 16px' }}>
-                    <span style={{ fontFamily: 'Inter, sans-serif', fontSize: '13px', color: 'var(--muted)' }}>
+                    <span style={{ fontFamily: 'var(--font-body)', fontSize: '13px', color: 'var(--muted)' }}>
                       {t.asunto ?? <span style={{ color: 'var(--line-strong)' }}>—</span>}
                     </span>
                   </td>

@@ -61,7 +61,7 @@ export default function LoginPage() {
   };
 
   const labelStyle: React.CSSProperties = {
-    fontFamily: 'DM Mono, monospace',
+    fontFamily: 'var(--font-mono)',
     fontSize: '10px',
     textTransform: 'uppercase',
     letterSpacing: '0.12em',
@@ -113,7 +113,7 @@ export default function LoginPage() {
             <button
               onClick={() => router.push('/')}
               style={{
-                fontFamily: 'DM Mono, monospace',
+                fontFamily: 'var(--font-mono)',
                 fontSize: '10px',
                 textTransform: 'uppercase',
                 color: muted,
@@ -160,7 +160,7 @@ export default function LoginPage() {
           <div style={{ padding: '32px 40px 40px' }}>
             <div
               style={{
-                fontFamily: 'DM Mono, monospace',
+                fontFamily: 'var(--font-mono)',
                 fontSize: '11px',
                 textTransform: 'uppercase',
                 letterSpacing: '0.15em',
@@ -216,7 +216,7 @@ export default function LoginPage() {
               {error && (
                 <div
                   style={{
-                    fontFamily: 'DM Mono, monospace',
+                    fontFamily: 'var(--font-mono)',
                     fontSize: '11px',
                     color: '#b91c1c',
                     marginBottom: '12px',
@@ -236,7 +236,7 @@ export default function LoginPage() {
                   border: `1px solid ${loading ? 'rgba(194,164,109,0.5)' : accent}`,
                   borderRadius: 0,
                   color: loading ? 'rgba(20,20,20,0.5)' : ink,
-                  fontFamily: 'DM Mono, monospace',
+                  fontFamily: 'var(--font-mono)',
                   fontSize: '12px',
                   textTransform: 'uppercase',
                   letterSpacing: '0.15em',

@@ -39,7 +39,7 @@ export default function AlertasPage() {
   return (
     <div style={{ padding: '48px 64px', background: 'var(--paper)', minHeight: '100vh' }}>
       <div style={{ animation: 'fadeUp 0.4s ease forwards' }}>
-        <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.15em', color: 'var(--muted)', marginBottom: '8px' }}>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.15em', color: 'var(--muted)', marginBottom: '8px' }}>
           HISTORIAL
         </div>
         <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(32px, 4vw, 48px)', color: 'var(--ink)', fontWeight: 400 }}>
@@ -50,7 +50,7 @@ export default function AlertasPage() {
 
       <div style={{ marginTop: '40px' }}>
         {loading ? (
-          <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '11px', textTransform: 'uppercase', color: 'var(--muted)' }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', textTransform: 'uppercase', color: 'var(--muted)' }}>
             Cargando alertas...
           </div>
         ) : notifications.length === 0 ? (
@@ -58,7 +58,7 @@ export default function AlertasPage() {
             <div style={{ fontFamily: 'var(--font-display)', fontSize: '24px', color: 'var(--ink)', marginBottom: '8px' }}>
               No hay alertas enviadas
             </div>
-            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: '14px', color: 'var(--muted)' }}>
+            <div style={{ fontFamily: 'var(--font-body)', fontSize: '14px', color: 'var(--muted)' }}>
               Las alertas aparecerán aquí cuando haya cambios en tus trámites.
             </div>
           </div>
@@ -78,11 +78,11 @@ export default function AlertasPage() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                   <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: n.success ? '#166534' : '#991b1b', flexShrink: 0 }} />
                   <div>
-                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: '14px', fontWeight: 500, color: 'var(--ink)', marginBottom: '2px' }}>
+                    <div style={{ fontFamily: 'var(--font-body)', fontSize: '14px', fontWeight: 500, color: 'var(--ink)', marginBottom: '2px' }}>
                       {n.tramiteAlias || 'Trámite'} — {n.canal === 'whatsapp' ? 'WhatsApp' : 'Email'}
                     </div>
                     {n.mensaje && (
-                      <div style={{ fontFamily: 'Inter, sans-serif', fontSize: '13px', color: 'var(--muted)' }}>
+                      <div style={{ fontFamily: 'var(--font-body)', fontSize: '13px', color: 'var(--muted)' }}>
                         {n.mensaje.substring(0, 100)}{n.mensaje.length > 100 ? '...' : ''}
                       </div>
                     )}
@@ -90,11 +90,11 @@ export default function AlertasPage() {
                 </div>
                 <div style={{ textAlign: 'right', flexShrink: 0 }}>
                   {n.estado && (
-                    <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--muted)', marginBottom: '4px' }}>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--muted)', marginBottom: '4px' }}>
                       {n.estado}
                     </div>
                   )}
-                  <div style={{ fontFamily: 'Inter, sans-serif', fontSize: '12px', color: 'var(--muted)' }}>
+                  <div style={{ fontFamily: 'var(--font-body)', fontSize: '12px', color: 'var(--muted)' }}>
                     {new Date(n.enviado_at).toLocaleString('es-PE')}
                   </div>
                 </div>

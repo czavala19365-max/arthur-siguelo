@@ -16,7 +16,7 @@ export default function JudicialLayout({ children }: { children: React.ReactNode
 
   if (!authorized) {
     return (
-      <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'DM Mono, monospace', fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase' }}>
+      <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase' }}>
         Verificando acceso...
       </div>
     );

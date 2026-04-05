@@ -68,7 +68,7 @@ export default function ArchivadosPage() {
   if (loading) {
     return (
       <div style={{ padding: '48px 64px' }}>
-        <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.15em', color: 'var(--muted)' }}>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.15em', color: 'var(--muted)' }}>
           Cargando...
         </div>
       </div>
@@ -78,13 +78,13 @@ export default function ArchivadosPage() {
   return (
     <div style={{ padding: '48px 64px', background: 'var(--paper)', minHeight: '100vh' }}>
       <div style={{ animation: 'fadeUp 0.4s ease forwards' }}>
-        <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.15em', color: 'var(--muted)', marginBottom: '8px' }}>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.15em', color: 'var(--muted)', marginBottom: '8px' }}>
           ARCHIVADOS
         </div>
         <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(32px, 4vw, 48px)', color: 'var(--ink)', fontWeight: 400, lineHeight: 1.1 }}>
           Trámites Archivados
         </h1>
-        <p style={{ fontFamily: 'Inter, sans-serif', fontSize: '14px', color: 'var(--muted)', marginTop: '8px' }}>
+        <p style={{ fontFamily: 'var(--font-body)', fontSize: '14px', color: 'var(--muted)', marginTop: '8px' }}>
           Trámites que ya no necesitan seguimiento activo. Puedes restaurarlos en cualquier momento.
         </p>
       </div>
@@ -95,7 +95,7 @@ export default function ArchivadosPage() {
           gridTemplateColumns: '140px 100px 1fr 130px 130px 200px',
           background: 'var(--paper-dark)',
           padding: '12px 24px',
-          fontFamily: 'DM Mono, monospace',
+          fontFamily: 'var(--font-mono)',
           fontSize: '10px',
           textTransform: 'uppercase',
           letterSpacing: '0.12em',
@@ -115,7 +115,7 @@ export default function ArchivadosPage() {
             <div style={{ fontFamily: 'var(--font-display)', fontSize: '24px', color: 'var(--ink)', marginBottom: '12px' }}>
               No hay trámites archivados
             </div>
-            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: '15px', color: 'var(--muted)' }}>
+            <div style={{ fontFamily: 'var(--font-body)', fontSize: '15px', color: 'var(--muted)' }}>
               Cuando archives un trámite desde la vista principal, aparecerá aquí
             </div>
           </div>
@@ -134,21 +134,21 @@ export default function ArchivadosPage() {
               }}
             >
               <div><StatusBadge estado={t.estado_actual} /></div>
-              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: '13px', color: 'var(--muted)' }}>
+              <div style={{ fontFamily: 'var(--font-body)', fontSize: '13px', color: 'var(--muted)' }}>
                 {tipoText(t.tipo)}
               </div>
               <div>
                 <Link
                   href={`/dashboard/tramites/${t.id}`}
-                  style={{ fontFamily: 'Inter, sans-serif', fontSize: '14px', fontWeight: 600, color: 'var(--ink)' }}
+                  style={{ fontFamily: 'var(--font-body)', fontSize: '14px', fontWeight: 600, color: 'var(--ink)' }}
                 >
                   {t.alias}
                 </Link>
               </div>
-              <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '12px', color: 'var(--muted)' }}>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--muted)' }}>
                 {t.numero_titulo}/{t.anio}
               </div>
-              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: '12px', color: 'var(--muted)' }}>
+              <div style={{ fontFamily: 'var(--font-body)', fontSize: '12px', color: 'var(--muted)' }}>
                 {formatDate(t.archived_at)}
               </div>
               <div style={{ display: 'flex', gap: '8px' }}>
@@ -159,7 +159,7 @@ export default function ArchivadosPage() {
                     border: '1px solid var(--line-strong)',
                     borderRadius: 0,
                     padding: '6px 12px',
-                    fontFamily: 'DM Mono, monospace',
+                    fontFamily: 'var(--font-mono)',
                     fontSize: '10px',
                     textTransform: 'uppercase',
                     letterSpacing: '0.06em',
@@ -179,7 +179,7 @@ export default function ArchivadosPage() {
                     border: '1px solid rgba(153,27,27,0.2)',
                     borderRadius: 0,
                     padding: '6px 12px',
-                    fontFamily: 'DM Mono, monospace',
+                    fontFamily: 'var(--font-mono)',
                     fontSize: '10px',
                     textTransform: 'uppercase',
                     letterSpacing: '0.06em',

@@ -239,7 +239,7 @@ export default function Sidebar({ observadosCount = 0 }: SidebarProps) {
           <div
             style={{
               marginTop: '10px',
-              fontFamily: 'DM Mono, monospace',
+              fontFamily: 'var(--font-mono)',
               fontSize: '10px',
               textTransform: 'uppercase',
               letterSpacing: '0.12em',
@@ -262,7 +262,7 @@ export default function Sidebar({ observadosCount = 0 }: SidebarProps) {
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 padding: '10px 16px',
-                fontFamily: 'Inter, sans-serif',
+                fontFamily: 'var(--font-body)',
                 fontSize: '13px',
                 color: isActive(link.href) ? 'var(--sidebar-text)' : 'var(--sidebar-muted)',
                 background: isActive(link.href) ? 'var(--sidebar-active-bg)' : 'transparent',
@@ -312,7 +312,7 @@ export default function Sidebar({ observadosCount = 0 }: SidebarProps) {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                fontFamily: 'DM Mono, monospace',
+                fontFamily: 'var(--font-mono)',
                 fontSize: '12px',
                 color: 'var(--sidebar-text)',
                 flexShrink: 0,
@@ -323,7 +323,7 @@ export default function Sidebar({ observadosCount = 0 }: SidebarProps) {
             <div style={{ flex: 1, overflow: 'hidden' }}>
               <div
                 style={{
-                  fontFamily: 'Inter, sans-serif',
+                  fontFamily: 'var(--font-body)',
                   fontSize: '12px',
                   color: 'var(--sidebar-text)',
                   lineHeight: 1.3,
@@ -343,7 +343,7 @@ export default function Sidebar({ observadosCount = 0 }: SidebarProps) {
             }}
             style={{
               width: '100%',
-              fontFamily: 'DM Mono, monospace',
+              fontFamily: 'var(--font-mono)',
               fontSize: '10px',
               textTransform: 'uppercase',
               letterSpacing: '0.06em',

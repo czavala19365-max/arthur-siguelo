@@ -74,7 +74,7 @@ export default function SelectModulePage() {
           style={{
             marginTop: '48px',
             marginBottom: '40px',
-            fontFamily: 'DM Mono, monospace',
+            fontFamily: 'var(--font-mono)',
             fontSize: '11px',
             textTransform: 'uppercase',
             letterSpacing: '0.15em',
@@ -103,7 +103,7 @@ export default function SelectModulePage() {
           >
             <div
               style={{
-                fontFamily: 'DM Mono, monospace',
+                fontFamily: 'var(--font-mono)',
                 fontSize: '10px',
                 textTransform: 'uppercase',
                 letterSpacing: '0.15em',
@@ -137,7 +137,7 @@ export default function SelectModulePage() {
             </p>
             <div
               style={{
-                fontFamily: 'DM Mono, monospace',
+                fontFamily: 'var(--font-mono)',
                 fontSize: '11px',
                 textTransform: 'uppercase',
                 color: `rgba(${gold}, 0.65)`,
@@ -166,7 +166,7 @@ export default function SelectModulePage() {
           >
             <div
               style={{
-                fontFamily: 'DM Mono, monospace',
+                fontFamily: 'var(--font-mono)',
                 fontSize: '10px',
                 textTransform: 'uppercase',
                 letterSpacing: '0.15em',
@@ -200,7 +200,7 @@ export default function SelectModulePage() {
             </p>
             <div
               style={{
-                fontFamily: 'DM Mono, monospace',
+                fontFamily: 'var(--font-mono)',
                 fontSize: '11px',
                 textTransform: 'uppercase',
                 color: `rgba(${gold}, 0.65)`,
@@ -222,7 +222,7 @@ export default function SelectModulePage() {
             background: 'none',
             border: 'none',
             cursor: 'pointer',
-            fontFamily: 'DM Mono, monospace',
+            fontFamily: 'var(--font-mono)',
             fontSize: '10px',
             textTransform: 'uppercase',
             color: 'rgba(248,248,248,0.28)',

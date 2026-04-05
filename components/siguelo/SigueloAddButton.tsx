@@ -16,7 +16,7 @@ export default function SigueloAddButton() {
           border: open ? '1px solid var(--line-strong)' : 'none',
           borderRadius: 0,
           padding: '12px 24px',
-          fontFamily: 'Inter, sans-serif',
+          fontFamily: 'var(--font-body)',
           fontSize: '13px',
           fontWeight: 500,
           cursor: 'pointer',
