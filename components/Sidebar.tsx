@@ -39,11 +39,13 @@ const IconChat = () => (
   </svg>
 );
 
-const IconSunarp = () => (
+const IconSiguelo = () => (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="8" cy="8" r="6.5" />
-    <path d="M5.5 8h5M8 5.5v5" />
-    <path d="M5.5 5.5l5 5M10.5 5.5l-5 5" strokeWidth="1" opacity="0.5" />
+    <path d="M1.5 1h7l2.5 2.5V10H1.5V1z" />
+    <path d="M8.5 1v2.5H11" />
+    <path d="M3 5h5M3 7h5M3 9h3" />
+    <circle cx="12" cy="12.5" r="2" />
+    <path d="M13.4 14l1.6 1.5" />
   </svg>
 );
 
@@ -87,7 +89,7 @@ export default function Sidebar({ observadosCount = 0 }: SidebarProps) {
   }, []);
 
   const links = [
-    { href: '/dashboard/siguelo', label: 'Seguimiento a Títulos Registrales - Síguelo', hasAlert: false, Icon: IconSunarp },
+    { href: '/dashboard/siguelo', label: 'Seguimiento de Títulos - Síguelo', hasAlert: false, Icon: IconSiguelo },
     { href: '/dashboard/agenda', label: 'Agenda de Plazos', hasAlert: false, Icon: IconCalendar },
     { href: '/dashboard/alertas', label: 'Alertas', hasAlert: false, Icon: IconBell },
     { href: '/dashboard/chat', label: 'Consulta Legal', hasAlert: false, Icon: IconChat },
