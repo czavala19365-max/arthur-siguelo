@@ -20,14 +20,14 @@ export default function SelectModulePage() {
     cursor: 'pointer',
     background: 'rgba(255,255,255,0.04)',
     border: `1px solid rgba(${gold}, 0.28)`,
-    padding: '40px 36px',
+    padding: '40px 36px 48px',
     borderRadius: 0,
     transition: 'all 0.2s ease',
     boxShadow: '0 0 0 1px rgba(0,0,0,0.2) inset',
   };
 
   return (
-    <div style={{ position: 'relative', width: '100%', height: '100vh', overflow: 'hidden', background: '#0b0b0b' }}>
+    <div style={{ position: 'relative', width: '100%', height: '100vh', overflowX: 'hidden', overflowY: 'auto', background: '#0b0b0b' }}>
       <AnimatedBackground />
       <div
         style={{
@@ -119,10 +119,10 @@ export default function SelectModulePage() {
               style={{
                 fontFamily: 'var(--font-display)',
                 fontSize: '42px',
-                fontWeight: 800,
-                letterSpacing: '-0.03em',
+                fontWeight: 600,
+                letterSpacing: '-0.02em',
                 color: '#ffffff',
-                lineHeight: 1.25,
+                lineHeight: 1.3,
               }}
             >
               registral
@@ -183,10 +183,10 @@ export default function SelectModulePage() {
               style={{
                 fontFamily: 'var(--font-display)',
                 fontSize: '42px',
-                fontWeight: 800,
-                letterSpacing: '-0.03em',
+                fontWeight: 600,
+                letterSpacing: '-0.02em',
                 color: '#ffffff',
-                lineHeight: 1.25,
+                lineHeight: 1.3,
               }}
             >
               judicial

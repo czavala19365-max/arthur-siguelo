@@ -102,7 +102,13 @@ textarea {
 
 h1, h2, h3 {
   font-family: var(--font-display);
+  font-weight: 600;
   letter-spacing: -0.02em;
+}
+
+button {
+  font-family: var(--font-body);
+  font-weight: 500;
 }
 
 .badge {
