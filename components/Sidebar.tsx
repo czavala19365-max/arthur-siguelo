@@ -39,6 +39,14 @@ const IconChat = () => (
   </svg>
 );
 
+const IconHome = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M2 7L8 2l6 5" />
+    <path d="M4 7v7h8V7" />
+    <path d="M6 14v-4h4v4" />
+  </svg>
+);
+
 const IconSiguelo = () => (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
     <circle cx="6.5" cy="6.5" r="4.5" />
@@ -86,6 +94,7 @@ export default function Sidebar({ observadosCount = 0 }: SidebarProps) {
   }, []);
 
   const links = [
+    { href: '/dashboard', label: 'Inicio', hasAlert: false, Icon: IconHome },
     { href: '/dashboard/siguelo', label: 'Seguimiento de Títulos - Síguelo', hasAlert: false, Icon: IconSiguelo },
     { href: '/dashboard/agenda', label: 'Agenda de Plazos', hasAlert: false, Icon: IconCalendar },
     { href: '/dashboard/alertas', label: 'Alertas', hasAlert: false, Icon: IconBell },
