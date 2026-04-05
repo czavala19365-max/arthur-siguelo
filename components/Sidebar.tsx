@@ -41,11 +41,8 @@ const IconChat = () => (
 
 const IconSiguelo = () => (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M1.5 1h7l2.5 2.5V10H1.5V1z" />
-    <path d="M8.5 1v2.5H11" />
-    <path d="M3 5h5M3 7h5M3 9h3" />
-    <circle cx="12" cy="12.5" r="2" />
-    <path d="M13.4 14l1.6 1.5" />
+    <circle cx="6.5" cy="6.5" r="4.5" />
+    <path d="M10 10l4 4" />
   </svg>
 );
 
