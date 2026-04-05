@@ -198,39 +198,18 @@ export default function TituloSection({
                     <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '13px', color: 'var(--ink)', fontWeight: 500 }}>{t.numero_titulo}</div>
                     <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '10px', color: 'var(--muted)', marginTop: '2px' }}>{t.anio_titulo}</div>
                   </td>
-                  <td style={{ padding: '14px 16px', maxWidth: '120px' }}>
-                    <span style={{
-                      display: 'block',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                      fontFamily: 'Inter, sans-serif',
-                      fontSize: '13px',
-                      color: 'var(--muted)',
-                    }} title={t.oficina_registral}>{t.oficina_registral}</span>
+                  <td style={{ padding: '14px 16px' }}>
+                    <span style={{ fontFamily: 'Inter, sans-serif', fontSize: '13px', color: 'var(--muted)' }}>
+                      {t.oficina_registral}
+                    </span>
                   </td>
-                  <td style={{ padding: '14px 16px', maxWidth: '160px' }}>
-                    <span style={{
-                      display: 'block',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                      fontFamily: 'Inter, sans-serif',
-                      fontSize: '13px',
-                      fontWeight: 500,
-                      color: 'var(--ink)',
-                    }} title={t.nombre_cliente}>{t.nombre_cliente}</span>
+                  <td style={{ padding: '14px 16px' }}>
+                    <span style={{ fontFamily: 'Inter, sans-serif', fontSize: '13px', fontWeight: 500, color: 'var(--ink)' }}>
+                      {t.nombre_cliente}
+                    </span>
                   </td>
-                  <td style={{ padding: '14px 16px', maxWidth: '180px' }}>
-                    <span style={{
-                      display: 'block',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                      fontFamily: 'Inter, sans-serif',
-                      fontSize: '13px',
-                      color: 'var(--muted)',
-                    }} title={t.asunto ?? ''}>
+                  <td style={{ padding: '14px 16px' }}>
+                    <span style={{ fontFamily: 'Inter, sans-serif', fontSize: '13px', color: 'var(--muted)' }}>
                       {t.asunto ?? <span style={{ color: 'var(--line-strong)' }}>—</span>}
                     </span>
                   </td>
