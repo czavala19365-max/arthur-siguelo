@@ -37,7 +37,9 @@ export default function SigueloPage() {
             Títulos Registrales
           </h1>
         </div>
-        <SigueloAddButton />
+        <Suspense fallback={null}>
+          <SigueloAddButton />
+        </Suspense>
       </div>
 
       {/* Lista con buscador integrado */}
