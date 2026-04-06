@@ -3,15 +3,40 @@
 import { useEffect, useState } from 'react'
 import { getHistorialAction } from '@/app/actions'
 import ConsultarButton from './ConsultarButton'
-import EstadoBadge from './EstadoBadge'
+import { getEstadoStyle } from '@/lib/estados'
 import type { Titulo, HistorialEstado } from '@/types'
 
-function InfoRow({ label, value }: { label: string; value: string | null | undefined }) {
+function Field({ label, value }: { label: string; value: string | null | undefined }) {
   if (!value) return null
   return (
-    <div className="grid grid-cols-[140px_1fr] gap-2 py-1.5 border-b border-gray-50 last:border-0">
-      <span className="text-xs text-gray-400 font-medium uppercase tracking-wide leading-5">{label}</span>
-      <span className="text-sm text-gray-800 break-words">{value}</span>
+    <div>
+      <div style={{
+        fontFamily: 'var(--font-mono)', fontSize: '9px',
+        textTransform: 'uppercase', letterSpacing: '0.12em',
+        color: 'var(--muted)', marginBottom: '4px',
+      }}>
+        {label}
+      </div>
+      <div style={{
+        fontFamily: 'var(--font-body)', fontSize: '13px',
+        color: 'var(--ink)', lineHeight: 1.45, wordBreak: 'break-word',
+      }}>
+        {value}
+      </div>
+    </div>
+  )
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{
+      fontFamily: 'var(--font-mono)', fontSize: '9px',
+      textTransform: 'uppercase', letterSpacing: '0.14em',
+      color: 'var(--accent)', marginBottom: '12px',
+      paddingBottom: '8px',
+      borderBottom: '1px solid var(--line-faint)',
+    }}>
+      {children}
     </div>
   )
 }
@@ -39,6 +64,7 @@ export default function TituloDetailModal({
     return () => window.removeEventListener('keydown', handler)
   }, [onClose])
 
+  const estadoStyle = getEstadoStyle(titulo.ultimo_estado ?? '')
   const ultimaConsulta = titulo.ultima_consulta
     ? new Date(titulo.ultima_consulta).toLocaleString('es-PE', {
         timeZone: 'America/Lima',
@@ -48,90 +74,207 @@ export default function TituloDetailModal({
     : null
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 p-4 overflow-y-auto"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
-    >
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl my-4 overflow-hidden">
+    <>
+      <style>{`
+        @keyframes modalIn { from { opacity: 0; transform: translate(-50%,-48%); } to { opacity: 1; transform: translate(-50%,-50%); } }
+      `}</style>
 
-        {/* Header */}
-        <div className="flex items-start justify-between px-6 py-4" style={{ backgroundColor: '#1e3a5f' }}>
-          <div>
-            <p className="text-xs font-medium mb-1" style={{ color: 'rgba(255,255,255,0.55)' }}>
-              {titulo.oficina_registral} · {titulo.anio_titulo}
-            </p>
-            <h2 className="text-lg font-bold text-white leading-tight">
-              Título {titulo.numero_titulo}
-            </h2>
-            {titulo.ultimo_estado && (
-              <div className="mt-2">
-                <EstadoBadge estado={titulo.ultimo_estado} />
+      {/* Overlay */}
+      <div
+        onClick={onClose}
+        style={{
+          position: 'fixed', inset: 0,
+          background: 'rgba(0,0,0,0.52)',
+          zIndex: 200,
+        }}
+      />
+
+      {/* Panel */}
+      <div style={{
+        position: 'fixed',
+        top: '50%', left: '50%',
+        transform: 'translate(-50%,-50%)',
+        width: 'min(94vw, 860px)',
+        maxHeight: '85vh',
+        background: 'var(--paper)',
+        border: '1px solid var(--line)',
+        borderRadius: '4px',
+        boxShadow: '0 24px 80px rgba(0,0,0,0.22)',
+        zIndex: 201,
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+        animation: 'modalIn 0.22s ease forwards',
+      }}>
+
+        {/* ── Header ─────────────────────────────────────────────── */}
+        <div style={{
+          background: 'var(--ink)',
+          padding: '28px 32px 24px',
+          flexShrink: 0,
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px' }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              {/* Breadcrumb */}
+              <div style={{
+                fontFamily: 'var(--font-mono)', fontSize: '10px',
+                textTransform: 'uppercase', letterSpacing: '0.12em',
+                color: 'rgba(255,255,255,0.45)',
+                marginBottom: '8px',
+              }}>
+                {titulo.oficina_registral} · {titulo.anio_titulo}
               </div>
-            )}
+
+              {/* Número grande */}
+              <h2 style={{
+                fontFamily: 'var(--font-display)',
+                fontSize: 'clamp(24px, 3vw, 36px)',
+                fontWeight: 700,
+                color: 'var(--paper)',
+                lineHeight: 1.1,
+                letterSpacing: '-0.01em',
+                fontStyle: 'italic',
+                marginBottom: '14px',
+              }}>
+                Título {titulo.numero_titulo}
+              </h2>
+
+              {/* Badge de estado */}
+              {titulo.ultimo_estado && estadoStyle && (
+                <span style={{
+                  display: 'inline-block',
+                  padding: '4px 12px',
+                  background: estadoStyle.bg,
+                  color: estadoStyle.text,
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.1em',
+                  borderRadius: '2px',
+                }}>
+                  {titulo.ultimo_estado}
+                </span>
+              )}
+              {titulo.ultimo_estado && !estadoStyle && (
+                <span style={{
+                  display: 'inline-block',
+                  padding: '4px 12px',
+                  background: 'rgba(255,255,255,0.12)',
+                  color: 'rgba(255,255,255,0.75)',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.1em',
+                  borderRadius: '2px',
+                }}>
+                  {titulo.ultimo_estado}
+                </span>
+              )}
+              {!titulo.ultimo_estado && (
+                <span style={{
+                  display: 'inline-block',
+                  padding: '4px 12px',
+                  background: 'rgba(255,255,255,0.08)',
+                  color: 'rgba(255,255,255,0.4)',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '11px',
+                  letterSpacing: '0.1em',
+                  borderRadius: '2px',
+                }}>
+                  Sin estado
+                </span>
+              )}
+            </div>
+
+            {/* Botón cerrar */}
+            <button
+              onClick={onClose}
+              style={{
+                width: '32px', height: '32px',
+                background: 'rgba(255,255,255,0.08)',
+                border: '1px solid rgba(255,255,255,0.15)',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                color: 'rgba(255,255,255,0.65)',
+                fontSize: '18px',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontFamily: 'var(--font-body)',
+                flexShrink: 0,
+                transition: 'background 0.15s',
+              }}
+              onMouseOver={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.18)' }}
+              onMouseOut={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)' }}
+              aria-label="Cerrar"
+            >
+              ×
+            </button>
           </div>
-          <button
-            onClick={onClose}
-            className="ml-4 mt-0.5 flex-shrink-0 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
         </div>
 
-        <div className="px-6 py-5 space-y-5 overflow-y-auto max-h-[calc(100vh-180px)]">
+        {/* ── Cuerpo scrollable ────────────────────────────────────── */}
+        <div style={{
+          flex: 1,
+          overflowY: 'auto',
+          padding: '28px 32px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '28px',
+        }}>
 
-          {/* ── Información del título ───────────────────────────── */}
+          {/* Título registral */}
           <section>
-            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
-              Título Registral
-            </h3>
-            <div className="bg-gray-50 rounded-xl px-4 py-2">
-              <InfoRow label="Número" value={`${titulo.numero_titulo} / ${titulo.anio_titulo}`} />
-              <InfoRow label="Oficina" value={titulo.oficina_registral} />
-              <InfoRow label="Registro" value={titulo.registro} />
-              <InfoRow label="Área registral" value={titulo.area_registral} />
-              <InfoRow label="Nº de partida" value={titulo.numero_partida} />
+            <SectionLabel>Título registral</SectionLabel>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px 32px' }}>
+              <Field label="Número" value={titulo.numero_titulo} />
+              <Field label="Año" value={String(titulo.anio_titulo)} />
+              <Field label="Oficina registral" value={titulo.oficina_registral} />
+              <Field label="Tipo de registro" value={titulo.registro} />
+              <Field label="Área registral" value={titulo.area_registral} />
+              <Field label="Número de partida" value={titulo.numero_partida} />
             </div>
           </section>
 
-          {/* ── Cliente ──────────────────────────────────────────── */}
+          {/* Cliente */}
           <section>
-            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
-              Cliente
-            </h3>
-            <div className="bg-gray-50 rounded-xl px-4 py-2">
-              <InfoRow label="Cliente" value={titulo.nombre_cliente} />
-              <InfoRow label="Email(s)" value={titulo.email_cliente} />
-              <InfoRow label="WhatsApp(s)" value={titulo.whatsapp_cliente} />
+            <SectionLabel>Cliente</SectionLabel>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px 32px' }}>
+              <Field label="Nombre" value={titulo.nombre_cliente} />
+              <Field label="WhatsApp" value={titulo.whatsapp_cliente} />
+              <Field label="Email(s)" value={titulo.email_cliente} />
             </div>
           </section>
 
-          {/* ── Expediente ───────────────────────────────────────── */}
+          {/* Expediente (solo si hay datos) */}
           {(titulo.proyecto || titulo.asunto || titulo.abogado || titulo.notaria) && (
             <section>
-              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
-                Expediente
-              </h3>
-              <div className="bg-gray-50 rounded-xl px-4 py-2">
-                <InfoRow label="Proyecto" value={titulo.proyecto} />
-                <InfoRow label="Asunto" value={titulo.asunto} />
-                <InfoRow label="Abogado a cargo" value={titulo.abogado} />
-                <InfoRow label="Notaría / Presentante" value={titulo.notaria} />
+              <SectionLabel>Expediente</SectionLabel>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px 32px' }}>
+                <Field label="Proyecto" value={titulo.proyecto} />
+                <Field label="Asunto" value={titulo.asunto} />
+                <Field label="Abogado a cargo" value={titulo.abogado} />
+                <Field label="Notaría / Presentante" value={titulo.notaria} />
               </div>
             </section>
           )}
 
-          {/* ── Estado y acciones ────────────────────────────────── */}
+          {/* Estado y acciones */}
           <section>
-            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
-              Estado y acciones
-            </h3>
-            <div className="bg-gray-50 rounded-xl px-4 py-3">
+            <SectionLabel>Estado y acciones</SectionLabel>
+            <div style={{
+              background: 'var(--surface)',
+              border: '1px solid var(--line)',
+              padding: '16px 20px',
+            }}>
               {ultimaConsulta && (
-                <p className="text-xs text-gray-400 mb-3">
+                <div style={{
+                  fontFamily: 'var(--font-mono)', fontSize: '10px',
+                  color: 'var(--muted)', textTransform: 'uppercase',
+                  letterSpacing: '0.08em', marginBottom: '14px',
+                }}>
                   Última consulta: {ultimaConsulta}
-                </p>
+                </div>
               )}
               <ConsultarButton
                 tituloId={titulo.id}
@@ -142,36 +285,75 @@ export default function TituloDetailModal({
             </div>
           </section>
 
-          {/* ── Historial de estados ─────────────────────────────── */}
+          {/* Historial */}
           <section>
-            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
-              Historial de estados
-            </h3>
+            <SectionLabel>Historial de estados</SectionLabel>
             {loadingHistorial ? (
-              <div className="text-xs text-gray-400 py-2">Cargando historial…</div>
+              <div style={{ fontFamily: 'var(--font-body)', fontSize: '13px', color: 'var(--muted)', padding: '8px 0' }}>
+                Cargando historial…
+              </div>
             ) : historial.length === 0 ? (
-              <div className="text-xs text-gray-400 py-2 bg-gray-50 rounded-xl px-4">
+              <div style={{
+                fontFamily: 'var(--font-body)', fontSize: '13px',
+                color: 'var(--muted)', padding: '12px 16px',
+                background: 'var(--surface)', border: '1px solid var(--line)',
+              }}>
                 Sin cambios de estado registrados.
               </div>
             ) : (
-              <div className="space-y-2">
-                {historial.map((h) => {
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
+                {historial.map((h, i) => {
                   const fecha = new Date(h.detectado_en).toLocaleString('es-PE', {
                     timeZone: 'America/Lima',
                     dateStyle: 'short',
                     timeStyle: 'short',
                   })
+                  const prevStyle = getEstadoStyle(h.estado_anterior)
+                  const nextStyle = getEstadoStyle(h.estado_nuevo)
+
                   return (
-                    <div
-                      key={h.id}
-                      className="flex items-center gap-3 bg-gray-50 rounded-xl px-4 py-2.5"
-                    >
-                      <EstadoBadge estado={h.estado_anterior} />
-                      <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                      </svg>
-                      <EstadoBadge estado={h.estado_nuevo} />
-                      <span className="ml-auto text-xs text-gray-400 whitespace-nowrap">{fecha}</span>
+                    <div key={h.id} style={{ display: 'flex', alignItems: 'stretch', gap: '0' }}>
+                      {/* Línea de tiempo */}
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '24px', flexShrink: 0 }}>
+                        <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--accent)', flexShrink: 0, marginTop: '14px' }} />
+                        {i < historial.length - 1 && (
+                          <div style={{ flex: 1, width: '1px', background: 'var(--line)', marginTop: '4px' }} />
+                        )}
+                      </div>
+                      {/* Contenido */}
+                      <div style={{
+                        flex: 1, padding: '10px 0 16px 12px',
+                        display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap',
+                      }}>
+                        <span style={{
+                          padding: '3px 8px',
+                          background: prevStyle?.bg ?? 'var(--surface)',
+                          color: prevStyle?.text ?? 'var(--muted)',
+                          fontFamily: 'var(--font-mono)', fontSize: '10px',
+                          fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em',
+                        }}>
+                          {h.estado_anterior}
+                        </span>
+                        <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ color: 'var(--muted)', flexShrink: 0 }}>
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                        </svg>
+                        <span style={{
+                          padding: '3px 8px',
+                          background: nextStyle?.bg ?? 'var(--surface)',
+                          color: nextStyle?.text ?? 'var(--muted)',
+                          fontFamily: 'var(--font-mono)', fontSize: '10px',
+                          fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em',
+                        }}>
+                          {h.estado_nuevo}
+                        </span>
+                        <span style={{
+                          marginLeft: 'auto',
+                          fontFamily: 'var(--font-mono)', fontSize: '10px',
+                          color: 'var(--muted)', whiteSpace: 'nowrap',
+                        }}>
+                          {fecha}
+                        </span>
+                      </div>
                     </div>
                   )
                 })}
@@ -181,6 +363,6 @@ export default function TituloDetailModal({
 
         </div>
       </div>
-    </div>
+    </>
   )
 }
