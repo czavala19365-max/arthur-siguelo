@@ -449,3 +449,14 @@ export async function descargarAsiento(
 
 /** Lista de oficinas disponibles para el formulario */
 export const OFICINAS_DISPONIBLES = Object.keys(OFICINAS).sort()
+
+/**
+ * Convierte un nombre de oficina (ej: "LIMA") al código de 4 dígitos
+ * que espera sunarp-scraper.ts (ej: "0101").
+ * Retorna null si el nombre no está en el mapa.
+ */
+export function resolveOficinaCode(nombre: string): string | null {
+  const entry = OFICINAS[nombre.toUpperCase().trim()]
+  if (!entry) return null
+  return entry.zona + entry.oficina
+}
