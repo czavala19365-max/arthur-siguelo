@@ -29,36 +29,36 @@ REGLAS:
 6. Si te piden jurisprudencia, menciona número de resolución, fecha y sumilla cuando los conozcas
 7. Estructura tus respuestas con secciones claras cuando sean extensas`;
 
-async function callAnthropic(messages: ChatMsg[]): Promise<string> {
+async function callAnthropic(messages: ChatMsg[], sysPrompt: string): Promise<string> {
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   const response = await client.messages.create({
     model: 'claude-sonnet-4-6',
     max_tokens: 2000,
-    system: SYSTEM_PROMPT,
+    system: sysPrompt,
     messages: messages.map(m => ({ role: m.role, content: m.content })),
   });
   const block = response.content[0];
   return block.type === 'text' ? block.text : '';
 }
 
-async function callOpenAI(messages: ChatMsg[]): Promise<string> {
+async function callOpenAI(messages: ChatMsg[], sysPrompt: string): Promise<string> {
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   const response = await client.chat.completions.create({
     model: 'gpt-4o',
     max_tokens: 2000,
     messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'system', content: sysPrompt },
       ...messages.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
     ],
   });
   return response.choices[0]?.message?.content || '';
 }
 
-async function callGemini(messages: ChatMsg[]): Promise<string> {
+async function callGemini(messages: ChatMsg[], sysPrompt: string): Promise<string> {
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
   const model = genAI.getGenerativeModel({
     model: 'gemini-2.5-flash',
-    systemInstruction: SYSTEM_PROMPT,
+    systemInstruction: sysPrompt,
   });
   const history = messages.slice(0, -1).map(m => ({
     role: m.role === 'assistant' ? 'model' as const : 'user' as const,
@@ -84,9 +84,11 @@ export function listAvailableProviders(): Provider[] {
 
 export async function chatWithProvider(
   messages: ChatMsg[],
-  preferredProvider?: Provider
+  preferredProvider?: Provider,
+  systemPrompt?: string,
 ): Promise<ProviderResponse> {
   const available = getAvailableProviders();
+  const sysPrompt = systemPrompt ?? SYSTEM_PROMPT;
 
   if (available.length === 0) {
     console.error('[LLM] No hay proveedores configurados. Define ANTHROPIC_API_KEY, GEMINI_API_KEY u OPENAI_API_KEY en las variables de entorno.');
@@ -101,7 +103,7 @@ export async function chatWithProvider(
     ? [preferredProvider, ...available.filter(p => p !== preferredProvider)]
     : available;
 
-  const callers: Record<Provider, (msgs: ChatMsg[]) => Promise<string>> = {
+  const callers: Record<Provider, (msgs: ChatMsg[], sys: string) => Promise<string>> = {
     anthropic: callAnthropic,
     openai: callOpenAI,
     gemini: callGemini,
@@ -111,7 +113,7 @@ export async function chatWithProvider(
 
   for (const provider of ordered) {
     try {
-      const text = await callers[provider](messages);
+      const text = await callers[provider](messages, sysPrompt);
       if (provider !== ordered[0]) {
         console.warn(`[LLM] Usando proveedor de respaldo: ${provider}`);
       }
