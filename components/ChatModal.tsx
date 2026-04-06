@@ -146,14 +146,15 @@ export default function ChatModal({ initialQuery, onClose }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       })
-      const result = await res.json() as { success?: boolean; id?: string; estado?: string; error?: string }
+      const result = await res.json() as { success?: boolean; id?: string; estado?: string | null; detalle?: string | null; error?: string }
       if (result.success) {
+        const estadoLabel = result.estado ?? 'PENDIENTE'
         setMessages(prev => prev.map(m =>
-          m.id === msgId ? { ...m, confirmStatus: 'success', addedTitulo: { estado: result.estado ?? 'REGISTRADO', id: result.id ?? '' } } : m
+          m.id === msgId ? { ...m, confirmStatus: 'success', addedTitulo: { estado: estadoLabel, id: result.id ?? '' } } : m
         ))
         setMessages(prev => [...prev, {
           id: uid(), role: 'assistant',
-          content: `✅ Título agregado al seguimiento.\n\nEstado en SUNARP: **${result.estado ?? 'SIN DATOS'}**\n\nRecibirás alertas automáticas cuando haya cambios.`,
+          content: `✅ Título agregado al seguimiento.\n\nEstado en SUNARP: **${estadoLabel}**${result.detalle ? `\n${result.detalle}` : ''}\n\nRecibirás alertas automáticas cuando haya cambios.`,
         }])
       } else {
         setMessages(prev => prev.map(m =>
