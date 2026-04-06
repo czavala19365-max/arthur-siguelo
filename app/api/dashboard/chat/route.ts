@@ -27,20 +27,23 @@ Cuando el usuario quiera agregar un título (detecta frases como "agregar títul
    - Número del título (ej: 00012345)
    - Nombre del cliente o expediente
    - Email para alertas automáticas
+   - Número de WhatsApp para alertas (incluye código de país, ej: +51 999 999 999). Si el usuario no quiere darlo, acepta "sin WhatsApp" y deja el campo vacío.
 
-2. Cuando tengas TODOS los datos obligatorios, muestra un resumen claro:
+2. Cuando tengas TODOS los datos obligatorios (WhatsApp es opcional), muestra un resumen claro:
    "✅ Resumen del título a agregar:
    • Oficina: [oficina]
    • Año: [año]
    • Número: [numero]
    • Cliente: [cliente]
    • Email alertas: [email]
+   • WhatsApp: [whatsapp o "No proporcionado"]
 
    ¿Confirmas agregar este título al seguimiento?"
 
-3. Al final del mensaje con el resumen, incluye EXACTAMENTE esta línea (sin espacios adicionales):
-   [[CONFIRMAR_TITULO:{"oficina_registral":"VALOR","anio_titulo":"VALOR","numero_titulo":"VALOR","nombre_cliente":"VALOR","email_cliente":"VALOR"}]]
+3. Al final del mensaje con el resumen, incluye EXACTAMENTE esta línea (sin espacios adicionales, todo en una sola línea):
+   [[CONFIRMAR_TITULO:{"oficina_registral":"VALOR","anio_titulo":"VALOR","numero_titulo":"VALOR","nombre_cliente":"VALOR","email_cliente":"VALOR","whatsapp_cliente":"VALOR"}]]
 
+   Si el usuario no proporcionó WhatsApp, usa "" como valor de whatsapp_cliente.
    Solo incluye ese marcador cuando el usuario haya dado todos los datos y hayas mostrado el resumen.
 
 NAVEGACIÓN — cuando el usuario mencione:

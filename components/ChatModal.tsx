@@ -11,6 +11,7 @@ type TituloData = {
   numero_titulo: string
   nombre_cliente: string
   email_cliente: string
+  whatsapp_cliente?: string
 }
 
 type Message = {
@@ -25,7 +26,7 @@ type Message = {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-const MARKER_RE = /\[\[CONFIRMAR_TITULO:(\{[^}]*\})\]\]/
+const MARKER_RE = /\[\[CONFIRMAR_TITULO:([\s\S]*?)\]\]/
 
 function parseMessage(raw: string): { content: string; pendingTitulo?: TituloData } {
   const match = raw.match(MARKER_RE)
@@ -323,6 +324,7 @@ export default function ChatModal({ initialQuery, onClose }: Props) {
                         Número: msg.pendingTitulo.numero_titulo,
                         Cliente: msg.pendingTitulo.nombre_cliente,
                         Email: msg.pendingTitulo.email_cliente,
+                        ...(msg.pendingTitulo.whatsapp_cliente ? { WhatsApp: msg.pendingTitulo.whatsapp_cliente } : {}),
                       }).map(([k, v]) => (
                         <div key={k}>
                           <div style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', textTransform: 'uppercase', color: 'var(--muted)' }}>{k}</div>
