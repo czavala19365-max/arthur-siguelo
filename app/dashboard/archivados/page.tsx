@@ -112,7 +112,7 @@ export default function ArchivadosPage() {
 
         {tramites.length === 0 ? (
           <div style={{ padding: '64px 24px', textAlign: 'center' }}>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: '24px', color: 'var(--ink)', marginBottom: '12px' }}>
+            <div style={{ fontFamily: 'var(--font-body)', fontSize: '24px', color: 'var(--ink)', marginBottom: '12px', fontWeight: 600 }}>
               No hay trámites archivados
             </div>
             <div style={{ fontFamily: 'var(--font-body)', fontSize: '15px', color: 'var(--muted)' }}>

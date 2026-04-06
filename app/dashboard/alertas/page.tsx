@@ -55,7 +55,7 @@ export default function AlertasPage() {
           </div>
         ) : notifications.length === 0 ? (
           <div style={{ textAlign: 'center', marginTop: '60px' }}>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: '24px', color: 'var(--ink)', marginBottom: '8px' }}>
+            <div style={{ fontFamily: 'var(--font-body)', fontSize: '24px', color: 'var(--ink)', marginBottom: '8px', fontWeight: 600 }}>
               No hay alertas enviadas
             </div>
             <div style={{ fontFamily: 'var(--font-body)', fontSize: '14px', color: 'var(--muted)' }}>
