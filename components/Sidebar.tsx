@@ -103,7 +103,7 @@ export default function Sidebar({ observadosCount = 0 }: SidebarProps) {
   ];
 
   const sigueloSubLinks = [
-    { href: '/dashboard/siguelo', label: 'Títulos Activos', Icon: IconSiguelo },
+    { href: '/dashboard/siguelo', label: 'Títulos Registrales Activos', Icon: IconSiguelo },
     { href: '/dashboard/siguelo/archivados', label: 'Archivados', Icon: IconArchive },
     { href: '/dashboard/siguelo/eliminados', label: 'Eliminados', Icon: IconTrash },
   ];
@@ -304,7 +304,7 @@ export default function Sidebar({ observadosCount = 0 }: SidebarProps) {
             >
               <span style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <IconSiguelo />
-                Seguimiento · Síguelo
+                Seguimiento de Títulos - Síguelo
               </span>
               <svg
                 width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2"
