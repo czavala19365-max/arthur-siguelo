@@ -1,16 +1,14 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { getHistorialAction } from '@/app/actions'
 import ConsultarButton from './ConsultarButton'
 import { getEstadoStyle } from '@/lib/estados'
-import type { Titulo, HistorialEstado, DetalleCronologiaEntry } from '@/types'
+import type { Titulo, DetalleCronologiaEntry } from '@/types'
 
 // ── Tipos de tab ──────────────────────────────────────────────────────────────
-type TabId = 'datos' | 'sunarp' | 'pagos' | 'actos' | 'cronologia' | 'descargas'
+type TabId = 'datos' | 'pagos' | 'actos' | 'cronologia' | 'descargas'
 const TABS: { id: TabId; label: string }[] = [
   { id: 'datos',      label: 'Datos' },
-  { id: 'sunarp',     label: 'SUNARP' },
   { id: 'pagos',      label: 'Pagos' },
   { id: 'actos',      label: 'Actos' },
   { id: 'cronologia', label: 'Cronología' },
@@ -86,8 +84,6 @@ export default function TituloDetailModal({
   onClose: () => void
 }) {
   const [activeTab, setActiveTab]         = useState<TabId>('datos')
-  const [historial, setHistorial]         = useState<HistorialEstado[]>([])
-  const [loadingHistorial, setLoadingHistorial] = useState(true)
   const [cronologia, setCronologia]       = useState<DetalleCronologiaEntry[] | null>(null)
   const [loadingCron, setLoadingCron]     = useState(false)
   const [cronError, setCronError]         = useState<string | null>(null)
@@ -99,14 +95,6 @@ export default function TituloDetailModal({
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [onClose])
-
-  // Cargar historial
-  useEffect(() => {
-    getHistorialAction(titulo.id).then(h => {
-      setHistorial(h)
-      setLoadingHistorial(false)
-    })
-  }, [titulo.id])
 
   // Cargar cronología al activar esa pestaña (solo una vez)
   useEffect(() => {
@@ -329,146 +317,64 @@ export default function TituloDetailModal({
                 </section>
               )}
 
-              {/* Historial de estados */}
+              {/* Separador */}
+              <div style={{ borderTop: '1px solid var(--line-faint)' }} />
+
+              {/* Información SUNARP */}
               <section>
-                <SectionLabel>Historial de estados</SectionLabel>
-                {loadingHistorial ? (
-                  <div style={{ fontFamily: 'var(--font-body)', fontSize: '13px', color: 'var(--muted)', padding: '8px 0' }}>
-                    Cargando…
+                <SectionLabel>Información SUNARP</SectionLabel>
+                {!(titulo.fecha_presentacion || titulo.fecha_vencimiento || titulo.lugar_presentacion || titulo.nombre_presentante) ? (
+                  <div style={{
+                    padding: '14px 16px',
+                    background: 'var(--surface)', border: '1px solid var(--line-faint)',
+                    fontFamily: 'var(--font-body)', fontSize: '13px',
+                    color: 'var(--muted)', lineHeight: 1.5,
+                  }}>
+                    Actualiza el estado para ver esta información.
                   </div>
-                ) : historial.length === 0 ? (
-                  <EmptyState text="Sin cambios de estado registrados" />
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column' }}>
-                    {historial.map((h, i) => {
-                      const fecha = new Date(h.detectado_en).toLocaleString('es-PE', {
-                        timeZone: 'America/Lima', dateStyle: 'short', timeStyle: 'short',
-                      })
-                      const prevStyle = getEstadoStyle(h.estado_anterior)
-                      const nextStyle = getEstadoStyle(h.estado_nuevo)
-                      return (
-                        <div key={h.id} style={{ display: 'flex', alignItems: 'stretch' }}>
-                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '24px', flexShrink: 0 }}>
-                            <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--accent)', flexShrink: 0, marginTop: '14px' }} />
-                            {i < historial.length - 1 && (
-                              <div style={{ flex: 1, width: '1px', background: 'var(--line)', marginTop: '4px' }} />
-                            )}
-                          </div>
-                          <div style={{
-                            flex: 1, padding: '10px 0 16px 12px',
-                            display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap',
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px 28px' }}>
+                      <Field label="Fecha y Hora de Presentación" value={titulo.fecha_presentacion} />
+                      <Field label="Fecha de Vencimiento"         value={titulo.fecha_vencimiento} />
+                      <Field label="Lugar de Presentación"        value={titulo.lugar_presentacion} />
+                      <Field label="Presentante"                  value={titulo.nombre_presentante} />
+                    </div>
+                    {(titulo.indi_prorroga === '1' || titulo.indi_suspension === '1' || (titulo.monto_devolucion && titulo.monto_devolucion !== '0')) && (
+                      <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
+                        {titulo.indi_prorroga === '1' && (
+                          <span style={{
+                            display: 'inline-block', padding: '3px 10px',
+                            background: '#fef3c7', color: '#92400e',
+                            fontFamily: 'var(--font-mono)', fontSize: '10px',
+                            fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em',
                           }}>
-                            <span style={{
-                              padding: '3px 8px',
-                              background: prevStyle?.bg ?? 'var(--surface)',
-                              color: prevStyle?.text ?? 'var(--muted)',
-                              fontFamily: 'var(--font-mono)', fontSize: '10px',
-                              fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em',
-                            }}>{h.estado_anterior}</span>
-                            <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ color: 'var(--muted)', flexShrink: 0 }}>
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                            </svg>
-                            <span style={{
-                              padding: '3px 8px',
-                              background: nextStyle?.bg ?? 'var(--surface)',
-                              color: nextStyle?.text ?? 'var(--muted)',
-                              fontFamily: 'var(--font-mono)', fontSize: '10px',
-                              fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em',
-                            }}>{h.estado_nuevo}</span>
-                            <span style={{
-                              marginLeft: 'auto',
-                              fontFamily: 'var(--font-mono)', fontSize: '10px',
-                              color: 'var(--muted)', whiteSpace: 'nowrap',
-                            }}>{fecha}</span>
-                          </div>
-                        </div>
-                      )
-                    })}
+                            Prorrogado
+                          </span>
+                        )}
+                        {titulo.indi_suspension === '1' && (
+                          <span style={{
+                            display: 'inline-block', padding: '3px 10px',
+                            background: '#fee2e2', color: '#991b1b',
+                            fontFamily: 'var(--font-mono)', fontSize: '10px',
+                            fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em',
+                          }}>
+                            Suspendido
+                          </span>
+                        )}
+                        {titulo.monto_devolucion && titulo.monto_devolucion !== '0' && (
+                          <span style={{
+                            fontFamily: 'var(--font-body)', fontSize: '13px',
+                            color: 'var(--ink)',
+                          }}>
+                            Devolución: <strong>S/ {titulo.monto_devolucion}</strong>
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </section>
-            </div>
-          )}
-
-          {/* ══ TAB: SUNARP ═════════════════════════════════════════════ */}
-          {activeTab === 'sunarp' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-
-              {!(titulo.fecha_presentacion || titulo.fecha_vencimiento || titulo.lugar_presentacion || titulo.nombre_presentante) && (
-                <div style={{
-                  padding: '20px', background: 'var(--surface)',
-                  border: '1px solid var(--line)',
-                  fontFamily: 'var(--font-body)', fontSize: '13px',
-                  color: 'var(--muted)', lineHeight: 1.6,
-                }}>
-                  No hay datos de SUNARP disponibles. Usa{' '}
-                  <strong style={{ color: 'var(--ink)' }}>Actualizar estado</strong>{' '}
-                  en la pestaña Descargas para cargar esta información.
-                </div>
-              )}
-
-              {(titulo.fecha_presentacion || titulo.fecha_vencimiento || titulo.lugar_presentacion) && (
-                <section>
-                  <SectionLabel>Presentación</SectionLabel>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px 28px' }}>
-                    <Field label="Fecha y Hora de Presentación" value={titulo.fecha_presentacion} />
-                    <Field label="Fecha de Vencimiento"         value={titulo.fecha_vencimiento} />
-                    <Field label="Lugar de Presentación"        value={titulo.lugar_presentacion} />
-                  </div>
-                </section>
-              )}
-
-              {titulo.nombre_presentante && (
-                <section>
-                  <SectionLabel>Presentante</SectionLabel>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px 28px' }}>
-                    <Field label="Nombre del Presentante" value={titulo.nombre_presentante} />
-                    <Field label="Tipo de Registro SUNARP" value={titulo.tipo_registro} />
-                  </div>
-                </section>
-              )}
-
-              {(titulo.indi_prorroga === '1' || titulo.indi_suspension === '1' || titulo.monto_devolucion) && (
-                <section>
-                  <SectionLabel>Indicadores</SectionLabel>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px 28px' }}>
-                    {titulo.indi_prorroga === '1' && (
-                      <div>
-                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--muted)', marginBottom: '4px' }}>
-                          Prórroga
-                        </div>
-                        <span style={{
-                          display: 'inline-block', padding: '3px 10px',
-                          background: '#fef3c7', color: '#92400e',
-                          fontFamily: 'var(--font-mono)', fontSize: '10px',
-                          fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em',
-                        }}>
-                          Prorrogado
-                        </span>
-                      </div>
-                    )}
-                    {titulo.indi_suspension === '1' && (
-                      <div>
-                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--muted)', marginBottom: '4px' }}>
-                          Suspensión
-                        </div>
-                        <span style={{
-                          display: 'inline-block', padding: '3px 10px',
-                          background: '#fee2e2', color: '#991b1b',
-                          fontFamily: 'var(--font-mono)', fontSize: '10px',
-                          fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em',
-                        }}>
-                          Suspendido
-                        </span>
-                      </div>
-                    )}
-                    {titulo.monto_devolucion && titulo.monto_devolucion !== '0' && (
-                      <Field label="Monto de Devolución" value={`S/ ${titulo.monto_devolucion}`} />
-                    )}
-                  </div>
-                </section>
-              )}
-
             </div>
           )}
 
