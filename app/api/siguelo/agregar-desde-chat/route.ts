@@ -14,12 +14,25 @@ export async function POST(request: Request) {
 
     const { oficina_registral, anio_titulo, numero_titulo, nombre_cliente, email_cliente, whatsapp_cliente } = body
 
+    console.log('[agregar-desde-chat] Body recibido:', JSON.stringify({
+      oficina_registral, anio_titulo, numero_titulo, nombre_cliente, email_cliente,
+      whatsapp_cliente: whatsapp_cliente ? '***' : '(vacío)',
+    }))
+
     // Consulta el estado actual en SUNARP
     const scrape = await scrapeTitulo(
       numero_titulo,
       String(anio_titulo),
       oficina_registral,
     )
+
+    console.log('[agregar-desde-chat] Scrape result:', {
+      estado: scrape.estado,
+      observacion: scrape.observacion,
+      isObservado: scrape.isObservado,
+      isInscrito: scrape.isInscrito,
+      portalDown: scrape.portalDown,
+    })
 
     // Guarda en Supabase
     const id = await createTitulo({
@@ -39,6 +52,8 @@ export async function POST(request: Request) {
       area_registral: null,
       numero_partida: null,
     })
+
+    console.log('[agregar-desde-chat] Supabase insert OK, id:', id)
 
     return Response.json({
       success: true,
