@@ -39,7 +39,7 @@ function RowDownloads({ titulo }: { titulo: Titulo }) {
 
   const linkStyle: React.CSSProperties = {
     display: 'inline-flex', alignItems: 'center', gap: '4px',
-    fontFamily: 'var(--font-mono)', fontSize: '10px',
+    fontFamily: 'var(--font-mono)', fontSize: '12px',
     textTransform: 'uppercase', letterSpacing: '0.06em',
     textDecoration: 'none',
   }
@@ -160,7 +160,7 @@ export default function TituloSection({
     borderRadius: 0,
     padding: '5px 12px',
     fontFamily: 'var(--font-mono)',
-    fontSize: '10px',
+    fontSize: '13px',
     textTransform: 'uppercase',
     letterSpacing: '0.08em',
     color: 'var(--ink)',
@@ -221,7 +221,7 @@ export default function TituloSection({
                 onClick={() => setPendingAction(null)}
                 style={{
                   flex: 1,
-                  fontFamily: 'var(--font-mono)', fontSize: '11px',
+                  fontFamily: 'var(--font-mono)', fontSize: '13px',
                   textTransform: 'uppercase', letterSpacing: '0.08em',
                   background: 'transparent', border: '1px solid var(--line-strong)',
                   color: 'var(--ink)', borderRadius: 0, padding: '11px 16px', cursor: 'pointer',
@@ -235,7 +235,7 @@ export default function TituloSection({
                 onClick={confirmarAccion}
                 style={{
                   flex: 1,
-                  fontFamily: 'var(--font-mono)', fontSize: '11px',
+                  fontFamily: 'var(--font-mono)', fontSize: '13px',
                   textTransform: 'uppercase', letterSpacing: '0.08em',
                   background: pendingAction.tipo === 'archivar' ? 'var(--accent)' : '#dc2626',
                   border: 'none', color: pendingAction.tipo === 'archivar' ? '#141414' : '#fff',
@@ -274,14 +274,14 @@ export default function TituloSection({
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
             <span style={{
               display: 'inline-block', padding: '3px 10px',
-              fontFamily: 'var(--font-mono)', fontSize: '10px',
+              fontFamily: 'var(--font-mono)', fontSize: '12px',
               textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600,
               backgroundColor: estadoStyle.bg, color: estadoStyle.text,
             }}>
               {estadoPlural}
             </span>
             <span style={{
-              fontFamily: 'var(--font-mono)', fontSize: '10px',
+              fontFamily: 'var(--font-mono)', fontSize: '12px',
               textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--muted)',
             }}>
               {titulos.length} {titulos.length === 1 ? 'título' : 'títulos'}
@@ -306,7 +306,7 @@ export default function TituloSection({
               <thead>
                 <tr style={{
                   background: 'var(--paper-dark)',
-                  fontFamily: 'var(--font-mono)', fontSize: '10px',
+                  fontFamily: 'var(--font-mono)', fontSize: '12px',
                   textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--muted)',
                 }}>
                   <th style={{ padding: '10px 24px', fontWeight: 500, textAlign: 'left', whiteSpace: 'nowrap' }}>Nº Título</th>
@@ -331,21 +331,21 @@ export default function TituloSection({
                     onMouseOut={e => { (e.currentTarget as HTMLElement).style.background = i % 2 === 1 ? 'var(--paper-dark)' : 'var(--surface)' }}
                   >
                     <td style={{ padding: '14px 24px' }}>
-                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', color: 'var(--ink)', fontWeight: 500 }}>{t.numero_titulo}</div>
-                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--muted)', marginTop: '2px' }}>{t.anio_titulo}</div>
+                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '15px', color: 'var(--ink)', fontWeight: 500 }}>{t.numero_titulo}</div>
+                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--muted)', marginTop: '2px' }}>{t.anio_titulo}</div>
                     </td>
                     <td style={{ padding: '14px 16px' }}>
-                      <span style={{ fontFamily: 'var(--font-body)', fontSize: '13px', color: 'var(--muted)' }}>
+                      <span style={{ fontFamily: 'var(--font-body)', fontSize: '14px', color: 'var(--muted)' }}>
                         {t.oficina_registral}
                       </span>
                     </td>
                     <td style={{ padding: '14px 16px' }}>
-                      <span style={{ fontFamily: 'var(--font-body)', fontSize: '13px', fontWeight: 500, color: 'var(--ink)' }}>
+                      <span style={{ fontFamily: 'var(--font-body)', fontSize: '14px', fontWeight: 500, color: 'var(--ink)' }}>
                         {t.nombre_cliente}
                       </span>
                     </td>
                     <td style={{ padding: '14px 16px' }}>
-                      <span style={{ fontFamily: 'var(--font-body)', fontSize: '13px', color: 'var(--muted)' }}>
+                      <span style={{ fontFamily: 'var(--font-body)', fontSize: '14px', color: 'var(--muted)' }}>
                         {t.asunto ?? <span style={{ color: 'var(--line-strong)' }}>—</span>}
                       </span>
                     </td>
