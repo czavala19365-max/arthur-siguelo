@@ -1,10 +1,18 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import TituloForm from './TituloForm'
 
 export default function SigueloAddButton() {
+  const searchParams = useSearchParams()
   const [open, setOpen] = useState(false)
+
+  useEffect(() => {
+    if (searchParams.get('action') === 'agregar') {
+      setOpen(true)
+    }
+  }, [searchParams])
 
   return (
     <>
