@@ -15,6 +15,7 @@ export type Titulo = {
   ultima_consulta: string | null
   area_registral: string | null
   numero_partida: string | null
+  estado_gestion?: string | null
   created_at: string
 }
 

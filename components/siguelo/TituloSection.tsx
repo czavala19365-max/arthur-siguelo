@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { getEstadoStyle, ESTADOS_CON_ESQUELA, LABEL_ESQUELA, normalizarEstado, ESTADO_PLURAL } from '@/lib/estados'
-import { eliminarTituloAction } from '@/app/actions'
+import { archivarTituloAction, eliminarTituloLogicoAction } from '@/app/actions'
 import TituloDetailModal from './TituloDetailModal'
 import type { Titulo } from '@/types'
 
@@ -110,8 +110,9 @@ export default function TituloSection({
   const [expanded, setExpanded] = useState(true)
   const [selected, setSelected] = useState<Titulo | null>(null)
   const [toast, setToast] = useState<string | null>(null)
-  const [deletingId, setDeletingId] = useState<string | null>(null)
-  const [, startDelete] = useTransition()
+  const [processingId, setProcessingId] = useState<string | null>(null)
+  const [pendingAction, setPendingAction] = useState<{ tipo: 'archivar' | 'eliminar'; titulo: Titulo } | null>(null)
+  const [, startAction] = useTransition()
 
   const estadoStyle = getEstadoStyle(estado) ?? { bg: '#F3F4F6', text: '#374151' }
   const estadoPlural = ESTADO_PLURAL[estado] ?? estado
@@ -121,19 +122,20 @@ export default function TituloSection({
     setTimeout(() => setToast(null), 3000)
   }
 
-  function handleArchivar() {
-    showToast('Función de archivo próximamente')
-  }
-
-  function handleEliminar(t: Titulo) {
-    if (!confirm(`¿Eliminar el título ${t.numero_titulo} / ${t.anio_titulo} y todo su historial?`)) return
-    setDeletingId(t.id)
-    startDelete(async () => {
-      const res = await eliminarTituloAction(t.id)
-      setDeletingId(null)
+  function confirmarAccion() {
+    if (!pendingAction) return
+    const { tipo, titulo: t } = pendingAction
+    setPendingAction(null)
+    setProcessingId(t.id)
+    startAction(async () => {
+      const res = tipo === 'archivar'
+        ? await archivarTituloAction(t.id)
+        : await eliminarTituloLogicoAction(t.id)
+      setProcessingId(null)
       if (res.error) {
-        showToast(`Error al eliminar: ${res.error}`)
+        showToast(`Error: ${res.error}`)
       } else {
+        showToast(tipo === 'archivar' ? 'Título archivado correctamente' : 'Título eliminado')
         router.refresh()
       }
     })
@@ -169,6 +171,85 @@ export default function TituloSection({
   return (
     <>
       {toast && <Toast message={toast} onHide={() => setToast(null)} />}
+
+      {/* Modal de confirmación archivar/eliminar */}
+      {pendingAction && (
+        <>
+          <div
+            onClick={() => setPendingAction(null)}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 400 }}
+          />
+          <div style={{
+            position: 'fixed', top: '50%', left: '50%',
+            transform: 'translate(-50%,-50%)',
+            width: 'min(90vw, 440px)',
+            background: 'var(--paper)', border: '1px solid var(--line)',
+            borderRadius: '4px', padding: '28px 32px',
+            boxShadow: '0 24px 64px rgba(0,0,0,0.22)', zIndex: 401,
+          }}>
+            <h3 style={{
+              fontFamily: 'var(--font-body)', fontSize: '18px',
+              fontWeight: 600, color: 'var(--ink)', marginBottom: '12px',
+            }}>
+              {pendingAction.tipo === 'archivar' ? 'Archivar título' : 'Eliminar título'}
+            </h3>
+            <p style={{
+              fontFamily: 'var(--font-body)', fontSize: '14px',
+              color: 'var(--muted)', lineHeight: 1.6, marginBottom: '8px',
+            }}>
+              {pendingAction.tipo === 'archivar'
+                ? <>¿Deseas archivar el título{' '}
+                    <strong style={{ color: 'var(--ink)' }}>
+                      {pendingAction.titulo.anio_titulo}-{pendingAction.titulo.numero_titulo}
+                    </strong>?</>
+                : <>¿Deseas eliminar el título{' '}
+                    <strong style={{ color: 'var(--ink)' }}>
+                      {pendingAction.titulo.anio_titulo}-{pendingAction.titulo.numero_titulo}
+                    </strong>?</>
+              }
+            </p>
+            <p style={{
+              fontFamily: 'var(--font-body)', fontSize: '13px',
+              color: 'var(--muted)', lineHeight: 1.5, marginBottom: '24px',
+            }}>
+              {pendingAction.tipo === 'archivar'
+                ? 'El título se moverá a Títulos Archivados y dejará de recibir monitoreo automático.'
+                : 'El título se moverá a Títulos Eliminados.'}
+            </p>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                onClick={() => setPendingAction(null)}
+                style={{
+                  flex: 1,
+                  fontFamily: 'var(--font-mono)', fontSize: '11px',
+                  textTransform: 'uppercase', letterSpacing: '0.08em',
+                  background: 'transparent', border: '1px solid var(--line-strong)',
+                  color: 'var(--ink)', borderRadius: 0, padding: '11px 16px', cursor: 'pointer',
+                }}
+                onMouseOver={e => { e.currentTarget.style.background = 'var(--surface)' }}
+                onMouseOut={e => { e.currentTarget.style.background = 'transparent' }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmarAccion}
+                style={{
+                  flex: 1,
+                  fontFamily: 'var(--font-mono)', fontSize: '11px',
+                  textTransform: 'uppercase', letterSpacing: '0.08em',
+                  background: pendingAction.tipo === 'archivar' ? 'var(--accent)' : '#dc2626',
+                  border: 'none', color: pendingAction.tipo === 'archivar' ? '#141414' : '#fff',
+                  borderRadius: 0, padding: '11px 16px', cursor: 'pointer',
+                }}
+                onMouseOver={e => { e.currentTarget.style.opacity = '0.85' }}
+                onMouseOut={e => { e.currentTarget.style.opacity = '1' }}
+              >
+                {pendingAction.tipo === 'archivar' ? 'Archivar' : 'Eliminar'}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
 
       <div style={{
         border: '1px solid var(--line)',
@@ -244,7 +325,7 @@ export default function TituloSection({
                       borderTop: '1px solid var(--line-faint)',
                       background: i % 2 === 1 ? 'var(--paper-dark)' : 'var(--surface)',
                       transition: 'background 0.1s',
-                      opacity: deletingId === t.id ? 0.4 : 1,
+                      opacity: processingId === t.id ? 0.4 : 1,
                     }}
                     onMouseOver={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(194,164,109,0.06)' }}
                     onMouseOut={e => { (e.currentTarget as HTMLElement).style.background = i % 2 === 1 ? 'var(--paper-dark)' : 'var(--surface)' }}
@@ -289,7 +370,8 @@ export default function TituloSection({
 
                         {/* Archivar */}
                         <button
-                          onClick={handleArchivar}
+                          onClick={() => setPendingAction({ tipo: 'archivar', titulo: t })}
+                          disabled={processingId === t.id}
                           title="Archivar"
                           style={iconBtnBase}
                           onMouseOver={e => { e.currentTarget.style.background = 'rgba(194,164,109,0.12)'; e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)' }}
@@ -298,19 +380,19 @@ export default function TituloSection({
                           <ArchiveIcon />
                         </button>
 
-                        {/* Eliminar */}
+                        {/* Eliminar (mover a eliminados) */}
                         <button
-                          onClick={() => handleEliminar(t)}
-                          disabled={deletingId === t.id}
-                          title="Eliminar"
+                          onClick={() => setPendingAction({ tipo: 'eliminar', titulo: t })}
+                          disabled={processingId === t.id}
+                          title="Mover a Eliminados"
                           style={{
                             ...iconBtnBase,
-                            cursor: deletingId === t.id ? 'not-allowed' : 'pointer',
+                            cursor: processingId === t.id ? 'not-allowed' : 'pointer',
                           }}
-                          onMouseOver={e => { if (deletingId !== t.id) { e.currentTarget.style.background = 'rgba(220,38,38,0.08)'; e.currentTarget.style.borderColor = '#dc2626'; e.currentTarget.style.color = '#dc2626' } }}
+                          onMouseOver={e => { if (!processingId) { e.currentTarget.style.background = 'rgba(220,38,38,0.08)'; e.currentTarget.style.borderColor = '#dc2626'; e.currentTarget.style.color = '#dc2626' } }}
                           onMouseOut={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'var(--line)'; e.currentTarget.style.color = 'var(--muted)' }}
                         >
-                          {deletingId === t.id ? (
+                          {processingId === t.id ? (
                             <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px' }}>…</span>
                           ) : (
                             <TrashIcon />

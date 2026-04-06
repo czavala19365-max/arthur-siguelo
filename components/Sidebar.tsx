@@ -76,10 +76,12 @@ export default function Sidebar({ observadosCount = 0 }: SidebarProps) {
   const [count, setCount] = useState(observadosCount);
   const [userEmail, setUserEmail] = useState('');
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [sigueloOpen, setSigueloOpen] = useState(false);
 
-  // Close sidebar on route change
+  // Close sidebar on route change; auto-open siguelo group if on a siguelo path
   useEffect(() => {
     setMobileOpen(false);
+    if (pathname.startsWith('/dashboard/siguelo')) setSigueloOpen(true);
   }, [pathname]);
 
   useEffect(() => {
@@ -95,16 +97,20 @@ export default function Sidebar({ observadosCount = 0 }: SidebarProps) {
 
   const links = [
     { href: '/dashboard', label: 'Inicio', hasAlert: false, Icon: IconHome },
-    { href: '/dashboard/siguelo', label: 'Seguimiento de Títulos - Síguelo', hasAlert: false, Icon: IconSiguelo },
     { href: '/dashboard/agenda', label: 'Agenda de Plazos', hasAlert: false, Icon: IconCalendar },
     { href: '/dashboard/alertas', label: 'Alertas', hasAlert: false, Icon: IconBell },
     { href: '/dashboard/chat', label: 'Consulta Legal', hasAlert: false, Icon: IconChat },
-    { href: '/dashboard/archivados', label: 'Archivados', hasAlert: false, Icon: IconArchive },
-    { href: '/dashboard/eliminados', label: 'Eliminados', hasAlert: false, Icon: IconTrash },
+  ];
+
+  const sigueloSubLinks = [
+    { href: '/dashboard/siguelo', label: 'Títulos Activos', Icon: IconSiguelo },
+    { href: '/dashboard/siguelo/archivados', label: 'Archivados', Icon: IconArchive },
+    { href: '/dashboard/siguelo/eliminados', label: 'Eliminados', Icon: IconTrash },
   ];
 
   const isActive = (href: string) => {
     if (href === '/dashboard') return pathname === '/dashboard';
+    if (href === '/dashboard/siguelo') return pathname === '/dashboard/siguelo';
     return pathname.startsWith(href);
   };
 
@@ -252,22 +258,109 @@ export default function Sidebar({ observadosCount = 0 }: SidebarProps) {
 
         {/* Navigation */}
         <nav style={{ marginTop: '36px', padding: '0 16px', flex: 1 }}>
-          {links.map(link => (
+
+          {/* Inicio */}
+          {links.slice(0, 1).map(link => (
             <Link
               key={link.href}
               href={link.href}
               onClick={() => setMobileOpen(false)}
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 padding: '10px 16px',
-                fontFamily: 'var(--font-body)',
-                fontSize: '13px',
+                fontFamily: 'var(--font-body)', fontSize: '13px',
                 color: isActive(link.href) ? 'var(--sidebar-text)' : 'var(--sidebar-muted)',
                 background: isActive(link.href) ? 'var(--sidebar-active-bg)' : 'transparent',
+                borderRadius: '4px', marginBottom: '4px',
+                transition: 'color 0.15s, background 0.15s',
+                textDecoration: 'none',
+              }}
+            >
+              <span style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <link.Icon />
+                {link.label}
+              </span>
+            </Link>
+          ))}
+
+          {/* ── Síguelo (desplegable) ───────────────────────────── */}
+          <div style={{ marginBottom: '4px' }}>
+            {/* Ítem padre — solo expande/colapsa */}
+            <button
+              onClick={() => setSigueloOpen(v => !v)}
+              style={{
+                width: '100%',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '10px 16px',
+                fontFamily: 'var(--font-body)', fontSize: '13px',
+                color: pathname.startsWith('/dashboard/siguelo') ? 'var(--sidebar-text)' : 'var(--sidebar-muted)',
+                background: pathname.startsWith('/dashboard/siguelo') ? 'var(--sidebar-active-bg)' : 'transparent',
                 borderRadius: '4px',
-                marginBottom: '4px',
+                border: 'none', cursor: 'pointer',
+                transition: 'color 0.15s, background 0.15s',
+              }}
+              onMouseOver={e => { if (!pathname.startsWith('/dashboard/siguelo')) e.currentTarget.style.color = 'var(--sidebar-text)' }}
+              onMouseOut={e => { if (!pathname.startsWith('/dashboard/siguelo')) e.currentTarget.style.color = 'var(--sidebar-muted)' }}
+            >
+              <span style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <IconSiguelo />
+                Seguimiento · Síguelo
+              </span>
+              <svg
+                width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2"
+                viewBox="0 0 24 24"
+                style={{
+                  transform: sigueloOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                  transition: 'transform 0.2s',
+                  flexShrink: 0,
+                  opacity: 0.5,
+                }}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+
+            {/* Sub-ítems */}
+            {sigueloOpen && (
+              <div style={{ paddingLeft: '8px', marginTop: '2px' }}>
+                {sigueloSubLinks.map(sub => (
+                  <Link
+                    key={sub.href}
+                    href={sub.href}
+                    onClick={() => setMobileOpen(false)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '10px',
+                      padding: '8px 16px 8px 20px',
+                      fontFamily: 'var(--font-body)', fontSize: '12px',
+                      color: isActive(sub.href) ? 'var(--sidebar-text)' : 'var(--sidebar-muted)',
+                      background: isActive(sub.href) ? 'var(--sidebar-active-bg)' : 'transparent',
+                      borderRadius: '4px', marginBottom: '2px',
+                      transition: 'color 0.15s, background 0.15s',
+                      textDecoration: 'none',
+                      borderLeft: isActive(sub.href) ? '2px solid var(--accent)' : '2px solid transparent',
+                    }}
+                  >
+                    <sub.Icon />
+                    {sub.label}
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Resto de links */}
+          {links.slice(1).map(link => (
+            <Link
+              key={link.href}
+              href={link.href}
+              onClick={() => setMobileOpen(false)}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '10px 16px',
+                fontFamily: 'var(--font-body)', fontSize: '13px',
+                color: isActive(link.href) ? 'var(--sidebar-text)' : 'var(--sidebar-muted)',
+                background: isActive(link.href) ? 'var(--sidebar-active-bg)' : 'transparent',
+                borderRadius: '4px', marginBottom: '4px',
                 transition: 'color 0.15s, background 0.15s',
                 textDecoration: 'none',
               }}
@@ -277,16 +370,7 @@ export default function Sidebar({ observadosCount = 0 }: SidebarProps) {
                 {link.label}
               </span>
               {link.hasAlert && (
-                <span
-                  style={{
-                    width: '8px',
-                    height: '8px',
-                    borderRadius: '50%',
-                    background: '#ef4444',
-                    display: 'inline-block',
-                    flexShrink: 0,
-                  }}
-                />
+                <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#ef4444', display: 'inline-block', flexShrink: 0 }} />
               )}
             </Link>
           ))}
