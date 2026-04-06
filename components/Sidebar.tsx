@@ -304,7 +304,7 @@ export default function Sidebar({ observadosCount = 0 }: SidebarProps) {
             >
               <span style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <IconSiguelo />
-                Seguimiento de Títulos - Síguelo
+                Seguimiento de Títulos
               </span>
               <svg
                 width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2"
