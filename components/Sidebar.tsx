@@ -47,6 +47,23 @@ const IconHome = () => (
   </svg>
 );
 
+const IconPublicidad = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 2h7l3 3v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z" />
+    <path d="M10 2v3h3" />
+    <circle cx="8" cy="9.5" r="2" />
+    <path d="M8 7.5V6" />
+  </svg>
+);
+
+const IconPartidas = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="6.5" cy="6.5" r="4" />
+    <path d="M9.5 9.5L13 13" />
+    <path d="M4.5 4.5h4M4.5 6.5h3M4.5 8.5h2" />
+  </svg>
+);
+
 const IconSiguelo = () => (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
     <circle cx="6.5" cy="6.5" r="4.5" />
@@ -97,9 +114,10 @@ export default function Sidebar({ observadosCount = 0 }: SidebarProps) {
 
   const links = [
     { href: '/dashboard', label: 'Inicio', hasAlert: false, Icon: IconHome },
+    { href: '/dashboard/publicidad-registral', label: 'Publicidad Registral', hasAlert: false, Icon: IconPublicidad },
+    { href: '/dashboard/partidas-juridicas', label: 'Partidas - Personas Jurídicas', hasAlert: false, Icon: IconPartidas },
     { href: '/dashboard/agenda', label: 'Agenda de Plazos', hasAlert: false, Icon: IconCalendar },
     { href: '/dashboard/alertas', label: 'Alertas', hasAlert: false, Icon: IconBell },
-    { href: '/dashboard/chat', label: 'Consulta Legal', hasAlert: false, Icon: IconChat },
   ];
 
   const sigueloSubLinks = [
