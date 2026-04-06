@@ -105,7 +105,18 @@ export async function agregarYConsultarTitulo(
 
   try {
     const resultado = await consultarTitulo({ oficina_registral, anio_titulo, numero_titulo })
-    await actualizarEstadoTitulo(tituloId, resultado.estado, resultado.areaRegistral, resultado.numeroPartida)
+    await actualizarEstadoTitulo(tituloId, resultado.estado, resultado.areaRegistral, resultado.numeroPartida, {
+      fecha_presentacion: resultado.fechaHoraPresentacion,
+      fecha_vencimiento:  resultado.fechaVencimiento,
+      lugar_presentacion: resultado.lugarPresentacion,
+      nombre_presentante: resultado.nombrePresentante,
+      tipo_registro:      resultado.tipoRegistro,
+      monto_devolucion:   resultado.montoDevo,
+      indi_prorroga:      resultado.indiPror,
+      indi_suspension:    resultado.indiSusp,
+      pagos:              resultado.lstPagos,
+      actos:              resultado.lstActos,
+    })
 
     // Enviar email de confirmación (no bloquea si falla)
     const tituloGuardado = await getTituloById(tituloId)
@@ -166,7 +177,18 @@ export async function consultarAhora(
       })
     }
 
-    await actualizarEstadoTitulo(id, resultado.estado, resultado.areaRegistral, resultado.numeroPartida)
+    await actualizarEstadoTitulo(id, resultado.estado, resultado.areaRegistral, resultado.numeroPartida, {
+      fecha_presentacion: resultado.fechaHoraPresentacion,
+      fecha_vencimiento:  resultado.fechaVencimiento,
+      lugar_presentacion: resultado.lugarPresentacion,
+      nombre_presentante: resultado.nombrePresentante,
+      tipo_registro:      resultado.tipoRegistro,
+      monto_devolucion:   resultado.montoDevo,
+      indi_prorroga:      resultado.indiPror,
+      indi_suspension:    resultado.indiSusp,
+      pagos:              resultado.lstPagos,
+      actos:              resultado.lstActos,
+    })
     revalidatePath('/dashboard/siguelo')
 
     return { estado: resultado.estado, detalle: resultado.detalle ?? undefined }

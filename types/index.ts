@@ -1,3 +1,30 @@
+export type PagoSunarp = {
+  anioRecibo: string
+  numeroRecibo: string
+  montoTotalRecibo: string
+  fechaOperacion: string
+  inExoneracion?: string
+  inExtorno?: string
+  descriZonaRegistral?: string
+}
+
+export type DetalleCronologiaEntry = {
+  desEstado: string
+  etapa: string
+  area: string
+  fecha: string
+  fechaNotificacion: string | null
+  fechaResolucion: string | null
+  fechaInfoOral: string | null
+  fechaAcuseRecibo: string | null
+  tieneAcuse?: boolean
+  indicador1?: string
+  secuencia: string
+  responsable: string
+  documento2: string
+  tipoEsquela2: string
+}
+
 export type Titulo = {
   id: string
   oficina_registral: string
@@ -17,6 +44,17 @@ export type Titulo = {
   numero_partida: string | null
   estado_gestion?: string | null
   created_at: string
+  // Campos de SUNARP (se llenan al consultar estado)
+  fecha_presentacion?: string | null
+  fecha_vencimiento?: string | null
+  lugar_presentacion?: string | null
+  nombre_presentante?: string | null
+  tipo_registro?: string | null
+  monto_devolucion?: string | null
+  indi_prorroga?: string | null
+  indi_suspension?: string | null
+  pagos?: PagoSunarp[] | null
+  actos?: string[] | null
 }
 
 export type TituloFormState = {
