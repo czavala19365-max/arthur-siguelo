@@ -148,13 +148,12 @@ export default function HomeDashboard({ movimientos, plazosProximos, plazosVenci
             {date}
           </div>
           <h1 style={{
-            fontFamily: 'var(--font-display)',
+            fontFamily: 'var(--font-body)',
             fontSize: 'clamp(28px, 3.5vw, 44px)',
             color: 'var(--ink)',
-            fontWeight: 400,
+            fontWeight: 600,
             lineHeight: 1.15,
             margin: 0,
-            fontStyle: 'italic',
           }}>
             {greeting}{name ? `, ${name}` : ''}
           </h1>

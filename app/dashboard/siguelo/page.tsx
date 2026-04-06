@@ -27,10 +27,10 @@ export default function SigueloPage() {
             SUNARP SÍGUELO
           </div>
           <h1 style={{
-            fontFamily: 'var(--font-display)',
+            fontFamily: 'var(--font-body)',
             fontSize: 'clamp(32px, 4vw, 48px)',
             color: 'var(--ink)',
-            fontWeight: 400,
+            fontWeight: 600,
             lineHeight: 1.1,
             margin: 0,
           }}>

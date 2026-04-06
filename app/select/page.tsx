@@ -117,13 +117,12 @@ export default function SelectModulePage() {
             </div>
             <div
               style={{
-                fontFamily: 'var(--font-display)',
+                fontFamily: 'var(--font-body)',
                 fontSize: '42px',
                 fontWeight: 600,
                 letterSpacing: '-0.02em',
                 color: '#ffffff',
-                lineHeight: 1.6,
-                marginBottom: '-10px',
+                lineHeight: 1.3,
               }}
             >
               registral
@@ -182,13 +181,12 @@ export default function SelectModulePage() {
             </div>
             <div
               style={{
-                fontFamily: 'var(--font-display)',
+                fontFamily: 'var(--font-body)',
                 fontSize: '42px',
                 fontWeight: 600,
                 letterSpacing: '-0.02em',
                 color: '#ffffff',
-                lineHeight: 1.6,
-                marginBottom: '-10px',
+                lineHeight: 1.3,
               }}
             >
               judicial
