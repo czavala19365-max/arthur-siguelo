@@ -1,5 +1,6 @@
 import { createTitulo } from '@/lib/supabase'
 import { scrapeTitulo } from '@/lib/sunarp-scraper'
+import { resolveOficinaCode } from '@/lib/scraper'
 
 export async function POST(request: Request) {
   try {
@@ -19,11 +20,21 @@ export async function POST(request: Request) {
       whatsapp_cliente: whatsapp_cliente ? '***' : '(vacío)',
     }))
 
+    // Convertir nombre de oficina ("LIMA") al código numérico ("0101") que espera el scraper
+    const oficinaCodigo = resolveOficinaCode(oficina_registral)
+    console.log('[agregar-desde-chat] Código de oficina resuelto:', oficinaCodigo, '(para:', oficina_registral, ')')
+    if (!oficinaCodigo) {
+      return Response.json({
+        success: false,
+        error: `Oficina registral no reconocida: "${oficina_registral}". Usa el nombre exacto (ej: LIMA, AREQUIPA, CUSCO).`,
+      }, { status: 400 })
+    }
+
     // Consulta el estado actual en SUNARP
     const scrape = await scrapeTitulo(
       numero_titulo,
       String(anio_titulo),
-      oficina_registral,
+      oficinaCodigo,
     )
 
     console.log('[agregar-desde-chat] Scrape result:', {
