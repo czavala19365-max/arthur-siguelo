@@ -28,13 +28,13 @@ export default function SigueloPage() {
           </div>
           <h1 style={{
             fontFamily: 'var(--font-body)',
-            fontSize: 'clamp(32px, 4vw, 48px)',
+            fontSize: 'clamp(28px, 4vw, 44px)',
             color: 'var(--ink)',
             fontWeight: 600,
             lineHeight: 1.1,
             margin: 0,
           }}>
-            Títulos Registrales
+            Títulos Registrales Activos
           </h1>
         </div>
         <Suspense fallback={null}>

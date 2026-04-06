@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { createTitulo, getTituloById, actualizarEstadoTitulo, registrarCambioEstado, getUltimoEstado, eliminarTitulo, getHistorialByTituloId } from '@/lib/supabase'
+import { createTitulo, getTituloById, actualizarEstadoTitulo, registrarCambioEstado, getUltimoEstado, eliminarTitulo, getHistorialByTituloId, archivarTitulo, eliminarTituloLogico, restaurarTitulo } from '@/lib/supabase'
 import { consultarTitulo, descargarEsquela, descargarAsiento } from '@/lib/scraper'
 import { enviarConfirmacionAgregado } from '@/lib/alertas'
 import type { TituloFormState, HistorialEstado } from '@/types'
@@ -243,5 +243,39 @@ export async function getHistorialAction(id: string): Promise<HistorialEstado[]>
     return await getHistorialByTituloId(id)
   } catch {
     return []
+  }
+}
+
+export async function archivarTituloAction(id: string): Promise<{ error?: string }> {
+  try {
+    await archivarTitulo(id)
+    revalidatePath('/dashboard/siguelo')
+    revalidatePath('/dashboard/siguelo/archivados')
+    return {}
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error al archivar.' }
+  }
+}
+
+export async function eliminarTituloLogicoAction(id: string): Promise<{ error?: string }> {
+  try {
+    await eliminarTituloLogico(id)
+    revalidatePath('/dashboard/siguelo')
+    revalidatePath('/dashboard/siguelo/eliminados')
+    return {}
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error al eliminar.' }
+  }
+}
+
+export async function restaurarTituloAction(id: string): Promise<{ error?: string }> {
+  try {
+    await restaurarTitulo(id)
+    revalidatePath('/dashboard/siguelo')
+    revalidatePath('/dashboard/siguelo/archivados')
+    revalidatePath('/dashboard/siguelo/eliminados')
+    return {}
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error al restaurar.' }
   }
 }

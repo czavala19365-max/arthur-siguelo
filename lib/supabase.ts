@@ -10,10 +10,57 @@ export async function getTitulos(): Promise<Titulo[]> {
   const { data, error } = await supabase
     .from('titulos')
     .select('*')
+    .eq('estado_gestion', 'activo')
     .order('created_at', { ascending: false })
 
   if (error) throw new Error(error.message)
   return data ?? []
+}
+
+export async function getTitulosArchivados(): Promise<Titulo[]> {
+  const { data, error } = await supabase
+    .from('titulos')
+    .select('*')
+    .eq('estado_gestion', 'archivado')
+    .order('created_at', { ascending: false })
+
+  if (error) throw new Error(error.message)
+  return data ?? []
+}
+
+export async function getTitulosEliminados(): Promise<Titulo[]> {
+  const { data, error } = await supabase
+    .from('titulos')
+    .select('*')
+    .eq('estado_gestion', 'eliminado')
+    .order('created_at', { ascending: false })
+
+  if (error) throw new Error(error.message)
+  return data ?? []
+}
+
+export async function archivarTitulo(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('titulos')
+    .update({ estado_gestion: 'archivado' })
+    .eq('id', id)
+  if (error) throw new Error(error.message)
+}
+
+export async function eliminarTituloLogico(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('titulos')
+    .update({ estado_gestion: 'eliminado' })
+    .eq('id', id)
+  if (error) throw new Error(error.message)
+}
+
+export async function restaurarTitulo(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('titulos')
+    .update({ estado_gestion: 'activo' })
+    .eq('id', id)
+  if (error) throw new Error(error.message)
 }
 
 export async function createTitulo(
