@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-import type { Titulo, HistorialEstado } from '@/types'
+import type { Titulo, HistorialEstado, PagoSunarp } from '@/types'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -75,11 +75,25 @@ export async function createTitulo(
   return data.id as string
 }
 
+export type ExtraSunarpData = {
+  fecha_presentacion?: string | null
+  fecha_vencimiento?: string | null
+  lugar_presentacion?: string | null
+  nombre_presentante?: string | null
+  tipo_registro?: string | null
+  monto_devolucion?: string | null
+  indi_prorroga?: string | null
+  indi_suspension?: string | null
+  pagos?: PagoSunarp[] | null
+  actos?: string[] | null
+}
+
 export async function actualizarEstadoTitulo(
   id: string,
   nuevoEstado: string,
   areaRegistral?: string | null,
-  numeroPartida?: string | null
+  numeroPartida?: string | null,
+  extra?: ExtraSunarpData
 ): Promise<void> {
   const updates: Record<string, unknown> = {
     ultimo_estado: nuevoEstado,
@@ -87,6 +101,19 @@ export async function actualizarEstadoTitulo(
   }
   if (areaRegistral !== undefined) updates.area_registral = areaRegistral
   if (numeroPartida !== undefined) updates.numero_partida = numeroPartida
+
+  if (extra) {
+    if (extra.fecha_presentacion !== undefined) updates.fecha_presentacion = extra.fecha_presentacion
+    if (extra.fecha_vencimiento  !== undefined) updates.fecha_vencimiento  = extra.fecha_vencimiento
+    if (extra.lugar_presentacion !== undefined) updates.lugar_presentacion = extra.lugar_presentacion
+    if (extra.nombre_presentante !== undefined) updates.nombre_presentante = extra.nombre_presentante
+    if (extra.tipo_registro      !== undefined) updates.tipo_registro      = extra.tipo_registro
+    if (extra.monto_devolucion   !== undefined) updates.monto_devolucion   = extra.monto_devolucion
+    if (extra.indi_prorroga      !== undefined) updates.indi_prorroga      = extra.indi_prorroga
+    if (extra.indi_suspension    !== undefined) updates.indi_suspension    = extra.indi_suspension
+    if (extra.pagos              !== undefined) updates.pagos              = extra.pagos
+    if (extra.actos              !== undefined) updates.actos              = extra.actos
+  }
 
   const { error } = await supabase
     .from('titulos')

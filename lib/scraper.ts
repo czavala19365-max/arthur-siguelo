@@ -2,6 +2,7 @@ import chromium from '@sparticuz/chromium-min'
 import puppeteer from 'puppeteer-core'
 import { Solver } from '@2captcha/captcha-solver'
 import CryptoJS from 'crypto-js'
+import type { PagoSunarp, DetalleCronologiaEntry } from '@/types'
 
 const SIGUELO_URL  = 'https://siguelo.sunarp.gob.pe/siguelo/'
 const CONSULTA_API = 'https://api-gateway.sunarp.gob.pe:9443/sunarp/siguelo/siguelo-tracking/tracking/api/consultaTitulo'
@@ -99,6 +100,16 @@ export type ScraperResult = {
   numeroPartida: string | null
   consultadoEn: string
   rawResponse: unknown
+  fechaHoraPresentacion: string | null
+  fechaVencimiento: string | null
+  lugarPresentacion: string | null
+  nombrePresentante: string | null
+  tipoRegistro: string | null
+  montoDevo: string | null
+  indiPror: string | null
+  indiSusp: string | null
+  lstPagos: PagoSunarp[] | null
+  lstActos: string[] | null
 }
 
 /**
@@ -267,6 +278,18 @@ export async function consultarTitulo(params: ScraperParams): Promise<ScraperRes
     tituloEntry?.partidaMatriz ??
     null
 
+  // Extraer actos registrales únicos de todos los lstTitulo entries
+  const lstActos: string[] | null = (() => {
+    if (!lstTitulo) return null
+    const set = new Set<string>()
+    for (const t of lstTitulo as TituloEntry[]) {
+      if (t.actoRegistral && String(t.actoRegistral).trim()) {
+        set.add(String(t.actoRegistral).trim())
+      }
+    }
+    return set.size > 0 ? [...set] : null
+  })()
+
   return {
     estado,
     detalle,
@@ -274,6 +297,16 @@ export async function consultarTitulo(params: ScraperParams): Promise<ScraperRes
     numeroPartida,
     consultadoEn: new Date().toISOString(),
     rawResponse: data,
+    fechaHoraPresentacion: (tituloEntry?.fechaHoraPresentacion as string) ?? null,
+    fechaVencimiento:      (tituloEntry?.fechaVencimiento      as string) ?? null,
+    lugarPresentacion:     (tituloEntry?.lugarPresentacion     as string) ?? null,
+    nombrePresentante:     (tituloEntry?.nombrePresentante     as string) ?? null,
+    tipoRegistro:          (tituloEntry?.tipoRegistro          as string) ?? null,
+    montoDevo:             (tituloEntry?.montoDevo             as string) ?? null,
+    indiPror:              (tituloEntry?.indiPror              as string) ?? null,
+    indiSusp:              (tituloEntry?.indiSusp              as string) ?? null,
+    lstPagos:  (data.lstPagos  as PagoSunarp[]  | undefined) ?? null,
+    lstActos,
   }
 }
 
@@ -459,4 +492,78 @@ export function resolveOficinaCode(nombre: string): string | null {
   const entry = OFICINAS[nombre.toUpperCase().trim()]
   if (!entry) return null
   return entry.zona + entry.oficina
+}
+
+/**
+ * Devuelve { zona, oficina } separados para un nombre de oficina registral.
+ * Utilizado por los endpoints de ReporteST y detalleTitulo.
+ */
+export function getOficinaCodes(nombre: string): { zona: string; oficina: string } | null {
+  return OFICINAS[nombre.toUpperCase().trim()] ?? null
+}
+
+// ── detalleTitulo (cronología de movimientos) ─────────────────────────────────
+const DETALLE_TITULO_API = 'https://api-gateway.sunarp.gob.pe:9443/sunarp/siguelo/siguelo-tracking/tracking/api/detalleTitulo'
+
+/**
+ * Obtiene el detalle de seguimiento (cronología) de un título.
+ * NOTA: SUNARP requiere un token de sesión. Si se llama con token: null
+ * el servidor puede rechazar la solicitud. El error se propaga al caller.
+ */
+export async function detalleTituloSunarp(params: {
+  oficina_registral: string
+  anio_titulo: number
+  numero_titulo: string
+  tipo_registro?: string | null
+}): Promise<DetalleCronologiaEntry[]> {
+  const key = params.oficina_registral.toUpperCase().trim()
+  const oficina = OFICINAS[key]
+  if (!oficina) throw new Error(`Oficina no reconocida: "${params.oficina_registral}"`)
+
+  const numeroTitulo = params.numero_titulo.padStart(8, '0')
+
+  const innerPayload = {
+    codigoZona:    oficina.zona,
+    codigoOficina: oficina.oficina,
+    anioTitulo:    String(params.anio_titulo),
+    numeroTitulo,
+    tipoRegistro:  params.tipo_registro ?? '',
+    ip:            '0.0.0.0',
+    userApp:       'sigue+',
+    userCrea:      'sigue+',
+    status:        'A',
+    token:         null,
+  }
+
+  const response = await fetch(DETALLE_TITULO_API, {
+    method: 'POST',
+    headers: {
+      'Content-Type':    'application/json',
+      'X-IBM-Client-Id': IBM_CLIENT_ID,
+      Origin:            'https://siguelo.sunarp.gob.pe',
+      Referer:           SIGUELO_URL,
+    },
+    body: JSON.stringify({ dmFsdWU: encrypt(JSON.stringify(innerPayload)) }),
+  })
+
+  if (!response.ok) throw new Error(`API detalleTitulo respondió HTTP ${response.status}`)
+
+  const encryptedResponse = await response.json() as Record<string, string>
+  const validFlag = decrypt(encryptedResponse.dglwbw ?? '')
+
+  if (validFlag !== '2') {
+    let errorData: Record<string, unknown> = {}
+    try { errorData = JSON.parse(decrypt(encryptedResponse.cmVzcG9uc2U ?? '')) } catch { /* ignorar */ }
+    throw new Error(
+      `detalleTitulo rechazado: ${(errorData.descripcionRespuesta as string) ?? validFlag ?? 'respuesta inválida'}`
+    )
+  }
+
+  const data = JSON.parse(decrypt(encryptedResponse.cmVzcG9uc2U)) as Record<string, unknown>
+
+  if (data.codigoRespuesta !== '0000') {
+    throw new Error(`Error SIGUELO ${data.codigoRespuesta}: ${data.descripcionRespuesta}`)
+  }
+
+  return (data.lstDetalleTitulo as DetalleCronologiaEntry[]) ?? []
 }
