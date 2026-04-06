@@ -15,10 +15,25 @@ export const ESTADO_STYLES: Record<string, { bg: string; text: string }> = {
 export const ESTADOS_CON_ESQUELA = new Set(['OBSERVADO', 'LIQUIDADO', 'TACHADO', 'INSCRITO'])
 
 export const LABEL_ESQUELA: Record<string, { singular: string; plural: string }> = {
-  'OBSERVADO': { singular: 'Observación',  plural: 'Observaciones' },
-  'LIQUIDADO': { singular: 'Liquidación',  plural: 'Liquidaciones' },
-  'TACHADO':   { singular: 'Tacha',        plural: 'Tachas'        },
-  'INSCRITO':  { singular: 'Inscripción',  plural: 'Inscripciones' },
+  'OBSERVADO': { singular: 'Esquela de Observación',  plural: 'Esquelas de Observación' },
+  'LIQUIDADO': { singular: 'Esquela de Liquidación',  plural: 'Esquelas de Liquidación' },
+  'TACHADO':   { singular: 'Esquela de Tacha',        plural: 'Esquelas de Tacha'        },
+  'INSCRITO':  { singular: 'Anotación de Inscripción', plural: 'Anotaciones de Inscripción' },
+}
+
+export const ESTADO_PLURAL: Record<string, string> = {
+  'EN CALIFICACIÓN': 'EN CALIFICACIÓN',
+  'OBSERVADO':       'OBSERVADOS',
+  'REINGRESADO':     'REINGRESADOS',
+  'APELADO':         'APELADOS',
+  'LIQUIDADO':       'LIQUIDADOS',
+  'PRORROGADO':      'PRORROGADOS',
+  'DISTRIBUIDO':     'DISTRIBUIDOS',
+  'INSCRITO':        'INSCRITOS',
+  'TACHADO':         'TACHADOS',
+  'PRESENTADO':      'PRESENTADOS',
+  'EN PROCESO':      'EN PROCESO',
+  'OTROS':           'OTROS',
 }
 
 export const STATE_ORDER = [

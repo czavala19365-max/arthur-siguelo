@@ -95,7 +95,7 @@ export default function TituloForm() {
   return (
     <div style={{ background: 'var(--paper)', border: '1px solid var(--line)', borderRadius: '6px', padding: '32px', position: 'relative' }}>
 
-      <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '20px', fontWeight: 600, color: 'var(--ink)', marginBottom: '28px', fontStyle: 'italic' }}>
+      <h2 style={{ fontFamily: 'var(--font-body)', fontSize: '22px', fontWeight: 600, color: 'var(--ink)', marginBottom: '28px', lineHeight: 1.3 }}>
         Agregar título registral
       </h2>
 
