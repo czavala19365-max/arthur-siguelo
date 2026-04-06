@@ -70,7 +70,7 @@ export default function TitulosClientView({ titulos }: { titulos: Titulo[] }) {
           <div style={{
             marginTop: '8px',
             fontFamily: 'var(--font-mono)',
-            fontSize: '10px',
+            fontSize: '12px',
             textTransform: 'uppercase',
             letterSpacing: '0.1em',
             color: 'var(--muted)',

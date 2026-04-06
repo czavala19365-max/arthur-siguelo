@@ -28,7 +28,7 @@ type Result = {
 const labelStyle: React.CSSProperties = {
   display: 'block',
   fontFamily: 'var(--font-mono)',
-  fontSize: '10px',
+  fontSize: '13px',
   textTransform: 'uppercase',
   letterSpacing: '0.1em',
   color: 'var(--muted)',
@@ -462,7 +462,7 @@ export default function TituloForm() {
                 style={{
                   flex: 1,
                   fontFamily: 'var(--font-mono)',
-                  fontSize: '11px',
+                  fontSize: '13px',
                   textTransform: 'uppercase',
                   letterSpacing: '0.08em',
                   background: 'transparent',
@@ -483,7 +483,7 @@ export default function TituloForm() {
                 style={{
                   flex: 1,
                   fontFamily: 'var(--font-mono)',
-                  fontSize: '11px',
+                  fontSize: '13px',
                   textTransform: 'uppercase',
                   letterSpacing: '0.08em',
                   background: 'var(--ink)',

@@ -21,14 +21,14 @@ function Field({ label, value }: { label: string; value: string | null | undefin
   return (
     <div>
       <div style={{
-        fontFamily: 'var(--font-mono)', fontSize: '9px',
+        fontFamily: 'var(--font-mono)', fontSize: '11px',
         textTransform: 'uppercase', letterSpacing: '0.12em',
         color: 'var(--muted)', marginBottom: '4px',
       }}>
         {label}
       </div>
       <div style={{
-        fontFamily: 'var(--font-body)', fontSize: '13px',
+        fontFamily: 'var(--font-body)', fontSize: '14px',
         color: 'var(--ink)', lineHeight: 1.45, wordBreak: 'break-word',
       }}>
         {value}
@@ -40,7 +40,7 @@ function Field({ label, value }: { label: string; value: string | null | undefin
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <div style={{
-      fontFamily: 'var(--font-mono)', fontSize: '9px',
+      fontFamily: 'var(--font-mono)', fontSize: '11px',
       textTransform: 'uppercase', letterSpacing: '0.14em',
       color: 'var(--accent)', marginBottom: '14px',
       paddingBottom: '8px',
@@ -122,7 +122,7 @@ export default function TituloDetailModal({
     : null
 
   const tabBtn = (id: TabId): React.CSSProperties => ({
-    fontFamily: 'var(--font-mono)', fontSize: '10px',
+    fontFamily: 'var(--font-mono)', fontSize: '13px',
     textTransform: 'uppercase', letterSpacing: '0.1em',
     padding: '11px 18px', border: 'none',
     borderBottom: activeTab === id ? '2px solid var(--accent)' : '2px solid transparent',
@@ -392,7 +392,7 @@ export default function TituloDetailModal({
                     <thead>
                       <tr style={{
                         background: 'var(--surface)',
-                        fontFamily: 'var(--font-mono)', fontSize: '9px',
+                        fontFamily: 'var(--font-mono)', fontSize: '11px',
                         textTransform: 'uppercase', letterSpacing: '0.12em',
                         color: 'var(--muted)',
                       }}>
@@ -525,7 +525,7 @@ export default function TituloDetailModal({
                     <thead>
                       <tr style={{
                         background: 'var(--surface)',
-                        fontFamily: 'var(--font-mono)', fontSize: '9px',
+                        fontFamily: 'var(--font-mono)', fontSize: '11px',
                         textTransform: 'uppercase', letterSpacing: '0.12em',
                         color: 'var(--muted)',
                       }}>
