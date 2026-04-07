@@ -847,6 +847,7 @@ async function _scrapeCEJ(numeroExpediente: string, maxRetries: number): Promise
         }
 
         // Try CapSolver first (with 30s timeout), fall back to 2captcha
+        console.log('[CEJ] Using captcha solver:', process.env.CAPSOLVER_API_KEY ? 'CapSolver' : '2captcha')
         let captchaToken: string | null = await Promise.race([
           solveHCaptchaWithCapSolver(sitekey, page.url()),
           new Promise<null>((_, reject) => setTimeout(() => reject(new Error('CapSolver timeout 30s')), 30000)),
