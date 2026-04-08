@@ -26,7 +26,7 @@ export async function POST(
       return Response.json({ error: 'Caso no encontrado' }, { status: 404 })
     }
 
-    const result = await scrapeCEJ(caso.numero_expediente)
+    const result = await scrapeCEJ(caso.numero_expediente, caso.partes ?? '')
 
     if (result.portalDown) {
       return Response.json({
@@ -43,7 +43,19 @@ export async function POST(
     const existing = getMovimientosByCaso(casoId)
     const existingKeys = new Set(existing.map(m => movementKey(m)))
 
-    const nuevos = result.movimientos.filter(m => !existingKeys.has(movementKey(m)))
+    const movimientos = result.actuaciones.map(a => ({
+      fecha: a.fecha,
+      acto: a.acto,
+      folio: a.folio,
+      sumilla: a.sumilla,
+    }))
+    const ultimoMovimiento =
+      movimientos.length > 0
+        ? [...movimientos].sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())[0]
+        : null
+    const etapaProcesal = result.etapa || result.estadoProceso || ''
+
+    const nuevos = movimientos.filter(m => !existingKeys.has(movementKey(m)))
     const enriched = []
 
     for (const mov of nuevos) {
@@ -66,11 +78,11 @@ export async function POST(
       enriched.push({ ...mov, urgencia: cls.urgencia, sugerencia: cls.sugerencia })
     }
 
-    const last = result.ultimoMovimiento
+    const last = ultimoMovimiento
     updateCaso(casoId, {
       ultimo_movimiento: last?.sumilla || last?.acto || null,
       ultimo_movimiento_fecha: last?.fecha || null,
-      etapa_procesal: result.etapaProcesal || null,
+      etapa_procesal: etapaProcesal || null,
       juez: result.juez || null,
       estado_hash: result.hash || null,
       last_checked: result.scrapedAt,
