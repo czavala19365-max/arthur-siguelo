@@ -35,7 +35,7 @@ export async function POST(request: Request) {
     // Await CEJ scraping (blocks until done or timeout)
     let scrapeResult: Awaited<ReturnType<typeof scrapeCEJ>> | null = null
     try {
-      scrapeResult = await scrapeCEJ(caso.numero_expediente)
+      scrapeResult = await scrapeCEJ(caso.numero_expediente, caso.partes ?? '')
     } catch (err) {
       console.error('[API] Initial CEJ poll error:', err)
     }

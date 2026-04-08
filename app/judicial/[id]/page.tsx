@@ -2,6 +2,7 @@
 
 import { use, useEffect, useMemo, useState, useCallback } from 'react';
 import Link from 'next/link';
+import CalendarButtons from '@/components/CalendarButtons';
 import { formatPartesDisplay } from '@/lib/format-partes-judicial';
 
 type Tab = 'resumen' | 'movimientos' | 'documentos' | 'agenda' | 'arthur';
@@ -45,19 +46,6 @@ function colorUrgencia(u: string) {
 
 function daysUntil(dateStr: string): number {
   return Math.ceil((new Date(dateStr).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-}
-
-function googleLink(title: string, date: string, details: string) {
-  const d = new Date(date);
-  const end = new Date(d.getTime() + 60 * 60 * 1000);
-  const fmt = (v: Date) => v.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
-  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&dates=${fmt(d)}/${fmt(end)}&details=${encodeURIComponent(details)}`;
-}
-
-function outlookLink(title: string, date: string, details: string) {
-  const d = new Date(date);
-  const end = new Date(d.getTime() + 60 * 60 * 1000);
-  return `https://outlook.live.com/calendar/0/deeplink/compose?subject=${encodeURIComponent(title)}&startdt=${encodeURIComponent(d.toISOString())}&enddt=${encodeURIComponent(end.toISOString())}&body=${encodeURIComponent(details)}&path=/calendar/action/compose`;
 }
 
 export default function JudicialCaseDetail({ params }: { params: Promise<{ id: string }> }) {
@@ -231,10 +219,11 @@ export default function JudicialCaseDetail({ params }: { params: Promise<{ id: s
                   <div style={{ fontFamily: 'var(--font-body)', fontWeight: 600 }}>{a.descripcion}</div>
                   <div style={{ fontFamily: 'var(--font-body)', fontSize: '13px', color: 'var(--muted)' }}>{a.fecha} · {a.tipo || 'evento'}</div>
                 </div>
-                <div style={{ display: 'flex', gap: '6px' }}>
-                  <button onClick={() => window.open(googleLink(`${a.descripcion} — ${caso.alias || caso.numero_expediente}`, a.fecha, caso.numero_expediente), '_blank')} style={{ border: '1px solid var(--line-strong)', background: 'transparent', padding: '6px 9px', fontFamily: 'var(--font-mono)', fontSize: '9px', textTransform: 'uppercase', cursor: 'pointer' }}>Google Calendar</button>
-                  <button onClick={() => window.open(outlookLink(`${a.descripcion} — ${caso.alias || caso.numero_expediente}`, a.fecha, caso.numero_expediente), '_blank')} style={{ border: '1px solid var(--line-strong)', background: 'transparent', padding: '6px 9px', fontFamily: 'var(--font-mono)', fontSize: '9px', textTransform: 'uppercase', cursor: 'pointer' }}>Outlook</button>
-                </div>
+                <CalendarButtons
+                  title={caso.alias || caso.numero_expediente}
+                  date={a.fecha}
+                  description={a.descripcion || 'Proceso judicial - arthur.ia'}
+                />
               </div>
             );
           })}
