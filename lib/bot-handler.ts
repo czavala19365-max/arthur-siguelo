@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import getDb from './db';
-import { consultarTituloSUNARP } from './sunarp-scraper';
+import { consultarTituloSUNARP, OFICINAS_ESTATICAS } from './sunarp-scraper';
 import { scrapeCEJ } from './cej-scraper';
 import { chatWithProvider, type ChatMsg } from './llm-providers';
 
@@ -13,6 +13,38 @@ Responde en español, de forma directa y concisa (máximo 200 palabras).
 Cita la base legal relevante (artículo, norma, directiva) cuando aplique.
 Sugiere siempre el siguiente paso práctico.
 Al final incluye: "⚠ Esta información es orientativa. Consulta con un abogado colegiado antes de actuar."`;
+
+// ── Oficina resolver ─────────────────────────────────────────────────────────
+// The SUNARP API requires a 4-digit numeric code (codigoZona + codigoOficina,
+// e.g. "0101" for Lima Sede Central). Users may type city names like "LIMA" or
+// "AREQUIPA". This function maps common names to their codes using the static
+// oficinas table exported from sunarp-scraper.ts.
+
+function resolveOficina(input: string): string {
+  const trimmed = input.trim();
+
+  // Already a numeric code (1–4 digits)
+  if (/^\d{1,4}$/.test(trimmed)) {
+    return trimmed.padStart(4, '0');
+  }
+
+  const upper = trimmed.toUpperCase();
+
+  // Exact match against nombre
+  const exact = OFICINAS_ESTATICAS.find(
+    (o) => o.nombreOficina.toUpperCase() === upper
+  );
+  if (exact) return exact.codigoZona + exact.codigoOficina;
+
+  // Partial match: nombre includes user input (e.g. "LIMA" matches "Lima - Sede Central")
+  const partial = OFICINAS_ESTATICAS.find((o) =>
+    o.nombreOficina.toUpperCase().includes(upper)
+  );
+  if (partial) return partial.codigoZona + partial.codigoOficina;
+
+  // Return as-is — scraper will log the failure with actual params
+  return upper;
+}
 
 // ── Interfaces ───────────────────────────────────────────────────────────────
 
@@ -242,8 +274,12 @@ async function consultarTituloYResponder(
   oficina: string
 ): Promise<BotResponse> {
   try {
+    // Resolve user-typed office name (e.g. "LIMA") to the 4-digit code the API requires.
+    const oficinaCodigo = resolveOficina(oficina);
+    console.log('[bot] consultarTituloSUNARP →', { numero, anio, oficina_raw: oficina, oficina_codigo: oficinaCodigo });
+
     // consultarTituloSUNARP(oficina, anio, numero) — parameter order matches sunarp-scraper.ts
-    const result = await consultarTituloSUNARP(oficina, anio, numero);
+    const result = await consultarTituloSUNARP(oficinaCodigo, anio, numero);
 
     if (result.portalDown) {
       return {
@@ -253,7 +289,7 @@ async function consultarTituloYResponder(
     }
 
     let txt = `📋 *Título ${numero}/${anio}*\n`;
-    txt += `Oficina: ${oficina}\n`;
+    txt += `Oficina: ${oficinaCodigo}${oficinaCodigo !== oficina.toUpperCase() ? ` (${oficina})` : ''}\n`;
     txt += `Estado: *${result.estado}*\n`;
     if (result.detalle) txt += `Detalle: ${result.detalle}\n`;
     if (result.areaRegistral) txt += `Área registral: ${result.areaRegistral}\n`;
