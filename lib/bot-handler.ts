@@ -1,8 +1,18 @@
 import Anthropic from '@anthropic-ai/sdk';
 import getDb from './db';
+import { consultarTituloSUNARP } from './sunarp-scraper';
+import { scrapeCEJ } from './cej-scraper';
+import { chatWithProvider, type ChatMsg } from './llm-providers';
 
 const anthropic = new Anthropic();
 const MODEL = 'claude-sonnet-4-20250514';
+
+// System prompt for legal Q&A — reuses same provider infrastructure as dashboard/chat
+const SUNARP_BOT_SYSTEM = `Eres Arthur, asistente legal peruano especializado en SUNARP y procesos judiciales.
+Responde en español, de forma directa y concisa (máximo 200 palabras).
+Cita la base legal relevante (artículo, norma, directiva) cuando aplique.
+Sugiere siempre el siguiente paso práctico.
+Al final incluye: "⚠ Esta información es orientativa. Consulta con un abogado colegiado antes de actuar."`;
 
 // ── Interfaces ───────────────────────────────────────────────────────────────
 
@@ -27,6 +37,7 @@ export type Intencion =
   | 'COPIA_LITERAL'
   | 'MIS_TITULOS'
   | 'MIS_CASOS'
+  | 'CONSULTA_LEGAL'
   | 'AYUDA'
   | 'SALUDO'
   | 'OTRO';
@@ -45,7 +56,7 @@ type EstadoSesion =
   | 'esperando_anio_titulo'
   | 'esperando_oficina_titulo'
   | 'esperando_expediente'
-  | 'esperando_distrito'
+  | 'esperando_distrito'   // legacy — redirects to esperando_expediente flow
   | 'esperando_parte'
   | 'esperando_numero_partida';
 
@@ -55,7 +66,6 @@ interface ContextoSesion {
   anio?: string;
   oficina?: string;
   expediente?: string;
-  distrito?: string;
   [key: string]: string | undefined;
 }
 
@@ -90,9 +100,10 @@ Intenciones posibles:
 - COPIA_LITERAL: quiere solicitar copia literal de partida registral
 - MIS_TITULOS: quiere ver sus títulos registrados en el sistema
 - MIS_CASOS: quiere ver sus casos judiciales registrados
-- AYUDA: pide ayuda o información sobre el servicio
+- CONSULTA_LEGAL: hace una pregunta legal sobre leyes, normativas, procesos, plazos o trámites (sin número de expediente ni título específico)
+- AYUDA: pide ayuda sobre cómo usar el asistente o qué puede hacer
 - SALUDO: saludo o presentación
-- OTRO: cualquier otro mensaje
+- OTRO: cualquier otro mensaje que no encaja en las anteriores
 
 Responde SOLO con JSON válido sin markdown ni explicaciones:
 {
@@ -135,18 +146,14 @@ export function getOrCreateUser(
 
   if (!user) {
     const result = db
-      .prepare(
-        `INSERT INTO bot_users (${field}, nombre) VALUES (?, ?)`
-      )
+      .prepare(`INSERT INTO bot_users (${field}, nombre) VALUES (?, ?)`)
       .run(userId, nombre);
     user = db
       .prepare('SELECT * FROM bot_users WHERE id = ?')
       .get(result.lastInsertRowid) as BotUser;
   } else if (nombre && !user.nombre) {
     db.prepare('UPDATE bot_users SET nombre = ? WHERE id = ?').run(nombre, user.id);
-    user = db
-      .prepare('SELECT * FROM bot_users WHERE id = ?')
-      .get(user.id) as BotUser;
+    user = db.prepare('SELECT * FROM bot_users WHERE id = ?').get(user.id) as BotUser;
   }
 
   return user!;
@@ -177,8 +184,7 @@ export function updateSession(
     ).run(estado, JSON.stringify(contexto), botUserId, plataforma);
   } else {
     db.prepare(
-      `INSERT INTO bot_sesiones (bot_user_id, plataforma, estado, contexto)
-       VALUES (?, ?, ?, ?)`
+      `INSERT INTO bot_sesiones (bot_user_id, plataforma, estado, contexto) VALUES (?, ?, ?, ?)`
     ).run(botUserId, plataforma, estado, JSON.stringify(contexto));
   }
 }
@@ -192,8 +198,7 @@ export function generarLinkPago(
   montoSoles: number
 ): string {
   const db = getDb();
-  const appUrl =
-    process.env.NEXT_PUBLIC_APP_URL || 'https://arthur-siguelo.vercel.app';
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://arthur-siguelo.vercel.app';
 
   const result = db
     .prepare(
@@ -205,10 +210,7 @@ export function generarLinkPago(
   const pagoId = result.lastInsertRowid as number;
   const paymentLink = `${appUrl}/pagar/${pagoId}?ref=${encodeURIComponent(referencia)}&monto=${montoSoles}`;
 
-  db.prepare('UPDATE bot_pagos SET payment_link = ? WHERE id = ?').run(
-    paymentLink,
-    pagoId
-  );
+  db.prepare('UPDATE bot_pagos SET payment_link = ? WHERE id = ?').run(paymentLink, pagoId);
 
   return paymentLink;
 }
@@ -223,21 +225,110 @@ function logMessage(
 ) {
   getDb()
     .prepare(
-      `INSERT INTO bot_mensajes (bot_user_id, plataforma, direccion, contenido)
-       VALUES (?, ?, ?, ?)`
+      `INSERT INTO bot_mensajes (bot_user_id, plataforma, direccion, contenido) VALUES (?, ?, ?, ?)`
     )
     .run(botUserId, plataforma, direccion, contenido);
 }
 
-// ── 6. Session flow handlers ─────────────────────────────────────────────────
+// ── 6. Scraper helpers ────────────────────────────────────────────────────────
 
-function manejarTitulo(
+/**
+ * Calls the existing SUNARP scraper (lib/sunarp-scraper.ts) and formats the result.
+ * Reuses the same consultarTituloSUNARP used by the web dashboard.
+ */
+async function consultarTituloYResponder(
+  numero: string,
+  anio: string,
+  oficina: string
+): Promise<BotResponse> {
+  try {
+    // consultarTituloSUNARP(oficina, anio, numero) — parameter order matches sunarp-scraper.ts
+    const result = await consultarTituloSUNARP(oficina, anio, numero);
+
+    if (result.portalDown) {
+      return {
+        texto: 'No pude conectarme a SUNARP en este momento. Reintentaré pronto.',
+        esError: true,
+      };
+    }
+
+    let txt = `📋 *Título ${numero}/${anio}*\n`;
+    txt += `Oficina: ${oficina}\n`;
+    txt += `Estado: *${result.estado}*\n`;
+    if (result.detalle) txt += `Detalle: ${result.detalle}\n`;
+    if (result.areaRegistral) txt += `Área registral: ${result.areaRegistral}\n`;
+    if (result.numeroPartida) txt += `N° de partida: ${result.numeroPartida}\n`;
+    txt += `\n_Consultado: ${new Date(result.scrapedAt).toLocaleString('es-PE')}_`;
+
+    return { texto: txt };
+  } catch (err) {
+    console.error('[bot] consultarTituloSUNARP error:', err instanceof Error ? err.message : err);
+    return {
+      texto: 'No pude conectarme a SUNARP en este momento. Reintentaré pronto.',
+      esError: true,
+    };
+  }
+}
+
+/**
+ * Calls the existing CEJ scraper (lib/cej-scraper.ts) and formats the result.
+ * Reuses the same scrapeCEJ used by the judicial dashboard.
+ */
+async function consultarExpedienteYResponder(expediente: string): Promise<BotResponse> {
+  try {
+    const result = await scrapeCEJ(expediente);
+
+    if (result.portalDown) {
+      const nota = result.error ? `\n_${result.error}_` : '';
+      return {
+        texto: `No pude conectarme al CEJ en este momento. Reintentaré pronto.${nota}`,
+        esError: true,
+      };
+    }
+
+    const ultimaActuacion = result.actuaciones[0] ?? null;
+
+    let txt = `⚖️ *Expediente ${expediente}*\n`;
+    if (result.organoJurisdiccional) txt += `Órgano: ${result.organoJurisdiccional}\n`;
+    if (result.distritoJudicial) txt += `Distrito: ${result.distritoJudicial}\n`;
+    if (result.proceso) txt += `Proceso: ${result.proceso}\n`;
+    if (result.etapa) txt += `Etapa: ${result.etapa}\n`;
+    if (result.estadoProceso) txt += `Estado: *${result.estadoProceso}*\n`;
+
+    if (ultimaActuacion) {
+      txt += `\n*Última actuación:*\n`;
+      txt += `• ${ultimaActuacion.fecha} — ${ultimaActuacion.acto}\n`;
+      if (ultimaActuacion.sumilla) txt += `  ${ultimaActuacion.sumilla}\n`;
+    }
+
+    if (result.totalActuaciones > 0) {
+      txt += `\n_Total actuaciones: ${result.totalActuaciones}_`;
+    }
+    txt += `\n_Consultado: ${new Date(result.scrapedAt).toLocaleString('es-PE')}_`;
+
+    return { texto: txt };
+  } catch (err) {
+    console.error('[bot] scrapeCEJ error:', err instanceof Error ? err.message : err);
+    return {
+      texto: 'No pude conectarme al CEJ en este momento. Reintentaré pronto.',
+      esError: true,
+    };
+  }
+}
+
+// ── 7. Session flow handlers ─────────────────────────────────────────────────
+
+/**
+ * Handles multi-step SUNARP title lookup.
+ * Step order: numero_titulo → anio → oficina → calls consultarTituloSUNARP.
+ */
+async function manejarTitulo(
   estado: EstadoSesion,
   contexto: ContextoSesion,
   texto: string,
   botUser: BotUser,
   plataforma: 'telegram' | 'whatsapp'
-): BotResponse {
+): Promise<BotResponse> {
   const trimmed = texto.trim();
 
   if (estado === 'esperando_numero_titulo') {
@@ -254,112 +345,46 @@ function manejarTitulo(
       anio: trimmed,
     });
     return {
-      texto: '¿En qué *oficina registral*? (ej: LIMA, AREQUIPA, CUSCO)',
+      texto: '¿En qué *oficina registral*? (ej: LIMA, AREQUIPA, CUSCO o código como 0101)',
     };
   }
 
   if (estado === 'esperando_oficina_titulo') {
     const nuevoCont = { ...contexto, oficina: trimmed.toUpperCase() };
     updateSession(botUser.id, plataforma, 'idle', {});
-
-    const db = getDb();
-    const titulo = db
-      .prepare(
-        `SELECT * FROM tramites
-         WHERE numero_titulo = ? AND anio = ? AND oficina_registral = ?
-         AND deleted_at IS NULL LIMIT 1`
-      )
-      .get(
-        nuevoCont.numero_titulo,
-        nuevoCont.anio,
-        nuevoCont.oficina
-      ) as {
-        estado_actual: string;
-        alias: string;
-        observacion_texto: string | null;
-        last_checked: string | null;
-      } | undefined;
-
-    if (titulo) {
-      let msg = `📋 *Título ${nuevoCont.numero_titulo ?? ''}/${nuevoCont.anio ?? ''}*\n`;
-      msg += `Oficina: ${nuevoCont.oficina ?? ''}\n`;
-      msg += `Estado: *${titulo.estado_actual}*\n`;
-      if (titulo.observacion_texto) msg += `Observación: ${titulo.observacion_texto}\n`;
-      if (titulo.last_checked) msg += `\n_Última consulta: ${titulo.last_checked}_`;
-      return { texto: msg };
-    }
-
-    return {
-      texto: `No encontré el título *${nuevoCont.numero_titulo ?? ''}/${nuevoCont.anio ?? ''}* en la oficina *${nuevoCont.oficina ?? ''}*.\n\nIntenta de nuevo o escribe *ayuda*.`,
-    };
+    return await consultarTituloYResponder(
+      nuevoCont.numero_titulo ?? '',
+      nuevoCont.anio ?? '',
+      nuevoCont.oficina ?? ''
+    );
   }
 
   return { texto: 'Por favor escribe el número de título.' };
 }
 
-function manejarExpediente(
+/**
+ * Handles CEJ expediente lookup.
+ * Calls scrapeCEJ directly — no need to ask for district.
+ */
+async function manejarExpediente(
   estado: EstadoSesion,
   contexto: ContextoSesion,
   texto: string,
   botUser: BotUser,
   plataforma: 'telegram' | 'whatsapp'
-): BotResponse {
+): Promise<BotResponse> {
   const trimmed = texto.trim();
 
   if (estado === 'esperando_expediente') {
-    updateSession(botUser.id, plataforma, 'esperando_distrito', {
-      ...contexto,
-      expediente: trimmed,
-    });
-    return {
-      texto: '¿En qué *distrito judicial*? (ej: LIMA, LIMA NORTE, CALLAO)',
-    };
+    updateSession(botUser.id, plataforma, 'idle', {});
+    return await consultarExpedienteYResponder(trimmed);
   }
 
+  // Legacy state: the user had already provided the expediente number in a prior step.
   if (estado === 'esperando_distrito') {
-    const nuevoCont = { ...contexto, distrito: trimmed.toUpperCase() };
     updateSession(botUser.id, plataforma, 'idle', {});
-
-    const db = getDb();
-    const caso = db
-      .prepare(
-        `SELECT * FROM casos
-         WHERE numero_expediente = ? AND distrito_judicial = ?
-         AND activo = 1 LIMIT 1`
-      )
-      .get(
-        nuevoCont.expediente,
-        nuevoCont.distrito
-      ) as {
-        estado: string;
-        tipo_proceso: string | null;
-        ultimo_movimiento: string | null;
-        ultimo_movimiento_fecha: string | null;
-        proximo_evento: string | null;
-        proximo_evento_fecha: string | null;
-      } | undefined;
-
-    if (caso) {
-      let msg = `⚖️ *Expediente ${nuevoCont.expediente ?? ''}*\n`;
-      msg += `Distrito: ${nuevoCont.distrito ?? ''}\n`;
-      if (caso.tipo_proceso) msg += `Proceso: ${caso.tipo_proceso}\n`;
-      msg += `Estado: *${caso.estado}*\n`;
-      if (caso.ultimo_movimiento) {
-        msg += `Último movimiento: ${caso.ultimo_movimiento}`;
-        if (caso.ultimo_movimiento_fecha)
-          msg += ` _(${caso.ultimo_movimiento_fecha})_`;
-        msg += '\n';
-      }
-      if (caso.proximo_evento) {
-        msg += `Próximo evento: ${caso.proximo_evento}`;
-        if (caso.proximo_evento_fecha) msg += ` - ${caso.proximo_evento_fecha}`;
-      }
-      return { texto: msg };
-    }
-
-    return {
-      texto: `No encontré el expediente *${nuevoCont.expediente ?? ''}* en el distrito *${nuevoCont.distrito ?? ''}*.\n\nEscribe *mis casos* o *ayuda*.`,
-    };
+    const expediente = contexto.expediente || trimmed;
+    return await consultarExpedienteYResponder(expediente);
   }
 
   return { texto: 'Por favor escribe el número de expediente.' };
@@ -379,13 +404,11 @@ function manejarParte(
     updateSession(botUser.id, plataforma, 'idle', {});
     const link = generarLinkPago(botUser.id, 'VIGENCIA_PODER', trimmed, 35.0);
     return {
-      texto: `🔍 *Vigencia de Poder Notarial*\n\nNombre: *${trimmed}*\n\nCosto del servicio: *S/ 35.00*\n\nRealiza el pago aquí:\n${link}\n\nUna vez confirmado, procesaremos tu consulta.`,
+      texto: `🔍 *Vigencia de Poder Notarial*\n\nNombre: *${trimmed}*\n\nCosto del servicio: *S/ 35.00*\n\nRealiza el pago aquí:\n${link}\n\nUna vez confirmado el pago, procesaremos tu consulta.`,
     };
   }
 
-  return {
-    texto: 'Por favor escribe el nombre completo de la persona o empresa.',
-  };
+  return { texto: 'Por favor escribe el nombre completo de la persona o empresa.' };
 }
 
 function manejarPartida(
@@ -405,14 +428,14 @@ function manejarPartida(
     const monto = esCopia ? 45.0 : 30.0;
     const link = generarLinkPago(botUser.id, tipo, trimmed, monto);
     return {
-      texto: `📄 *${label}*\n\nPartida N°: *${trimmed}*\n\nCosto: *S/ ${monto.toFixed(2)}*\n\nRealiza el pago aquí:\n${link}\n\nUna vez confirmado, procesaremos tu solicitud.`,
+      texto: `📄 *${label}*\n\nPartida N°: *${trimmed}*\n\nCosto: *S/ ${monto.toFixed(2)}*\n\nRealiza el pago aquí:\n${link}\n\nUna vez confirmado el pago, procesaremos tu solicitud.`,
     };
   }
 
   return { texto: 'Por favor escribe el número de partida registral.' };
 }
 
-// ── 7. procesarMensaje ───────────────────────────────────────────────────────
+// ── 8. procesarMensaje ───────────────────────────────────────────────────────
 
 export async function procesarMensaje(msg: BotMessage): Promise<BotResponse> {
   const botUser = getOrCreateUser(msg.plataforma, msg.userId, msg.nombre);
@@ -424,19 +447,20 @@ export async function procesarMensaje(msg: BotMessage): Promise<BotResponse> {
     ? (JSON.parse(sesion.contexto) as ContextoSesion)
     : {};
 
-  // Ongoing flow dispatch
+  // ── Ongoing session flows ────────────────────────────────────────────────
+
   if (
     estado === 'esperando_numero_titulo' ||
     estado === 'esperando_anio_titulo' ||
     estado === 'esperando_oficina_titulo'
   ) {
-    const resp = manejarTitulo(estado, contexto, msg.texto, botUser, msg.plataforma);
+    const resp = await manejarTitulo(estado, contexto, msg.texto, botUser, msg.plataforma);
     logMessage(botUser.id, msg.plataforma, 'out', resp.texto);
     return resp;
   }
 
   if (estado === 'esperando_expediente' || estado === 'esperando_distrito') {
-    const resp = manejarExpediente(estado, contexto, msg.texto, botUser, msg.plataforma);
+    const resp = await manejarExpediente(estado, contexto, msg.texto, botUser, msg.plataforma);
     logMessage(botUser.id, msg.plataforma, 'out', resp.texto);
     return resp;
   }
@@ -453,72 +477,74 @@ export async function procesarMensaje(msg: BotMessage): Promise<BotResponse> {
     return resp;
   }
 
-  // Detect intent
+  // ── Intent detection ─────────────────────────────────────────────────────
+
   const { intencion, parametros } = await detectarIntencion(msg.texto);
   let respuesta: BotResponse;
 
   switch (intencion) {
+    // ── Greeting ───────────────────────────────────────────────────────────
     case 'SALUDO': {
       const nombre = botUser.nombre ? `, ${botUser.nombre}` : '';
       respuesta = {
-        texto: `👋 ¡Hola${nombre}! Soy *Arthur*, tu asistente legal.\n\n¿En qué puedo ayudarte?`,
+        texto: `👋 ¡Hola${nombre}! Soy *Arthur*, tu asistente legal.\n\n¿En qué puedo ayudarte hoy?`,
         opciones: [
           'Mis Títulos',
           'Mis Casos',
           'Seguimiento Título',
           'Estado Expediente',
+          'Consulta Legal',
           'Ayuda',
         ],
       };
       break;
     }
 
+    // ── Help menu ──────────────────────────────────────────────────────────
     case 'AYUDA': {
       respuesta = {
-        texto: `🤖 *Arthur - Asistente Legal*\n\nPuedo ayudarte con:\n\n• 📋 *Seguimiento de títulos* SUNARP\n• ⚖️ *Estado de expedientes* judiciales\n• 🔍 *Vigencia de poderes* notariales\n• 📄 *Publicidad registral* y copias literales\n• 📁 *Mis títulos* y *mis casos* registrados\n\n¿Qué deseas consultar?`,
+        texto: `🤖 *Arthur - Asistente Legal*\n\nPuedo ayudarte con:\n\n• 📋 *Seguimiento de títulos* SUNARP\n• ⚖️ *Estado de expedientes* judiciales\n• 🔍 *Vigencia de poderes* notariales\n• 📄 *Publicidad registral* y copias literales\n• 💬 *Consultas legales* sobre derecho registral/procesal\n• 📁 *Mis títulos* y casos registrados\n\n¿Qué deseas consultar?`,
         opciones: [
           'Seguimiento Título',
           'Estado Expediente',
           'Vigencia Poder',
           'Publicidad Registral',
           'Copia Literal',
-          'Mis Títulos',
+          'Consulta Legal',
         ],
       };
       break;
     }
 
+    // ── TASK 1 & 4 — SUNARP title tracking (reuses consultarTituloSUNARP) ──
     case 'SEGUIMIENTO_TITULO': {
-      if (parametros.numero_titulo && parametros.anio && parametros.oficina) {
-        const db = getDb();
-        const titulo = db
-          .prepare(
-            `SELECT * FROM tramites
-             WHERE numero_titulo = ? AND anio = ? AND oficina_registral = ?
-             AND deleted_at IS NULL LIMIT 1`
-          )
-          .get(
-            parametros.numero_titulo,
-            parametros.anio,
-            parametros.oficina.toUpperCase()
-          ) as {
-            estado_actual: string;
-            observacion_texto: string | null;
-            last_checked: string | null;
-          } | undefined;
+      const { numero_titulo, anio, oficina } = parametros;
 
-        if (titulo) {
-          let txt = `📋 *Título ${parametros.numero_titulo}/${parametros.anio}*\n`;
-          txt += `Oficina: ${parametros.oficina.toUpperCase()}\n`;
-          txt += `Estado: *${titulo.estado_actual}*\n`;
-          if (titulo.observacion_texto)
-            txt += `Observación: ${titulo.observacion_texto}\n`;
-          if (titulo.last_checked)
-            txt += `_Última consulta: ${titulo.last_checked}_`;
-          respuesta = { texto: txt };
-          break;
-        }
+      if (numero_titulo && anio && oficina) {
+        // All params present — call scraper immediately, no questions asked
+        respuesta = await consultarTituloYResponder(numero_titulo, anio, oficina.toUpperCase());
+        break;
       }
+
+      if (numero_titulo && anio) {
+        // Have numero + anio — ask only for oficina
+        updateSession(botUser.id, msg.plataforma, 'esperando_oficina_titulo', { numero_titulo, anio });
+        respuesta = {
+          texto: `📋 ¿En qué *oficina registral* es el título *${numero_titulo}/${anio}*?\n(ej: LIMA, AREQUIPA, CUSCO o código como 0101)`,
+        };
+        break;
+      }
+
+      if (numero_titulo) {
+        // Have numero — ask only for anio
+        updateSession(botUser.id, msg.plataforma, 'esperando_anio_titulo', { numero_titulo });
+        respuesta = {
+          texto: `📋 ¿En qué *año* es el título *${numero_titulo}*? (ej: 2024)`,
+        };
+        break;
+      }
+
+      // Nothing known — start full flow
       updateSession(botUser.id, msg.plataforma, 'esperando_numero_titulo', {});
       respuesta = {
         texto: '📋 *Seguimiento de Título SUNARP*\n\n¿Cuál es el *número de título*? (ej: 12345)',
@@ -526,41 +552,25 @@ export async function procesarMensaje(msg: BotMessage): Promise<BotResponse> {
       break;
     }
 
+    // ── TASK 3 & 4 — CEJ expediente (reuses scrapeCEJ) ────────────────────
     case 'ESTADO_EXPEDIENTE': {
-      if (parametros.expediente && parametros.distrito) {
-        const db = getDb();
-        const caso = db
-          .prepare(
-            `SELECT * FROM casos
-             WHERE numero_expediente = ? AND distrito_judicial = ?
-             AND activo = 1 LIMIT 1`
-          )
-          .get(
-            parametros.expediente,
-            parametros.distrito.toUpperCase()
-          ) as {
-            estado: string;
-            tipo_proceso: string | null;
-            ultimo_movimiento: string | null;
-          } | undefined;
+      const { expediente } = parametros;
 
-        if (caso) {
-          let txt = `⚖️ *Expediente ${parametros.expediente}*\n`;
-          if (caso.tipo_proceso) txt += `Proceso: ${caso.tipo_proceso}\n`;
-          txt += `Estado: *${caso.estado}*\n`;
-          if (caso.ultimo_movimiento)
-            txt += `Último movimiento: ${caso.ultimo_movimiento}`;
-          respuesta = { texto: txt };
-          break;
-        }
+      if (expediente) {
+        // Expediente number present — call scraper immediately
+        respuesta = await consultarExpedienteYResponder(expediente);
+        break;
       }
+
+      // Ask for expediente
       updateSession(botUser.id, msg.plataforma, 'esperando_expediente', {});
       respuesta = {
-        texto: '⚖️ *Estado de Expediente Judicial*\n\n¿Cuál es el *número de expediente*?',
+        texto: '⚖️ *Estado de Expediente Judicial*\n\n¿Cuál es el *número de expediente*?\n(ej: 00123-2024-0-1801-JR-CI-01)',
       };
       break;
     }
 
+    // ── Vigencia de poder ──────────────────────────────────────────────────
     case 'VIGENCIA_PODER': {
       updateSession(botUser.id, msg.plataforma, 'esperando_parte', {});
       respuesta = {
@@ -569,6 +579,7 @@ export async function procesarMensaje(msg: BotMessage): Promise<BotResponse> {
       break;
     }
 
+    // ── Publicidad registral ───────────────────────────────────────────────
     case 'PUBLICIDAD_REGISTRAL': {
       updateSession(botUser.id, msg.plataforma, 'esperando_numero_partida', {
         flujo: 'PUBLICIDAD_REGISTRAL',
@@ -579,6 +590,7 @@ export async function procesarMensaje(msg: BotMessage): Promise<BotResponse> {
       break;
     }
 
+    // ── Copia literal ──────────────────────────────────────────────────────
     case 'COPIA_LITERAL': {
       updateSession(botUser.id, msg.plataforma, 'esperando_numero_partida', {
         flujo: 'COPIA_LITERAL',
@@ -589,10 +601,26 @@ export async function procesarMensaje(msg: BotMessage): Promise<BotResponse> {
       break;
     }
 
+    // ── TASK 1 — Legal consultation (reuses chatWithProvider from llm-providers) ──
+    case 'CONSULTA_LEGAL': {
+      try {
+        const msgs: ChatMsg[] = [{ role: 'user', content: msg.texto }];
+        const result = await chatWithProvider(msgs, 'anthropic', SUNARP_BOT_SYSTEM);
+        respuesta = { texto: result.text };
+      } catch (err) {
+        console.error('[bot] chatWithProvider error:', err instanceof Error ? err.message : err);
+        respuesta = {
+          texto: 'No pude procesar tu consulta legal en este momento. Intenta nuevamente.',
+          esError: true,
+        };
+      }
+      break;
+    }
+
+    // ── Mis títulos ────────────────────────────────────────────────────────
     case 'MIS_TITULOS': {
       const db = getDb();
-      const lookup =
-        msg.plataforma === 'whatsapp' ? msg.userId : (botUser.nombre ?? '');
+      const lookup = msg.plataforma === 'whatsapp' ? msg.userId : '';
       const tramites = db
         .prepare(
           `SELECT * FROM tramites
@@ -625,10 +653,10 @@ export async function procesarMensaje(msg: BotMessage): Promise<BotResponse> {
       break;
     }
 
+    // ── Mis casos ──────────────────────────────────────────────────────────
     case 'MIS_CASOS': {
       const db = getDb();
-      const lookup =
-        msg.plataforma === 'whatsapp' ? msg.userId : (botUser.nombre ?? '');
+      const lookup = msg.plataforma === 'whatsapp' ? msg.userId : '';
       const casos = db
         .prepare(
           `SELECT * FROM casos
@@ -655,8 +683,7 @@ export async function procesarMensaje(msg: BotMessage): Promise<BotResponse> {
           if (c.tipo_proceso) txt += `   ${c.tipo_proceso} — `;
           txt += `${c.estado}\n`;
           if (c.alias) txt += `   ${c.alias}\n`;
-          if (c.ultimo_movimiento)
-            txt += `   Último: ${c.ultimo_movimiento}\n`;
+          if (c.ultimo_movimiento) txt += `   Último: ${c.ultimo_movimiento}\n`;
           txt += '\n';
         });
         respuesta = { texto: txt };
@@ -664,10 +691,11 @@ export async function procesarMensaje(msg: BotMessage): Promise<BotResponse> {
       break;
     }
 
+    // ── Fallback ───────────────────────────────────────────────────────────
     default: {
       respuesta = {
-        texto: 'No entendí tu consulta. Puedo ayudarte con:\n\n• *Seguimiento de títulos* SUNARP\n• *Estado de expedientes* judiciales\n• *Vigencia de poderes*\n• *Publicidad registral*\n\n¿Qué deseas consultar?',
-        opciones: ['Mis Títulos', 'Mis Casos', 'Seguimiento Título', 'Ayuda'],
+        texto: 'No entendí tu consulta. Puedo ayudarte con:\n\n• *Seguimiento de títulos* SUNARP\n• *Estado de expedientes* judiciales\n• *Vigencia de poderes*\n• *Publicidad registral*\n• *Consultas legales*\n\n¿Qué deseas?',
+        opciones: ['Mis Títulos', 'Mis Casos', 'Seguimiento Título', 'Consulta Legal', 'Ayuda'],
       };
     }
   }
