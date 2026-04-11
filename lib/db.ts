@@ -186,6 +186,45 @@ function initSchema(db: Database.Database) {
       estado_nuevo TEXT NOT NULL,
       detectado_en TEXT DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS bot_users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      telegram_id TEXT UNIQUE,
+      whatsapp_number TEXT UNIQUE,
+      nombre TEXT,
+      email TEXT,
+      verificado INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS bot_sesiones (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      bot_user_id INTEGER REFERENCES bot_users(id),
+      plataforma TEXT,
+      estado TEXT DEFAULT 'idle',
+      contexto TEXT DEFAULT '{}',
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS bot_pagos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      bot_user_id INTEGER,
+      tipo TEXT,
+      referencia TEXT,
+      monto_soles REAL,
+      estado TEXT DEFAULT 'pendiente',
+      payment_link TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS bot_mensajes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      bot_user_id INTEGER,
+      plataforma TEXT,
+      direccion TEXT,
+      contenido TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
   `);
 
   // Migrate: add archived_at/deleted_at columns if missing
