@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import getDb, { type TituloSunarp } from './db';
+import getDb, { type Tramite } from './db';
 import { consultarTituloSUNARP, OFICINAS_ESTATICAS } from './sunarp-scraper';
 import { scrapeCEJ } from './cej-scraper';
 import { chatWithProvider, type ChatMsg } from './llm-providers';
@@ -265,12 +265,14 @@ function logMessage(
 // ── 6. Scraper helpers ────────────────────────────────────────────────────────
 
 /**
- * Title lookup: checks titulos_sunarp (the table the web platform writes to) first,
- * then falls back to a live SUNARP scrape only if no local record exists.
+ * Title lookup: queries the `tramites` table first (same data the web dashboard shows),
+ * then falls back to a live SUNARP scrape only when no DB record exists.
  *
- * titulos_sunarp columns used here:
- *   numero_titulo, anio_titulo, oficina_registral, oficina_nombre,
- *   ultimo_estado, ultima_consulta, area_registral, numero_partida
+ * tramites columns used: numero_titulo, anio, oficina_registral, oficina_nombre,
+ *   estado_actual, observacion_texto, calificador, last_checked, deleted_at
+ *
+ * DB stores numbers zero-padded to varying lengths (e.g. "001234", "009012").
+ * We try multiple formats so the lookup succeeds regardless of how the user typed it.
  */
 async function consultarTituloYResponder(
   numero: string,
@@ -279,59 +281,58 @@ async function consultarTituloYResponder(
 ): Promise<BotResponse> {
   try {
     const oficinaCodigo = resolveOficina(oficina);
+    const digits = numero.trim().replace(/\D/g, '');
 
-    // DB may store the number with or without leading zeros — try both variants.
-    const numNorm = numero.trim().replace(/\D/g, '').padStart(8, '0');
-    const numRaw  = numero.trim();
+    // Build deduped list of number variants to try in a single IN() query.
+    // DB stores numbers in whatever format was originally entered (often 6-digit padded).
+    const variants = [...new Set([
+      numero.trim(),                                    // as-is from user
+      digits,                                           // digits only, no padding
+      digits.padStart(8, '0'),                          // 8-digit padded (02416207)
+      digits.padStart(6, '0'),                          // 6-digit padded (only differs when < 6 digits)
+      String(parseInt(digits || '0', 10)),              // no leading zeros (2416207)
+    ])].filter(Boolean);
 
     console.log('[bot] consultarTitulo →', {
-      numero, anio, oficina_raw: oficina, oficina_codigo: oficinaCodigo,
+      numero, anio, oficina_raw: oficina, oficina_codigo: oficinaCodigo, variants,
     });
 
-    // ── 1. Local DB lookup (titulos_sunarp — same table the web platform reads) ──
+    // ── 1. tramites DB lookup (fast path — mirrors what the web dashboard shows) ──
     const db = getDb();
+    const placeholders = variants.map(() => '?').join(', ');
 
-    // Primary: numero + anio_titulo + oficina_registral
-    let titulo = db.prepare(`
-      SELECT * FROM titulos_sunarp
-      WHERE (numero_titulo = ? OR numero_titulo = ?)
-        AND anio_titulo = ?
-        AND oficina_registral = ?
-      ORDER BY id DESC
+    const tramite = db.prepare(`
+      SELECT * FROM tramites
+      WHERE numero_titulo IN (${placeholders})
+        AND anio = ?
+        AND deleted_at IS NULL
+      ORDER BY last_checked DESC
       LIMIT 1
-    `).get(numRaw, numNorm, anio, oficinaCodigo) as TituloSunarp | undefined;
+    `).get(...variants, anio) as Tramite | undefined;
 
-    // Fallback: numero + anio_titulo only (user may have mistyped the office)
-    if (!titulo) {
-      titulo = db.prepare(`
-        SELECT * FROM titulos_sunarp
-        WHERE (numero_titulo = ? OR numero_titulo = ?)
-          AND anio_titulo = ?
-        ORDER BY id DESC
-        LIMIT 1
-      `).get(numRaw, numNorm, anio) as TituloSunarp | undefined;
-    }
+    if (tramite) {
+      console.log('[bot] DB hit — tramite id:', tramite.id,
+        'numero_titulo:', tramite.numero_titulo,
+        'anio:', tramite.anio,
+        'estado_actual:', tramite.estado_actual);
 
-    if (titulo) {
-      console.log('[bot] DB hit — titulo id:', titulo.id, 'estado:', titulo.ultimo_estado);
-
-      let txt = `📋 *Título ${titulo.numero_titulo}/${titulo.anio_titulo}*\n`;
-      txt += `Oficina: ${titulo.oficina_registral}`;
-      if (titulo.oficina_nombre) txt += ` — ${titulo.oficina_nombre}`;
+      let txt = `📋 *Título ${tramite.numero_titulo}/${tramite.anio}*\n`;
+      txt += `Oficina: ${tramite.oficina_registral}`;
+      if (tramite.oficina_nombre) txt += ` — ${tramite.oficina_nombre}`;
       txt += '\n';
-      txt += `Estado: *${titulo.ultimo_estado}*\n`;
-      if (titulo.area_registral) txt += `Área registral: ${titulo.area_registral}\n`;
-      if (titulo.numero_partida) txt += `N° de partida: ${titulo.numero_partida}\n`;
-      if (titulo.ultima_consulta) {
-        txt += `\n_Verificado: ${new Date(titulo.ultima_consulta).toLocaleString('es-PE')}_`;
+      txt += `Estado: *${tramite.estado_actual}*\n`;
+      if (tramite.observacion_texto) txt += `Detalle: ${tramite.observacion_texto}\n`;
+      if (tramite.calificador) txt += `Calificador: ${tramite.calificador}\n`;
+      if (tramite.last_checked) {
+        txt += `\n_Verificado: ${new Date(tramite.last_checked).toLocaleString('es-PE')}_`;
       }
 
       return { texto: txt };
     }
 
-    // ── 2. Not in DB — attempt live SUNARP scrape ─────────────────────────────
     console.log('[bot] No DB record found — attempting live SUNARP scrape');
 
+    // ── 2. Live scrape fallback ────────────────────────────────────────────────
     // consultarTituloSUNARP(oficina, anio, numero) — parameter order matches sunarp-scraper.ts
     const result = await consultarTituloSUNARP(oficinaCodigo, anio, numero);
 
