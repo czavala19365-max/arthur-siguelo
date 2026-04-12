@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import getDb from './db';
+import getDb, { type Tramite } from './db';
 import { consultarTituloSUNARP, OFICINAS_ESTATICAS } from './sunarp-scraper';
 import { scrapeCEJ } from './cej-scraper';
 import { chatWithProvider, type ChatMsg } from './llm-providers';
@@ -265,8 +265,11 @@ function logMessage(
 // ── 6. Scraper helpers ────────────────────────────────────────────────────────
 
 /**
- * Calls the existing SUNARP scraper (lib/sunarp-scraper.ts) and formats the result.
- * Reuses the same consultarTituloSUNARP used by the web dashboard.
+ * Title lookup: checks the local SQLite DB first (same data the web platform shows),
+ * then falls back to a live SUNARP scrape only if no local record exists.
+ *
+ * The web platform NEVER calls SUNARP on page load — it shows tramites.estado_actual
+ * from the DB. The bot mirrors that behaviour so the answer is always consistent.
  */
 async function consultarTituloYResponder(
   numero: string,
@@ -276,7 +279,61 @@ async function consultarTituloYResponder(
   try {
     // Resolve user-typed office name (e.g. "LIMA") to the 4-digit code the API requires.
     const oficinaCodigo = resolveOficina(oficina);
-    console.log('[bot] consultarTituloSUNARP →', { numero, anio, oficina_raw: oficina, oficina_codigo: oficinaCodigo });
+
+    // The DB stores numero_titulo as the user originally entered it (may or may not have
+    // leading zeros). Try both the raw input and the 8-digit padded variant.
+    const numNorm = numero.trim().replace(/\D/g, '').padStart(8, '0');
+    const numRaw  = numero.trim();
+
+    console.log('[bot] consultarTitulo →', {
+      numero, anio, oficina_raw: oficina, oficina_codigo: oficinaCodigo,
+    });
+
+    // ── 1. Local DB lookup (fast path — mirrors what the web dashboard shows) ──
+    const db = getDb();
+
+    // Primary: match numero + anio + resolved office code
+    let tramite = db.prepare(`
+      SELECT * FROM tramites
+      WHERE (numero_titulo = ? OR numero_titulo = ?)
+        AND anio = ?
+        AND oficina_registral = ?
+        AND deleted_at IS NULL
+      ORDER BY activo DESC, last_checked DESC
+      LIMIT 1
+    `).get(numRaw, numNorm, anio, oficinaCodigo) as Tramite | undefined;
+
+    // Fallback: match by numero + anio alone (user may have given a different office name)
+    if (!tramite) {
+      tramite = db.prepare(`
+        SELECT * FROM tramites
+        WHERE (numero_titulo = ? OR numero_titulo = ?)
+          AND anio = ?
+          AND deleted_at IS NULL
+        ORDER BY activo DESC, last_checked DESC
+        LIMIT 1
+      `).get(numRaw, numNorm, anio) as Tramite | undefined;
+    }
+
+    if (tramite) {
+      console.log('[bot] DB hit — tramite id:', tramite.id, 'estado:', tramite.estado_actual);
+
+      let txt = `📋 *Título ${tramite.numero_titulo}/${tramite.anio}*\n`;
+      txt += `Oficina: ${tramite.oficina_registral}`;
+      if (tramite.oficina_nombre) txt += ` — ${tramite.oficina_nombre}`;
+      txt += '\n';
+      txt += `Estado: *${tramite.estado_actual}*\n`;
+      if (tramite.observacion_texto) txt += `Detalle: ${tramite.observacion_texto}\n`;
+      if (tramite.calificador) txt += `Calificador: ${tramite.calificador}\n`;
+      if (tramite.last_checked) {
+        txt += `\n_Verificado: ${new Date(tramite.last_checked).toLocaleString('es-PE')}_`;
+      }
+
+      return { texto: txt };
+    }
+
+    // ── 2. Not in DB — attempt live SUNARP scrape ─────────────────────────────
+    console.log('[bot] No DB record found — attempting live SUNARP scrape');
 
     // consultarTituloSUNARP(oficina, anio, numero) — parameter order matches sunarp-scraper.ts
     const result = await consultarTituloSUNARP(oficinaCodigo, anio, numero);
@@ -289,7 +346,9 @@ async function consultarTituloYResponder(
     }
 
     let txt = `📋 *Título ${numero}/${anio}*\n`;
-    txt += `Oficina: ${oficinaCodigo}${oficinaCodigo !== oficina.toUpperCase() ? ` (${oficina})` : ''}\n`;
+    txt += `Oficina: ${oficinaCodigo}`;
+    if (oficinaCodigo !== oficina.toUpperCase()) txt += ` (${oficina})`;
+    txt += '\n';
     txt += `Estado: *${result.estado}*\n`;
     if (result.detalle) txt += `Detalle: ${result.detalle}\n`;
     if (result.areaRegistral) txt += `Área registral: ${result.areaRegistral}\n`;
