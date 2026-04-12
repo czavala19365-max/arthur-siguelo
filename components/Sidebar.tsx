@@ -149,6 +149,9 @@ export default function Sidebar({ observadosCount = 0 }: SidebarProps) {
         .arthur-main {
           margin-left: 260px;
         }
+        .arthur-sidebar-close-mobile {
+          display: none;
+        }
         @media (max-width: 767px) {
           .arthur-sidebar {
             transform: translateX(-260px);
@@ -168,43 +171,38 @@ export default function Sidebar({ observadosCount = 0 }: SidebarProps) {
           .arthur-main {
             margin-left: 0 !important;
           }
+          .arthur-sidebar-close-mobile {
+            display: flex;
+          }
         }
       `}</style>
 
-      {/* Hamburger button — mobile only */}
       <button
+        type="button"
         className="arthur-hamburger"
         onClick={() => setMobileOpen(v => !v)}
-        aria-label={mobileOpen ? 'Cerrar menú' : 'Abrir menú'}
+        aria-label="Abrir menú"
         style={{
           position: 'fixed',
-          top: '14px',
-          left: '14px',
+          top: 0,
+          left: 0,
           zIndex: 400,
-          width: '38px',
-          height: '38px',
-          backgroundColor: 'var(--sidebar-bg)',
-          border: '1px solid var(--sidebar-edge)',
-          borderRadius: '4px',
+          width: '44px',
+          height: '44px',
+          backgroundColor: '#0a0a0a',
+          border: '1px solid #2a2a2a',
+          borderRadius: 0,
           cursor: 'pointer',
           alignItems: 'center',
           justifyContent: 'center',
-          color: 'var(--sidebar-text)',
+          color: '#c9a84c',
           flexShrink: 0,
+          padding: 0,
         }}
       >
-        {mobileOpen ? (
-          <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" viewBox="0 0 24 24">
-            <path d="M18 6L6 18M6 6l12 12" />
-          </svg>
-        ) : (
-          <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" viewBox="0 0 24 24">
-            <path d="M3 6h18M3 12h18M3 18h18" />
-          </svg>
-        )}
+        <span style={{ fontSize: '20px', lineHeight: 1 }} aria-hidden>☰</span>
       </button>
 
-      {/* Overlay — mobile only, visible when open */}
       <div
         className={`arthur-overlay${mobileOpen ? ' is-open' : ''}`}
         onClick={() => setMobileOpen(false)}
@@ -212,11 +210,10 @@ export default function Sidebar({ observadosCount = 0 }: SidebarProps) {
           position: 'fixed',
           inset: 0,
           zIndex: 250,
-          background: 'rgba(0,0,0,0.55)',
+          background: 'rgba(0,0,0,0.6)',
         }}
       />
 
-      {/* Sidebar */}
       <aside
         className={`arthur-sidebar${mobileOpen ? ' is-open' : ''}`}
         style={{
@@ -236,7 +233,32 @@ export default function Sidebar({ observadosCount = 0 }: SidebarProps) {
           overflowY: 'auto',
         }}
       >
-        {/* Logo */}
+        <button
+          type="button"
+          className="arthur-sidebar-close-mobile"
+          onClick={() => setMobileOpen(false)}
+          aria-label="Cerrar menú"
+          style={{
+            position: 'absolute',
+            top: '20px',
+            right: '12px',
+            zIndex: 2,
+            width: '36px',
+            height: '36px',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'transparent',
+            border: 'none',
+            color: '#c9a84c',
+            fontSize: '24px',
+            lineHeight: 1,
+            cursor: 'pointer',
+            padding: 0,
+          }}
+        >
+          ×
+        </button>
+
         <div style={{ padding: '32px 28px 0' }}>
           <Link href="/select" style={{ textDecoration: 'none' }}>
             <div

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { formatPartesDisplay } from '@/lib/format-partes-judicial';
 
@@ -34,10 +34,13 @@ const DISTRITOS = [
   'Lambayeque', 'Ica', 'Áncash', 'Cajamarca', 'Loreto',
   'Puno', 'San Martín', 'Tacna', 'Ayacucho', 'Huánuco',
   'Moquegua', 'Tumbes', 'Ucayali', 'Amazonas', 'Apurímac',
-  'Huancavelica', 'Madre de Dios', 'Pasco', 'Pasca',
+  'Huancavelica', 'Madre de Dios', 'Pasco',
 ]
 
-const TIPOS = ['Civil', 'Laboral', 'Penal', 'Familia', 'Comercial', 'Constitucional', 'Contencioso Administrativo']
+const ESPECIALIDADES = [
+  'Civil', 'Laboral', 'Penal', 'Familia', 'Comercial',
+  'Constitucional', 'Contencioso Administrativo', 'Laboral Previsional',
+]
 
 function relativeTime(dateStr: string | null): string {
   if (!dateStr) return 'Nunca';
@@ -58,6 +61,41 @@ function daysUntil(dateStr: string | null): number | null {
   return Math.ceil((d.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 }
 
+/** Parse expediente date string for external calendar links (same calendar day, 09:00–10:00). */
+function parseEventDateForCalendar(raw: string): { ymd: string; ymdDash: string } | null {
+  const t = raw.trim();
+  const slash = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (slash) {
+    const d0 = parseInt(slash[1], 10);
+    const m0 = parseInt(slash[2], 10);
+    const y0 = parseInt(slash[3], 10);
+    const date = new Date(y0, m0 - 1, d0);
+    if (Number.isNaN(date.getTime())) return null;
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return { ymd: `${y}${m}${d}`, ymdDash: `${y}-${m}-${d}` };
+  }
+  const date = new Date(t);
+  if (Number.isNaN(date.getTime())) return null;
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return { ymd: `${y}${m}${d}`, ymdDash: `${y}-${m}-${d}` };
+}
+
+function calendarGoogleUrl(alias: string, ymd: string) {
+  const details = encodeURIComponent('Proceso judicial - arthur.ia');
+  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(alias)}&dates=${ymd}T090000/${ymd}T100000&details=${details}`;
+}
+
+function calendarOutlookUrl(alias: string, ymdDash: string) {
+  const body = encodeURIComponent('Proceso judicial - arthur.ia');
+  return `https://outlook.live.com/calendar/0/deeplink/compose?subject=${encodeURIComponent(alias)}&startdt=${encodeURIComponent(`${ymdDash}T09:00:00`)}&enddt=${encodeURIComponent(`${ymdDash}T10:00:00`)}&body=${body}`;
+}
+
+const CURRENT_YEAR = String(new Date().getFullYear());
+
 export default function JudicialDashboardPage() {
   const [casos, setCasos] = useState<Caso[]>([]);
   const [stats, setStats] = useState({ total: 0, activos: 0, conAlerta: 0, proximasAudiencias: 0 });
@@ -65,19 +103,31 @@ export default function JudicialDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [pollingId, setPollingId] = useState<number | null>(null);
+  const [calendarHoverId, setCalendarHoverId] = useState<number | null>(null);
 
+  // Tabbed form state
+  const [activeTab, setActiveTab] = useState<'codigo' | 'filtros'>('codigo');
+  const [expFields, setExpFields] = useState({ sec: '', ano: CURRENT_YEAR, dist: '', tipo: '', esp: '', juz: '' });
   const [form, setForm] = useState({
-    numero_expediente: '',
-    distrito_judicial: 'Lima',
-    tipo_proceso: 'Civil',
-    partes: '',
-    cliente: '',
+    parte: '',
+    filtro_distrito: 'Lima',
+    filtro_ano: CURRENT_YEAR,
+    filtro_numero: '',
+    filtro_especialidad: 'Civil',
     alias: '',
-    prioridad: 'baja' as 'alta' | 'media' | 'baja',
     whatsapp_number: '',
     email: '',
     polling_frequency_hours: 4,
   });
+  const [submitStatus, setSubmitStatus] = useState('');
+
+  // Refs for auto-advance in tab 1
+  const refSec = useRef<HTMLInputElement>(null);
+  const refAno = useRef<HTMLInputElement>(null);
+  const refDist = useRef<HTMLInputElement>(null);
+  const refTipo = useRef<HTMLInputElement>(null);
+  const refEsp = useRef<HTMLInputElement>(null);
+  const refJuz = useRef<HTMLInputElement>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -110,27 +160,91 @@ export default function JudicialDashboardPage() {
     return casos.find(c => (details[c.id]?.movimientos || []).some(m => m.es_nuevo === 1 && m.urgencia === 'alta'));
   }, [casos, details]);
 
-  async function createCaso() {
-    const res = await fetch('/api/casos', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
-    });
-    if (!res.ok) return;
-    setDrawerOpen(false);
+  function resetForm() {
+    setActiveTab('codigo');
+    setExpFields({ sec: '', ano: CURRENT_YEAR, dist: '', tipo: '', esp: '', juz: '' });
     setForm({
-      numero_expediente: '',
-      distrito_judicial: 'Lima',
-      tipo_proceso: 'Civil',
-      partes: '',
-      cliente: '',
+      parte: '',
+      filtro_distrito: 'Lima',
+      filtro_ano: CURRENT_YEAR,
+      filtro_numero: '',
+      filtro_especialidad: 'Civil',
       alias: '',
-      prioridad: 'baja',
       whatsapp_number: '',
       email: '',
       polling_frequency_hours: 4,
     });
-    await loadData();
+    setSubmitStatus('');
+  }
+
+  function advanceField(
+    value: string,
+    maxLen: number,
+    nextRef: React.RefObject<HTMLInputElement | null> | null
+  ) {
+    if (value.length === maxLen && nextRef?.current) {
+      nextRef.current.focus();
+    }
+  }
+
+  async function createCaso() {
+    let numero_expediente: string;
+    if (activeTab === 'codigo') {
+      numero_expediente = `${expFields.sec}-${expFields.ano}-0-${expFields.dist}-${expFields.tipo}-${expFields.esp}-${expFields.juz}`;
+    } else {
+      numero_expediente = form.filtro_numero;
+    }
+
+    setSubmitStatus('Guardando proceso...');
+
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    timers.push(setTimeout(() => setSubmitStatus('Conectando con el CEJ...'), 1500));
+    timers.push(setTimeout(() => setSubmitStatus('Resolviendo captcha...'), 10000));
+    timers.push(setTimeout(() => setSubmitStatus('Analizando movimientos con IA...'), 35000));
+
+    const payload: Record<string, unknown> = {
+      numero_expediente,
+      parte: form.parte,
+      alias: form.alias || null,
+      searchType: activeTab,
+      whatsapp_number: form.whatsapp_number || null,
+      email: form.email || null,
+      polling_frequency_hours: form.polling_frequency_hours,
+    };
+    if (activeTab === 'filtros') {
+      payload.distrito_judicial = form.filtro_distrito;
+      payload.tipo_proceso = form.filtro_especialidad;
+    }
+
+    const res = await fetch('/api/casos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    timers.forEach(clearTimeout);
+
+    if (!res.ok) {
+      setSubmitStatus('Error al guardar el proceso.');
+      return;
+    }
+
+    const data = await res.json() as Record<string, unknown>;
+
+    if (data.portalDown) {
+      setSubmitStatus('⚠️ Proceso guardado. CEJ no disponible — revisión automática pendiente.');
+    } else if (data.captchaFailed) {
+      setSubmitStatus('⚠️ Proceso guardado. Captcha no resuelto — reintentará en próxima revisión.');
+    } else {
+      const count = data.movimientosCount as number | undefined;
+      setSubmitStatus(`✅ Proceso agregado con ${count ?? 0} movimientos detectados`);
+    }
+
+    setTimeout(() => {
+      setDrawerOpen(false);
+      resetForm();
+      void loadData();
+    }, 2500);
   }
 
   async function pollNow(id: number) {
@@ -153,6 +267,9 @@ export default function JudicialDashboardPage() {
   if (loading) {
     return <div style={{ padding: '48px 64px', fontFamily: 'var(--font-mono)', fontSize: '11px', textTransform: 'uppercase', color: 'var(--muted)' }}>Cargando procesos...</div>;
   }
+
+  const labelStyle: React.CSSProperties = { fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase' as const, letterSpacing: '0.1em', color: 'var(--muted)' };
+  const inputStyle: React.CSSProperties = { width: '100%', border: '1px solid var(--line-strong)', padding: '12px 14px', marginTop: 6, marginBottom: 16, fontFamily: 'var(--font-body)', fontSize: '13px', background: 'var(--paper)', color: 'var(--ink)', boxSizing: 'border-box' };
 
   return (
     <div style={{ padding: '48px 64px', background: 'var(--paper)', minHeight: '100vh' }}>
@@ -207,6 +324,8 @@ export default function JudicialDashboardPage() {
           const hasAny = det.movimientos.length > 0;
           const nextAud = [...det.audiencias].sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime())[0];
           const dleft = daysUntil(nextAud?.fecha || null);
+          const calParts = nextAud ? parseEventDateForCalendar(nextAud.fecha) : null;
+          const eventAlias = c.alias || c.cliente || 'Sin alias';
 
           return (
             <div key={c.id} onClick={() => (window.location.href = `/judicial/${c.id}`)} style={{ display: 'grid', gridTemplateColumns: '90px 120px 1.4fr 220px 150px 170px 110px 140px', padding: '0 24px', minHeight: '66px', alignItems: 'center', borderBottom: '1px solid var(--line-faint)', gap: '12px', cursor: 'pointer' }}>
@@ -228,22 +347,28 @@ export default function JudicialDashboardPage() {
               </div>
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--muted)' }}>{c.numero_expediente}</div>
               <div style={{ fontFamily: 'var(--font-body)', fontSize: '13px', color: 'var(--muted)' }}>{relativeTime(c.ultimo_movimiento_fecha)}</div>
-              <div style={{ fontFamily: 'var(--font-body)', fontSize: '12px', color: dleft === null ? 'var(--muted)' : dleft < 3 ? '#991b1b' : dleft < 7 ? '#92400e' : 'var(--ink)' }}>
+              <div
+                style={{ position: 'relative', fontFamily: 'var(--font-body)', fontSize: '12px', color: dleft === null ? 'var(--muted)' : dleft < 3 ? '#991b1b' : dleft < 7 ? '#92400e' : 'var(--ink)' }}
+                onMouseEnter={() => { if (calParts) setCalendarHoverId(c.id); }}
+                onMouseLeave={() => setCalendarHoverId(null)}
+                onClick={e => e.stopPropagation()}
+              >
                 {nextAud ? `${nextAud.fecha} (${dleft}d)` : 'Sin evento'}
+                {calendarHoverId === c.id && calParts && (
+                  <div style={{ position: 'absolute', left: 0, top: '100%', marginTop: 6, zIndex: 50, background: '#141414', border: '1px solid #2a2a2a', minWidth: 200, opacity: 1, transition: 'opacity 0.2s ease', boxShadow: '0 8px 24px rgba(0,0,0,0.35)' }}>
+                    <a href={calendarGoogleUrl(eventAlias, calParts.ymd)} target="_blank" rel="noopener noreferrer" style={{ display: 'block', padding: '8px 16px', fontFamily: 'DM Mono, monospace', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#c9a84c', textDecoration: 'none' }} onMouseOver={e => { e.currentTarget.style.background = '#1c1c1c'; }} onMouseOut={e => { e.currentTarget.style.background = 'transparent'; }}>
+                      Google Calendar
+                    </a>
+                    <a href={calendarOutlookUrl(eventAlias, calParts.ymdDash)} target="_blank" rel="noopener noreferrer" style={{ display: 'block', padding: '8px 16px', fontFamily: 'DM Mono, monospace', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#c9a84c', textDecoration: 'none', borderTop: '1px solid #2a2a2a' }} onMouseOver={e => { e.currentTarget.style.background = '#1c1c1c'; }} onMouseOut={e => { e.currentTarget.style.background = 'transparent'; }}>
+                      Outlook
+                    </a>
+                  </div>
+                )}
               </div>
               <div>
                 <button
                   onClick={(e) => { e.stopPropagation(); void togglePriority(c); }}
-                  style={{
-                    border: '1px solid var(--line-strong)',
-                    background: c.prioridad === 'alta' ? 'rgba(153,27,27,0.08)' : c.prioridad === 'media' ? 'rgba(217,119,6,0.09)' : 'rgba(107,101,96,0.08)',
-                    color: c.prioridad === 'alta' ? '#991b1b' : c.prioridad === 'media' ? '#92400e' : '#6b6560',
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: '10px',
-                    textTransform: 'uppercase',
-                    padding: '5px 8px',
-                    cursor: 'pointer'
-                  }}
+                  style={{ border: '1px solid var(--line-strong)', background: c.prioridad === 'alta' ? 'rgba(153,27,27,0.08)' : c.prioridad === 'media' ? 'rgba(217,119,6,0.09)' : 'rgba(107,101,96,0.08)', color: c.prioridad === 'alta' ? '#991b1b' : c.prioridad === 'media' ? '#92400e' : '#6b6560', fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', padding: '5px 8px', cursor: 'pointer' }}
                 >
                   {c.prioridad}
                 </button>
@@ -265,51 +390,223 @@ export default function JudicialDashboardPage() {
       {drawerOpen && (
         <>
           <div onClick={() => setDrawerOpen(false)} style={{ position: 'fixed', inset: 0, background: 'var(--overlay-scrim)', zIndex: 200 }} />
-          <div className="animate-slideInRight" style={{ position: 'fixed', top: 0, right: 0, width: '480px', height: '100vh', background: 'var(--paper)', borderLeft: '1px solid var(--line-mid)', zIndex: 300, overflowY: 'auto', padding: '40px 36px' }}>
+          <div className="animate-slideInRight" style={{ position: 'fixed', top: 0, right: 0, width: '520px', height: '100vh', background: 'var(--paper)', borderLeft: '1px solid var(--line-mid)', zIndex: 300, overflowY: 'auto', padding: '40px 36px' }}>
             <button onClick={() => setDrawerOpen(false)} style={{ position: 'absolute', right: '20px', top: '16px', border: 'none', background: 'none', cursor: 'pointer', fontSize: '20px' }}>×</button>
             <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '28px', fontWeight: 400 }}>Nuevo proceso</h2>
             <div style={{ width: '60px', height: '2px', background: 'var(--accent)', marginTop: '12px', marginBottom: '24px' }} />
 
-            <label style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--muted)' }}>Número de expediente</label>
-            <input value={form.numero_expediente} onChange={e => setForm({ ...form, numero_expediente: e.target.value })} placeholder="Ej: 00847-2023-0-1801-JR-CI-12" style={{ width: '100%', border: '1px solid var(--line-strong)', padding: '12px 14px', marginTop: 6, marginBottom: 6 }} />
-            <p style={{ fontFamily: 'var(--font-body)', fontSize: '12px', color: 'var(--muted)', marginBottom: 16 }}>Formato: número-año-0-distJudicial-tipo-juzgado</p>
-
-            <label style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--muted)' }}>Distrito judicial</label>
-            <select value={form.distrito_judicial} onChange={e => setForm({ ...form, distrito_judicial: e.target.value })} style={{ width: '100%', border: '1px solid var(--line-strong)', padding: '12px 14px', marginTop: 6, marginBottom: 16 }}>
-              {DISTRITOS.map(d => <option key={d}>{d}</option>)}
-            </select>
-
-            <label style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--muted)' }}>Tipo de proceso</label>
-            <select value={form.tipo_proceso} onChange={e => setForm({ ...form, tipo_proceso: e.target.value })} style={{ width: '100%', border: '1px solid var(--line-strong)', padding: '12px 14px', marginTop: 6, marginBottom: 16 }}>
-              {TIPOS.map(t => <option key={t}>{t}</option>)}
-            </select>
-
-            <label style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--muted)' }}>Partes del proceso</label>
-            <textarea value={form.partes} onChange={e => setForm({ ...form, partes: e.target.value })} placeholder="Ej: García vs. Inmobiliaria Horizonte SAC" style={{ width: '100%', border: '1px solid var(--line-strong)', padding: '12px 14px', marginTop: 6, marginBottom: 16, minHeight: 70 }} />
-
-            <label style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--muted)' }}>Cliente</label>
-            <input value={form.cliente} onChange={e => setForm({ ...form, cliente: e.target.value })} style={{ width: '100%', border: '1px solid var(--line-strong)', padding: '12px 14px', marginTop: 6, marginBottom: 16 }} />
-
-            <label style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--muted)' }}>Alias del caso</label>
-            <input value={form.alias} onChange={e => setForm({ ...form, alias: e.target.value })} style={{ width: '100%', border: '1px solid var(--line-strong)', padding: '12px 14px', marginTop: 6, marginBottom: 16 }} />
-
-            <label style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--muted)' }}>Prioridad</label>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginTop: 8, marginBottom: 16 }}>
-              {(['alta', 'media', 'baja'] as const).map(p => (
-                <button key={p} onClick={() => setForm({ ...form, prioridad: p })} style={{ border: form.prioridad === p ? '2px solid var(--ink)' : '1px solid var(--line-strong)', background: 'var(--surface)', padding: '10px 8px', fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', cursor: 'pointer' }}>
-                  {p}
+            {/* Tabs */}
+            <div style={{ display: 'flex', borderBottom: '1px solid var(--line-strong)', marginBottom: '24px' }}>
+              {(['codigo', 'filtros'] as const).map(tab => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  style={{
+                    border: 'none',
+                    borderBottom: activeTab === tab ? '2px solid var(--ink)' : '2px solid transparent',
+                    background: 'none',
+                    padding: '10px 16px',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: '10px',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.1em',
+                    cursor: 'pointer',
+                    color: activeTab === tab ? 'var(--ink)' : 'var(--muted)',
+                    marginBottom: '-1px',
+                  }}
+                >
+                  {tab === 'codigo' ? 'Por Código de Expediente' : 'Por Filtros'}
                 </button>
               ))}
             </div>
 
-            <label style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--muted)' }}>WhatsApp</label>
-            <input value={form.whatsapp_number} onChange={e => setForm({ ...form, whatsapp_number: e.target.value })} placeholder="+51999000000" style={{ width: '100%', border: '1px solid var(--line-strong)', padding: '12px 14px', marginTop: 6, marginBottom: 16 }} />
+            {/* TAB 1: Por Código de Expediente */}
+            {activeTab === 'codigo' && (
+              <div>
+                <label style={labelStyle}>Código de Expediente</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: 8, marginBottom: 6, flexWrap: 'nowrap' }}>
+                  <input
+                    ref={refSec}
+                    maxLength={5}
+                    placeholder="00001"
+                    value={expFields.sec}
+                    onChange={e => {
+                      const v = e.target.value;
+                      setExpFields(p => ({ ...p, sec: v }));
+                      advanceField(v, 5, refAno);
+                    }}
+                    style={{ width: '60px', border: '1px solid var(--line-strong)', padding: '10px 8px', fontFamily: 'var(--font-mono)', fontSize: '12px', textAlign: 'center', background: 'var(--paper)', color: 'var(--ink)' }}
+                  />
+                  <span style={{ color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>-</span>
+                  <input
+                    ref={refAno}
+                    maxLength={4}
+                    placeholder={CURRENT_YEAR}
+                    value={expFields.ano}
+                    onChange={e => {
+                      const v = e.target.value;
+                      setExpFields(p => ({ ...p, ano: v }));
+                      advanceField(v, 4, refDist);
+                    }}
+                    style={{ width: '52px', border: '1px solid var(--line-strong)', padding: '10px 8px', fontFamily: 'var(--font-mono)', fontSize: '12px', textAlign: 'center', background: 'var(--paper)', color: 'var(--ink)' }}
+                  />
+                  <span style={{ color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>-</span>
+                  <input
+                    value="0"
+                    disabled
+                    style={{ width: '28px', border: '1px solid var(--line)', padding: '10px 6px', fontFamily: 'var(--font-mono)', fontSize: '12px', textAlign: 'center', background: 'var(--surface)', color: 'var(--muted)' }}
+                  />
+                  <span style={{ color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>-</span>
+                  <input
+                    ref={refDist}
+                    maxLength={4}
+                    placeholder="1801"
+                    value={expFields.dist}
+                    onChange={e => {
+                      const v = e.target.value;
+                      setExpFields(p => ({ ...p, dist: v }));
+                      advanceField(v, 4, refTipo);
+                    }}
+                    style={{ width: '52px', border: '1px solid var(--line-strong)', padding: '10px 8px', fontFamily: 'var(--font-mono)', fontSize: '12px', textAlign: 'center', background: 'var(--paper)', color: 'var(--ink)' }}
+                  />
+                  <span style={{ color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>-</span>
+                  <input
+                    ref={refTipo}
+                    maxLength={2}
+                    placeholder="JR"
+                    value={expFields.tipo}
+                    onChange={e => {
+                      const v = e.target.value;
+                      setExpFields(p => ({ ...p, tipo: v }));
+                      advanceField(v, 2, refEsp);
+                    }}
+                    style={{ width: '36px', border: '1px solid var(--line-strong)', padding: '10px 6px', fontFamily: 'var(--font-mono)', fontSize: '12px', textAlign: 'center', background: 'var(--paper)', color: 'var(--ink)' }}
+                  />
+                  <span style={{ color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>-</span>
+                  <input
+                    ref={refEsp}
+                    maxLength={2}
+                    placeholder="CI"
+                    value={expFields.esp}
+                    onChange={e => {
+                      const v = e.target.value;
+                      setExpFields(p => ({ ...p, esp: v }));
+                      advanceField(v, 2, refJuz);
+                    }}
+                    style={{ width: '36px', border: '1px solid var(--line-strong)', padding: '10px 6px', fontFamily: 'var(--font-mono)', fontSize: '12px', textAlign: 'center', background: 'var(--paper)', color: 'var(--ink)' }}
+                  />
+                  <span style={{ color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>-</span>
+                  <input
+                    ref={refJuz}
+                    maxLength={2}
+                    placeholder="06"
+                    value={expFields.juz}
+                    onChange={e => setExpFields(p => ({ ...p, juz: e.target.value }))}
+                    style={{ width: '36px', border: '1px solid var(--line-strong)', padding: '10px 6px', fontFamily: 'var(--font-mono)', fontSize: '12px', textAlign: 'center', background: 'var(--paper)', color: 'var(--ink)' }}
+                  />
+                </div>
+                <p style={{ fontFamily: 'var(--font-body)', fontSize: '11px', color: 'var(--muted)', marginBottom: '20px' }}>
+                  Ej: 00001-2005-0-1817-JR-CO-06
+                </p>
 
-            <label style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--muted)' }}>Email</label>
-            <input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} style={{ width: '100%', border: '1px solid var(--line-strong)', padding: '12px 14px', marginTop: 6, marginBottom: 16 }} />
+                <label style={labelStyle}>
+                  APELLIDO PATERNO Y APELLIDO MATERNO O RAZÓN SOCIAL <span style={{ color: '#991b1b' }}>*</span>
+                </label>
+                <input
+                  value={form.parte}
+                  onChange={e => setForm(p => ({ ...p, parte: e.target.value }))}
+                  placeholder="Tal como aparece en las resoluciones"
+                  required
+                  style={inputStyle}
+                />
+                <p style={{ fontFamily: 'var(--font-body)', fontSize: '11px', color: 'var(--muted)', marginTop: -12, marginBottom: '16px' }}>
+                  (*) Dato obligatorio requerido por el CEJ
+                </p>
+              </div>
+            )}
 
-            <label style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--muted)' }}>Frecuencia</label>
-            <select value={form.polling_frequency_hours} onChange={e => setForm({ ...form, polling_frequency_hours: Number(e.target.value) })} style={{ width: '100%', border: '1px solid var(--line-strong)', padding: '12px 14px', marginTop: 6, marginBottom: 22 }}>
+            {/* TAB 2: Por Filtros */}
+            {activeTab === 'filtros' && (
+              <div>
+                <label style={labelStyle}>Distrito Judicial</label>
+                <select
+                  value={form.filtro_distrito}
+                  onChange={e => setForm(p => ({ ...p, filtro_distrito: e.target.value }))}
+                  style={{ ...inputStyle }}
+                >
+                  {DISTRITOS.map(d => <option key={d}>{d}</option>)}
+                </select>
+
+                <label style={labelStyle}>Año</label>
+                <input
+                  type="number"
+                  value={form.filtro_ano}
+                  onChange={e => setForm(p => ({ ...p, filtro_ano: e.target.value }))}
+                  style={inputStyle}
+                />
+
+                <label style={labelStyle}>Número</label>
+                <input
+                  value={form.filtro_numero}
+                  onChange={e => setForm(p => ({ ...p, filtro_numero: e.target.value }))}
+                  style={inputStyle}
+                />
+
+                <label style={labelStyle}>Especialidad</label>
+                <select
+                  value={form.filtro_especialidad}
+                  onChange={e => setForm(p => ({ ...p, filtro_especialidad: e.target.value }))}
+                  style={{ ...inputStyle }}
+                >
+                  {ESPECIALIDADES.map(e => <option key={e}>{e}</option>)}
+                </select>
+
+                <label style={labelStyle}>
+                  APELLIDO PATERNO Y APELLIDO MATERNO O RAZÓN SOCIAL <span style={{ color: '#991b1b' }}>*</span>
+                </label>
+                <input
+                  value={form.parte}
+                  onChange={e => setForm(p => ({ ...p, parte: e.target.value }))}
+                  placeholder="Tal como aparece en las resoluciones"
+                  required
+                  style={inputStyle}
+                />
+                <p style={{ fontFamily: 'var(--font-body)', fontSize: '11px', color: 'var(--muted)', marginTop: -12, marginBottom: '16px' }}>
+                  (*) Dato obligatorio requerido por el CEJ
+                </p>
+              </div>
+            )}
+
+            {/* Always visible below tabs */}
+            <label style={labelStyle}>Alias del caso</label>
+            <input
+              value={form.alias}
+              onChange={e => setForm(p => ({ ...p, alias: e.target.value }))}
+              placeholder="Nombre descriptivo para identificar el caso"
+              style={inputStyle}
+            />
+
+            <label style={labelStyle}>WhatsApp</label>
+            <input
+              value={form.whatsapp_number}
+              onChange={e => setForm(p => ({ ...p, whatsapp_number: e.target.value }))}
+              placeholder="+51999000000"
+              style={inputStyle}
+            />
+
+            <label style={labelStyle}>Email</label>
+            <input
+              value={form.email}
+              onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
+              style={inputStyle}
+            />
+
+            <label style={labelStyle}>Frecuencia de revisión</label>
+            <select
+              value={form.polling_frequency_hours}
+              onChange={e => setForm(p => ({ ...p, polling_frequency_hours: Number(e.target.value) }))}
+              style={{ ...inputStyle }}
+            >
               <option value={1}>Cada hora</option>
               <option value={2}>Cada 2h</option>
               <option value={4}>Cada 4h</option>
@@ -317,9 +614,26 @@ export default function JudicialDashboardPage() {
               <option value={24}>Cada 24h</option>
             </select>
 
-            <button onClick={() => void createCaso()} style={{ width: '100%', background: 'var(--ink)', color: 'var(--paper)', border: 'none', borderRadius: 0, padding: '16px', fontFamily: 'var(--font-body)', fontSize: '14px', cursor: 'pointer' }}>
-              Comenzar seguimiento →
-            </button>
+            {submitStatus ? (
+              <div style={{
+                padding: '16px',
+                border: '1px solid var(--line)',
+                background: 'var(--surface)',
+                fontFamily: 'var(--font-body)',
+                fontSize: '13px',
+                color: 'var(--ink)',
+                marginTop: 8,
+              }}>
+                {submitStatus}
+              </div>
+            ) : (
+              <button
+                onClick={() => void createCaso()}
+                style={{ width: '100%', background: 'var(--ink)', color: 'var(--paper)', border: 'none', borderRadius: 0, padding: '16px', fontFamily: 'var(--font-body)', fontSize: '14px', cursor: 'pointer', marginTop: 8 }}
+              >
+                Comenzar seguimiento →
+              </button>
+            )}
           </div>
         </>
       )}
