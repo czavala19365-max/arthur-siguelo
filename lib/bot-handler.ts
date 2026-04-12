@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import getDb, { type Tramite } from './db';
+import getDb, { type TituloSunarp } from './db';
 import { consultarTituloSUNARP, OFICINAS_ESTATICAS } from './sunarp-scraper';
 import { scrapeCEJ } from './cej-scraper';
 import { chatWithProvider, type ChatMsg } from './llm-providers';
@@ -265,11 +265,12 @@ function logMessage(
 // ── 6. Scraper helpers ────────────────────────────────────────────────────────
 
 /**
- * Title lookup: checks the local SQLite DB first (same data the web platform shows),
+ * Title lookup: checks titulos_sunarp (the table the web platform writes to) first,
  * then falls back to a live SUNARP scrape only if no local record exists.
  *
- * The web platform NEVER calls SUNARP on page load — it shows tramites.estado_actual
- * from the DB. The bot mirrors that behaviour so the answer is always consistent.
+ * titulos_sunarp columns used here:
+ *   numero_titulo, anio_titulo, oficina_registral, oficina_nombre,
+ *   ultimo_estado, ultima_consulta, area_registral, numero_partida
  */
 async function consultarTituloYResponder(
   numero: string,
@@ -277,11 +278,9 @@ async function consultarTituloYResponder(
   oficina: string
 ): Promise<BotResponse> {
   try {
-    // Resolve user-typed office name (e.g. "LIMA") to the 4-digit code the API requires.
     const oficinaCodigo = resolveOficina(oficina);
 
-    // The DB stores numero_titulo as the user originally entered it (may or may not have
-    // leading zeros). Try both the raw input and the 8-digit padded variant.
+    // DB may store the number with or without leading zeros — try both variants.
     const numNorm = numero.trim().replace(/\D/g, '').padStart(8, '0');
     const numRaw  = numero.trim();
 
@@ -289,44 +288,42 @@ async function consultarTituloYResponder(
       numero, anio, oficina_raw: oficina, oficina_codigo: oficinaCodigo,
     });
 
-    // ── 1. Local DB lookup (fast path — mirrors what the web dashboard shows) ──
+    // ── 1. Local DB lookup (titulos_sunarp — same table the web platform reads) ──
     const db = getDb();
 
-    // Primary: match numero + anio + resolved office code
-    let tramite = db.prepare(`
-      SELECT * FROM tramites
+    // Primary: numero + anio_titulo + oficina_registral
+    let titulo = db.prepare(`
+      SELECT * FROM titulos_sunarp
       WHERE (numero_titulo = ? OR numero_titulo = ?)
-        AND anio = ?
+        AND anio_titulo = ?
         AND oficina_registral = ?
-        AND deleted_at IS NULL
-      ORDER BY activo DESC, last_checked DESC
+      ORDER BY id DESC
       LIMIT 1
-    `).get(numRaw, numNorm, anio, oficinaCodigo) as Tramite | undefined;
+    `).get(numRaw, numNorm, anio, oficinaCodigo) as TituloSunarp | undefined;
 
-    // Fallback: match by numero + anio alone (user may have given a different office name)
-    if (!tramite) {
-      tramite = db.prepare(`
-        SELECT * FROM tramites
+    // Fallback: numero + anio_titulo only (user may have mistyped the office)
+    if (!titulo) {
+      titulo = db.prepare(`
+        SELECT * FROM titulos_sunarp
         WHERE (numero_titulo = ? OR numero_titulo = ?)
-          AND anio = ?
-          AND deleted_at IS NULL
-        ORDER BY activo DESC, last_checked DESC
+          AND anio_titulo = ?
+        ORDER BY id DESC
         LIMIT 1
-      `).get(numRaw, numNorm, anio) as Tramite | undefined;
+      `).get(numRaw, numNorm, anio) as TituloSunarp | undefined;
     }
 
-    if (tramite) {
-      console.log('[bot] DB hit — tramite id:', tramite.id, 'estado:', tramite.estado_actual);
+    if (titulo) {
+      console.log('[bot] DB hit — titulo id:', titulo.id, 'estado:', titulo.ultimo_estado);
 
-      let txt = `📋 *Título ${tramite.numero_titulo}/${tramite.anio}*\n`;
-      txt += `Oficina: ${tramite.oficina_registral}`;
-      if (tramite.oficina_nombre) txt += ` — ${tramite.oficina_nombre}`;
+      let txt = `📋 *Título ${titulo.numero_titulo}/${titulo.anio_titulo}*\n`;
+      txt += `Oficina: ${titulo.oficina_registral}`;
+      if (titulo.oficina_nombre) txt += ` — ${titulo.oficina_nombre}`;
       txt += '\n';
-      txt += `Estado: *${tramite.estado_actual}*\n`;
-      if (tramite.observacion_texto) txt += `Detalle: ${tramite.observacion_texto}\n`;
-      if (tramite.calificador) txt += `Calificador: ${tramite.calificador}\n`;
-      if (tramite.last_checked) {
-        txt += `\n_Verificado: ${new Date(tramite.last_checked).toLocaleString('es-PE')}_`;
+      txt += `Estado: *${titulo.ultimo_estado}*\n`;
+      if (titulo.area_registral) txt += `Área registral: ${titulo.area_registral}\n`;
+      if (titulo.numero_partida) txt += `N° de partida: ${titulo.numero_partida}\n`;
+      if (titulo.ultima_consulta) {
+        txt += `\n_Verificado: ${new Date(titulo.ultima_consulta).toLocaleString('es-PE')}_`;
       }
 
       return { texto: txt };
