@@ -40,17 +40,17 @@ export async function POST(request: Request) {
           return
         }
 
-        const first = result.ultimoMovimiento
+        const first = result.actuaciones[0] ?? null
         updateCaso(caso.id, {
           ultimo_movimiento: first?.sumilla || first?.acto || null,
           ultimo_movimiento_fecha: first?.fecha || null,
-          etapa_procesal: result.etapaProcesal || null,
+          etapa_procesal: result.etapa || null,
           juez: result.juez || null,
           estado_hash: result.hash || null,
           last_checked: result.scrapedAt,
         })
 
-        for (const mov of result.movimientos.slice(0, 10)) {
+        for (const mov of result.actuaciones.slice(0, 10)) {
           const cls = await clasificarMovimientoCEJ(
             mov.acto,
             mov.sumilla,

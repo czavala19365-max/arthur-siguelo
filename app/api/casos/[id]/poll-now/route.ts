@@ -43,7 +43,7 @@ export async function POST(
     const existing = getMovimientosByCaso(casoId)
     const existingKeys = new Set(existing.map(m => movementKey(m)))
 
-    const nuevos = result.movimientos.filter(m => !existingKeys.has(movementKey(m)))
+    const nuevos = result.actuaciones.filter(m => !existingKeys.has(movementKey(m)))
     const enriched = []
 
     for (const mov of nuevos) {
@@ -66,11 +66,11 @@ export async function POST(
       enriched.push({ ...mov, urgencia: cls.urgencia, sugerencia: cls.sugerencia })
     }
 
-    const last = result.ultimoMovimiento
+    const last = result.actuaciones[0] ?? null
     updateCaso(casoId, {
       ultimo_movimiento: last?.sumilla || last?.acto || null,
       ultimo_movimiento_fecha: last?.fecha || null,
-      etapa_procesal: result.etapaProcesal || null,
+      etapa_procesal: result.etapa || null,
       juez: result.juez || null,
       estado_hash: result.hash || null,
       last_checked: result.scrapedAt,
