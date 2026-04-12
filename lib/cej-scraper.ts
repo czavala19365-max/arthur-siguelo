@@ -3,6 +3,7 @@ import StealthPlugin from 'puppeteer-extra-plugin-stealth'
 import { Solver } from '2captcha-ts'
 import type { Browser, Page } from 'playwright'
 import crypto from 'crypto'
+import fs from 'fs'
 
 chromium.use(StealthPlugin())
 
@@ -265,6 +266,16 @@ function isRadwareBlocked(url: string, title: string): boolean {
   )
 }
 
+/** Solo para captchaDetected (Radware): true si hay iframe con perfdrive.com en src. */
+async function hasPerfdriveChallengeIframe(page: Page): Promise<boolean> {
+  return page.evaluate(() => {
+    return Array.from(document.querySelectorAll('iframe')).some((ifr) => {
+      const src = ifr.getAttribute('src') || ''
+      return src.includes('perfdrive.com')
+    })
+  }).catch(() => false)
+}
+
 function makeBrowserArgs() {
   return [
     '--no-sandbox',
@@ -272,6 +283,22 @@ function makeBrowserArgs() {
     '--disable-dev-shm-usage',
     '--disable-blink-features=AutomationControlled',
   ]
+}
+
+/** CEJ_DEBUG=1 o true → navegador visible + DevTools (equivalente práctico a debug: true, headless: false). */
+function isCejBrowserDebug(): boolean {
+  const v = process.env.CEJ_DEBUG
+  return v === '1' || v === 'true'
+}
+
+function cejChromiumLaunchOptions() {
+  const debug = isCejBrowserDebug()
+  return {
+    headless: !debug,
+    devtools: debug,
+    executablePath: process.env.CHROME_EXECUTABLE_PATH || undefined,
+    args: makeBrowserArgs(),
+  }
 }
 
 // Dump visible page text without the `offsetParent` filter (which is always null in headless).
@@ -294,123 +321,139 @@ async function dumpHtml(page: Page, selector: string, label: string): Promise<vo
 }
 
 async function parseActuaciones(page: Page): Promise<CejActuacion[]> {
-  // Strategy 1: standard table rows
-  const rows = await page.$$eval(
-    'table tr, #tablaActuaciones tr, .actuacion-row',
-    (els) => els.map(row => {
-      const cells = Array.from(row.querySelectorAll('td'))
-      if (cells.length < 3) return null
-      const links = Array.from(row.querySelectorAll('a[href], button'))
-      const docLinks = links
-        .filter((l: Element) => {
-          const a = l as HTMLAnchorElement
-          return a.href?.includes('.pdf') ||
-            l.textContent?.toLowerCase().includes('ver') ||
-            l.textContent?.toLowerCase().includes('pdf')
-        })
-        .map((l: Element) => (l as HTMLAnchorElement).href || '')
-      return {
-        numero: cells[0]?.textContent?.trim() || '',
-        fecha: cells[1]?.textContent?.trim() || cells[0]?.textContent?.trim() || '',
-        acto: cells[2]?.textContent?.trim() || cells[1]?.textContent?.trim() || '',
-        folio: cells[3]?.textContent?.trim() || '',
-        sumilla: cells[4]?.textContent?.trim() || cells[3]?.textContent?.trim() || cells[cells.length - 1]?.textContent?.trim() || '',
-        tieneDocumento: docLinks.length > 0,
-        documentoUrl: docLinks[0] || '',
-        tieneResolucion: cells.some((c: Element) =>
-          c.textContent?.toLowerCase().includes('resoluc') ||
-          c.textContent?.toLowerCase().includes('sentencia') ||
-          c.textContent?.toLowerCase().includes('auto')
-        ),
-      }
-    }).filter(Boolean)
-  ).catch(() => [] as null[])
+  await page.waitForSelector('[id^="pnlSeguimiento1"]', { timeout: 15000 })
+  await page.waitForTimeout(2000)
 
-  const validRows = (rows as (CejActuacion | null)[]).filter((r): r is CejActuacion => r !== null)
-  if (validRows.length > 0) return validRows
+  const parsed = await page.evaluate(() => {
+    const results: Array<{
+      numero: string
+      fecha: string
+      acto: string
+      folio: string
+      sumilla: string
+      tieneDocumento: boolean
+      documentoUrl: string
+      tieneResolucion: boolean
+    }> = []
 
-  // Strategy 2: div-based actuaciones (generic)
-  const divActuaciones = await page.$$eval(
-    '.actuacion, .item-actuacion, [class*="actuacion"]',
-    (divs) => divs.map(div => ({
-      numero: (div.querySelector('.numero, [class*="numero"]') as HTMLElement | null)?.textContent?.trim() || '',
-      fecha: (div.querySelector('.fecha, [class*="fecha"]') as HTMLElement | null)?.textContent?.trim() || '',
-      acto: (div.querySelector('.acto, [class*="acto"], .tipo') as HTMLElement | null)?.textContent?.trim() || '',
-      folio: (div.querySelector('.folio, [class*="folio"]') as HTMLElement | null)?.textContent?.trim() || '',
-      sumilla: (div.querySelector('.sumilla, [class*="sumilla"], .descripcion') as HTMLElement | null)?.textContent?.trim() || div.textContent?.trim() || '',
-      tieneDocumento: !!div.querySelector('a[href*=".pdf"], button'),
-      documentoUrl: ((div.querySelector('a[href*=".pdf"]') as HTMLAnchorElement | null)?.href) || '',
-      tieneResolucion: div.textContent?.toLowerCase().includes('resoluc') || false,
-    }))
-  ).catch(() => [] as CejActuacion[])
+    const panels = document.querySelectorAll('[id^="pnlSeguimiento"]')
+    panels.forEach((panel) => {
+      if (!panel.classList.contains('cpnlSeguimiento')) return
 
-  if ((divActuaciones as CejActuacion[]).filter(a => a.fecha || a.acto).length > 0) {
-    return (divActuaciones as CejActuacion[]).filter(a => a.fecha || a.acto)
-  }
+      const numero = panel.querySelector('.esquina')?.textContent?.trim() || ''
 
-  // Strategy 3: CEJ detalleform.html — use .esquina elements as anchors (confirmed present)
-  // Each .esquina is immediately followed by a panel div containing the actuacion data
-  const cejPanels = await page.evaluate(() => {
-    const esquinas = document.querySelectorAll('#pnlSeguimiento1 .esquina, [id^="pnlSeguimiento"] .esquina')
-    return Array.from(esquinas).map(esquina => {
-      const panel = esquina.nextElementSibling as HTMLElement | null
-      if (!panel) return null
+      const labels = panel.querySelectorAll('.roptionss, .roptionss-corto')
+      let fecha = ''
+      let resolucion = ''
+      let acto = ''
+      let sumilla = ''
+      let proveido = ''
 
-      const numero = esquina.textContent?.trim() || ''
+      labels.forEach((label) => {
+        const txt = label.textContent?.trim().toLowerCase() || ''
+        const next = label.nextElementSibling
+        const val = next?.textContent?.trim() || ''
+        if (txt.includes('fecha')) fecha = val
+        if (txt === 'resolución:' || txt === 'resolucion:') resolucion = val
+        if (txt === 'acto:') acto = val
+        if (txt === 'sumilla:') sumilla = val
+        if (txt === 'proveido:') proveido = val
+      })
 
-      const getVal = (labelText: string): string => {
-        const labels = panel.querySelectorAll('.roptionss, .roptionss-corto')
-        for (const label of labels) {
-          if (label.textContent?.trim().toLowerCase().includes(labelText.toLowerCase())) {
-            const wrapper = label.parentElement as HTMLElement | null
-            const fleft = wrapper?.querySelector('.fleft') as HTMLElement | null
-            if (fleft) return fleft.textContent?.trim() || ''
-            const sib = label.nextElementSibling as HTMLElement | null
-            if (sib) return sib.textContent?.trim() || ''
-          }
-        }
-        return ''
+      let sumillaFinal = sumilla
+      if (proveido) {
+        sumillaFinal = sumilla ? `${sumilla} | Proveído: ${proveido}` : `Proveído: ${proveido}`
       }
 
-      const fecha = getVal('fecha de ingreso') || getVal('fecha')
-      const acto = getVal('acto')
-      const folio = getVal('folios') || getVal('folio')
-      const sumilla = getVal('sumilla')
-      const tieneDoc = !!panel.querySelector('a[href*=".pdf"], a[href*="documento"]')
-      const docUrl = (panel.querySelector('a[href*=".pdf"], a[href*="documento"]') as HTMLAnchorElement | null)?.href || ''
-      const tieneResolucion = !!(acto && (acto.toLowerCase().includes('resoluc') || acto.toLowerCase().includes('sentenc') || acto.toLowerCase().includes('auto ')))
+      const docA = panel.querySelector('a[href*=".pdf"]')
+      const docUrl = docA ? (docA as HTMLAnchorElement).href || '' : ''
+      const tieneDocumento = !!(docUrl || panel.querySelector('a[href*="documento"]'))
+      const actoL = acto.toLowerCase()
+      const sumL = sumillaFinal.toLowerCase()
+      const tieneResolucion =
+        !!resolucion ||
+        actoL.includes('resoluc') ||
+        actoL.includes('sentenc') ||
+        sumL.includes('resoluc') ||
+        sumL.includes('sentencia')
 
-      return { numero, fecha, acto, folio, sumilla, tieneDocumento: tieneDoc, documentoUrl: docUrl, tieneResolucion }
-    }).filter((r): r is NonNullable<typeof r> => r !== null && !!(r.fecha || r.acto))
+      if (!(numero || fecha || acto || sumillaFinal)) return
+
+      results.push({
+        numero,
+        fecha,
+        acto,
+        folio: '',
+        sumilla: sumillaFinal,
+        tieneDocumento,
+        documentoUrl: docUrl,
+        tieneResolucion,
+      })
+    })
+
+    return results
   }).catch(() => [] as CejActuacion[])
 
-  return cejPanels as CejActuacion[]
+  return parsed as CejActuacion[]
 }
 
 async function parseCaseHeader(page: Page): Promise<Partial<CejCaseData>> {
   return page.evaluate(() => {
-    // Strategy A: detalleform.html uses .celdaGridN (label) + .celdaGrid (value) pairs
-    const getGridVal = (keywords: string[]): string => {
+    const norm = (s: string) => s.replace(/\s+/g, ' ').trim()
+
+    /** .celdaGridN que contiene keyword → siguiente .celdaGrid / .celdaGridxT */
+    function valueAfterCeldaGridN(contains: string): string {
       const labels = document.querySelectorAll('.celdaGridN')
-      for (const label of labels) {
-        const text = label.textContent?.toLowerCase() || ''
-        if (keywords.some(k => text.includes(k.toLowerCase()))) {
-          const sibling = label.nextElementSibling as HTMLElement | null
-          return sibling?.textContent?.trim() || ''
+      for (let i = 0; i < labels.length; i++) {
+        const label = labels[i]
+        const lt = label.textContent || ''
+        if (!lt.includes(contains)) continue
+        let sib: Element | null = label.nextElementSibling
+        while (sib) {
+          if (
+            sib.classList.contains('celdaGrid') ||
+            sib.classList.contains('celdaGridxT') ||
+            sib.classList.contains('celdaGridXe')
+          ) {
+            return norm(sib.textContent || '')
+          }
+          sib = sib.nextElementSibling
         }
       }
       return ''
     }
 
-    // Strategy B: table-based (older pages)
+    const getGridVal = (keywords: string[]): string => {
+      const labels = document.querySelectorAll('.celdaGridN')
+      for (let i = 0; i < labels.length; i++) {
+        const label = labels[i]
+        const text = (label.textContent || '').toLowerCase()
+        if (keywords.some(k => text.includes(k.toLowerCase()))) {
+          let sib: Element | null = label.nextElementSibling
+          while (sib) {
+            if (
+              sib.classList.contains('celdaGrid') ||
+              sib.classList.contains('celdaGridxT') ||
+              sib.classList.contains('celdaGridXe')
+            ) {
+              return norm(sib.textContent || '')
+            }
+            sib = sib.nextElementSibling
+          }
+        }
+      }
+      return ''
+    }
+
     const getText = (keywords: string[]): string => {
       const rows = document.querySelectorAll('table tr, .dato-expediente')
-      for (const row of rows) {
+      for (let r = 0; r < rows.length; r++) {
+        const row = rows[r]
         const cells = row.querySelectorAll('td, span, div')
         for (let i = 0; i < cells.length - 1; i++) {
-          const label = cells[i]?.textContent?.toLowerCase() || ''
+          const label = (cells[i].textContent || '').toLowerCase()
           if (keywords.some(k => label.includes(k.toLowerCase()))) {
-            return cells[i + 1]?.textContent?.trim() || ''
+            return norm(cells[i + 1].textContent || '')
           }
         }
       }
@@ -419,40 +462,66 @@ async function parseCaseHeader(page: Page): Promise<Partial<CejCaseData>> {
 
     const g = (keywords: string[]) => getGridVal(keywords) || getText(keywords)
 
-    // Parse partes from detalleform.html structure: div.partes rows with .cPartTip (rol) + .cNombresD (nombre)
     const partes: { rol: string; nombre: string }[] = []
-    document.querySelectorAll('.partes').forEach(row => {
-      const tips = row.querySelectorAll('.cPartTip')
-      const rol = tips[0]?.textContent?.trim() || ''
-      if (rol && rol.toUpperCase() !== 'PARTE') {
-        const nombre = (row.querySelector('.cNombresD') as HTMLElement | null)?.textContent?.trim() ||
-          (row.querySelector('.cNombresDN') as HTMLElement | null)?.textContent?.trim() || ''
-        if (nombre) partes.push({ rol, nombre })
+    const nombreCells = document.querySelectorAll('.cNombresD.cPartVJ')
+    for (let i = 0; i < nombreCells.length; i++) {
+      const cell = nombreCells[i]
+      const row = cell.closest('.partes')
+      const nombre = norm(cell.textContent || '')
+      if (!nombre) continue
+      let rol = ''
+      if (row) {
+        const tips = row.querySelectorAll('.cPartTip')
+        for (let t = 0; t < tips.length; t++) {
+          const tx = norm(tips[t].textContent || '')
+          if (!tx || tx.toUpperCase() === 'PARTE' || tx.toLowerCase().includes('tipo de')) continue
+          rol = tx
+          break
+        }
       }
-    })
-    // Fallback: table rows
+      partes.push({ rol: rol || 'PARTE', nombre })
+    }
+
+    if (partes.length === 0) {
+      document.querySelectorAll('.partes').forEach(row => {
+        const tips = row.querySelectorAll('.cPartTip')
+        const rol = tips[0] ? norm(tips[0].textContent || '') : ''
+        if (rol && rol.toUpperCase() !== 'PARTE') {
+          const nombreEl = row.querySelector('.cNombresD') || row.querySelector('.cNombresDN')
+          const nombre = nombreEl ? norm(nombreEl.textContent || '') : ''
+          if (nombre) partes.push({ rol, nombre })
+        }
+      })
+    }
     if (partes.length === 0) {
       document.querySelectorAll('table tr').forEach(row => {
         const cells = row.querySelectorAll('td')
         if (cells.length >= 2) {
-          const posibleRol = cells[0]?.textContent?.trim()?.toLowerCase() || ''
-          if (posibleRol.includes('demand') || posibleRol.includes('accion') ||
-              posibleRol.includes('imput') || posibleRol.includes('agrav') ||
-              posibleRol.includes('procurad')) {
-            partes.push({ rol: cells[0]?.textContent?.trim() || '', nombre: cells[1]?.textContent?.trim() || '' })
+          const posibleRol = (cells[0].textContent || '').toLowerCase()
+          if (
+            posibleRol.includes('demand') ||
+            posibleRol.includes('accion') ||
+            posibleRol.includes('imput') ||
+            posibleRol.includes('agrav') ||
+            posibleRol.includes('procurad')
+          ) {
+            partes.push({
+              rol: norm(cells[0].textContent || ''),
+              nombre: norm(cells[1].textContent || ''),
+            })
           }
         }
       })
     }
 
     return {
-      organoJurisdiccional: g(['organo jurisdiccional', 'juzgado', 'sala', 'tribunal']),
+      organoJurisdiccional: valueAfterCeldaGridN('Órgano') || g(['organo jurisdiccional', 'juzgado', 'sala', 'tribunal']),
       distritoJudicial: g(['distrito judicial', 'corte']),
-      juez: g(['juez', 'magistrado', 'vocal']),
+      juez: valueAfterCeldaGridN('Juez:') || valueAfterCeldaGridN('Juez') || g(['juez', 'magistrado', 'vocal']),
       especialidad: g(['especialidad']),
       proceso: g(['proceso']),
       etapa: g(['etapa procesal', 'etapa', 'instancia']),
-      estadoProceso: g(['estado']),
+      estadoProceso: valueAfterCeldaGridN('Estado:') || valueAfterCeldaGridN('Estado') || g(['estado']),
       partes,
     }
   }).catch(() => ({}))
@@ -580,6 +649,13 @@ async function scrapeResultsPage(page: Page, baseResult: CejCaseData, numeroExpe
   const headerData = await parseCaseHeader(page)
   const actuaciones = await parseActuaciones(page)
   console.log(`[CEJ] Found ${actuaciones.length} actuaciones`)
+
+  // DEBUG TEMPORAL - borrar después
+  if (actuaciones.length === 0) {
+    const html = await page.content()
+    fs.writeFileSync('debug-detalle.html', html)
+    console.log('[CEJ] HTML guardado en debug-detalle.html')
+  }
 
   // Paginate
   let hasNext = await page.$('a:has-text("Siguiente"), .siguiente, [title="Siguiente"]')
@@ -958,11 +1034,7 @@ async function tryDirectAccess(
 ): Promise<CejCaseData | null> {
   let browser: Browser | null = null
   try {
-    browser = await chromium.launch({
-      headless: true,
-      executablePath: process.env.CHROME_EXECUTABLE_PATH || undefined,
-      args: makeBrowserArgs(),
-    }) as unknown as Browser
+    browser = await chromium.launch(cejChromiumLaunchOptions()) as unknown as Browser
 
     const context = await browser.newContext({
       userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -1090,11 +1162,7 @@ async function _scrapeCEJ(numeroExpediente: string, maxRetries: number, parte: s
     try {
       console.log(`[CEJ] hCaptcha attempt ${attempt}/${maxRetries} — ${numeroExpediente}`)
 
-      browser = await chromium.launch({
-        headless: true,
-        executablePath: process.env.CHROME_EXECUTABLE_PATH || undefined,
-        args: makeBrowserArgs(),
-      }) as unknown as Browser
+      browser = await chromium.launch(cejChromiumLaunchOptions()) as unknown as Browser
 
       const context = await browser.newContext({
         userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -1106,8 +1174,8 @@ async function _scrapeCEJ(numeroExpediente: string, maxRetries: number, parte: s
       console.log('[CEJ] Navigating to portal...')
       await page.goto(CEJ_SEARCH_URL, { waitUntil: 'load', timeout: 30000 })
 
-      if (isRadwareBlocked(page.url(), await page.title())) {
-        console.log('[CEJ] Radware Bot Manager detected — solving hCaptcha...')
+      if (await hasPerfdriveChallengeIframe(page)) {
+        console.log('[CEJ] Radware Bot Manager detected (perfdrive iframe) — solving hCaptcha...')
         baseResult.captchaDetected = true
 
         const sitekey = await page.evaluate(() => {
