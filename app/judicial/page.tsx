@@ -96,6 +96,17 @@ function calendarOutlookUrl(alias: string, ymdDash: string) {
 
 const CURRENT_YEAR = String(new Date().getFullYear());
 
+function asCasoList(raw: unknown): Caso[] {
+  if (raw == null || !Array.isArray(raw)) return [];
+  return raw.filter(
+    (item): item is Caso =>
+      typeof item === 'object' &&
+      item !== null &&
+      'id' in item &&
+      typeof (item as Caso).id === 'number'
+  );
+}
+
 export default function JudicialDashboardPage() {
   const [casos, setCasos] = useState<Caso[]>([]);
   const [stats, setStats] = useState({ total: 0, activos: 0, conAlerta: 0, proximasAudiencias: 0 });
@@ -128,6 +139,8 @@ export default function JudicialDashboardPage() {
   const refTipo = useRef<HTMLInputElement>(null);
   const refEsp = useRef<HTMLInputElement>(null);
   const refJuz = useRef<HTMLInputElement>(null);
+  const cejSyncPollRef = useRef<number | null>(null);
+  const cejSyncTimeoutRef = useRef<number | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -136,16 +149,45 @@ export default function JudicialDashboardPage() {
         fetch('/api/casos'),
         fetch('/api/casos/stats'),
       ]);
-      const casosData = await casosRes.json() as Caso[];
-      const statsData = await statsRes.json() as typeof stats;
-      setCasos(casosData);
+
+      let casosRaw: unknown;
+      try {
+        casosRaw = await casosRes.json();
+      } catch {
+        casosRaw = null;
+      }
+      const casosList = asCasoList(casosRaw);
+
+      let statsData: typeof stats = { total: 0, activos: 0, conAlerta: 0, proximasAudiencias: 0 };
+      try {
+        const statsRaw: unknown = await statsRes.json();
+        if (statsRaw && typeof statsRaw === 'object' && !Array.isArray(statsRaw) && 'total' in statsRaw) {
+          const o = statsRaw as Record<string, unknown>;
+          statsData = {
+            total: Number(o.total) || 0,
+            activos: Number(o.activos) || 0,
+            conAlerta: Number(o.conAlerta) || 0,
+            proximasAudiencias: Number(o.proximasAudiencias) || 0,
+          };
+        }
+      } catch {
+        /* keep defaults */
+      }
+
+      setCasos(casosList);
       setStats(statsData);
 
       const map: Record<number, { movimientos: Movimiento[]; audiencias: Audiencia[] }> = {};
-      for (const c of casosData) {
+      for (let i = 0; i < casosList.length; i++) {
+        const c = casosList[i];
         const r = await fetch(`/api/casos/${c.id}`);
         if (!r.ok) continue;
-        const d = await r.json() as { movimientos: Movimiento[]; audiencias: Audiencia[] };
+        let d: { movimientos?: Movimiento[]; audiencias?: Audiencia[] };
+        try {
+          d = (await r.json()) as { movimientos?: Movimiento[]; audiencias?: Audiencia[] };
+        } catch {
+          continue;
+        }
         map[c.id] = { movimientos: d.movimientos || [], audiencias: d.audiencias || [] };
       }
       setDetails(map);
@@ -156,8 +198,25 @@ export default function JudicialDashboardPage() {
 
   useEffect(() => { void loadData(); }, [loadData]);
 
+  useEffect(
+    () => () => {
+      if (cejSyncPollRef.current) {
+        clearInterval(cejSyncPollRef.current);
+        cejSyncPollRef.current = null;
+      }
+      if (cejSyncTimeoutRef.current) {
+        clearTimeout(cejSyncTimeoutRef.current);
+        cejSyncTimeoutRef.current = null;
+      }
+    },
+    []
+  );
+
   const highAlertCase = useMemo(() => {
-    return casos.find(c => (details[c.id]?.movimientos || []).some(m => m.es_nuevo === 1 && m.urgencia === 'alta'));
+    const list = Array.isArray(casos) ? casos : [];
+    return list.find(c =>
+      (details[c.id]?.movimientos || []).some(m => m.es_nuevo === 1 && m.urgencia === 'alta')
+    );
   }, [casos, details]);
 
   function resetForm() {
@@ -197,11 +256,6 @@ export default function JudicialDashboardPage() {
 
     setSubmitStatus('Guardando proceso...');
 
-    const timers: ReturnType<typeof setTimeout>[] = [];
-    timers.push(setTimeout(() => setSubmitStatus('Conectando con el CEJ...'), 1500));
-    timers.push(setTimeout(() => setSubmitStatus('Resolviendo captcha...'), 10000));
-    timers.push(setTimeout(() => setSubmitStatus('Analizando movimientos con IA...'), 35000));
-
     const payload: Record<string, unknown> = {
       numero_expediente,
       parte: form.parte,
@@ -222,10 +276,17 @@ export default function JudicialDashboardPage() {
       body: JSON.stringify(payload),
     });
 
-    timers.forEach(clearTimeout);
-
     if (!res.ok) {
-      setSubmitStatus('Error al guardar el proceso.');
+      const text = await res.text().catch(() => '');
+      let msg = 'Error al guardar el proceso.';
+      try {
+        const j = JSON.parse(text) as { error?: string; detail?: string };
+        if (j.detail) msg = `${msg} ${j.detail}`;
+        else if (j.error && j.error !== 'Error al crear proceso judicial') msg = j.error;
+      } catch {
+        if (text) msg = `${msg} (${text.slice(0, 120)})`;
+      }
+      setSubmitStatus(msg);
       return;
     }
 
@@ -235,22 +296,102 @@ export default function JudicialDashboardPage() {
       setSubmitStatus('⚠️ Proceso guardado. CEJ no disponible — revisión automática pendiente.');
     } else if (data.captchaFailed) {
       setSubmitStatus('⚠️ Proceso guardado. Captcha no resuelto — reintentará en próxima revisión.');
+    } else if (data.syncPending) {
+      const casoId = data.id as number;
+      const initialLastChecked = (data.last_checked as string | null | undefined) ?? null;
+      setSubmitStatus('✅ Caso guardado. Sincronizando con el CEJ en segundo plano…');
+      void loadData();
+
+      if (cejSyncPollRef.current) clearInterval(cejSyncPollRef.current);
+      if (cejSyncTimeoutRef.current) clearTimeout(cejSyncTimeoutRef.current);
+
+      let ticks = 0;
+      cejSyncPollRef.current = window.setInterval(async () => {
+        ticks += 1;
+        await loadData();
+        try {
+          const r = await fetch(`/api/casos/${casoId}`);
+          if (!r.ok) return;
+          const detail = (await r.json()) as {
+            last_checked?: string | null;
+            movimientos?: unknown[];
+          };
+          const movs = Array.isArray(detail.movimientos) ? detail.movimientos.length : 0;
+          const synced =
+            movs > 0 ||
+            (detail.last_checked != null && detail.last_checked !== initialLastChecked);
+          if (synced || ticks >= 26) {
+            if (cejSyncPollRef.current) {
+              clearInterval(cejSyncPollRef.current);
+              cejSyncPollRef.current = null;
+            }
+            if (cejSyncTimeoutRef.current) {
+              clearTimeout(cejSyncTimeoutRef.current);
+              cejSyncTimeoutRef.current = null;
+            }
+            if (movs > 0) {
+              setSubmitStatus(`✅ Sincronizado: ${movs} movimiento(s) en el expediente.`);
+            } else if (synced && detail.last_checked) {
+              setSubmitStatus('✅ Sincronización con el CEJ completada.');
+            } else {
+              setSubmitStatus(
+                '✅ Caso guardado. Si no ves movimientos, abre el expediente y pulsa «Actualizar ahora».'
+              );
+            }
+          }
+        } catch {
+          /* ignore */
+        }
+      }, 6000);
+      cejSyncTimeoutRef.current = window.setTimeout(() => {
+        if (cejSyncPollRef.current) {
+          clearInterval(cejSyncPollRef.current);
+          cejSyncPollRef.current = null;
+        }
+        cejSyncTimeoutRef.current = null;
+      }, 165000);
     } else {
       const count = data.movimientosCount as number | undefined;
       setSubmitStatus(`✅ Proceso agregado con ${count ?? 0} movimientos detectados`);
     }
 
+    const delay = data.syncPending ? 1200 : 2500;
     setTimeout(() => {
       setDrawerOpen(false);
       resetForm();
-      void loadData();
-    }, 2500);
+      if (!data.syncPending) void loadData();
+    }, delay);
   }
 
   async function pollNow(id: number) {
     setPollingId(id);
     await fetch(`/api/casos/${id}/poll-now`, { method: 'POST' });
     setPollingId(null);
+    await loadData();
+  }
+
+  async function archiveCasoRow(id: number) {
+    if (!confirm('¿Archivar este proceso? Dejará de mostrarse en Mis Procesos (podrás restaurarlo desde Archivados).')) return;
+    const r = await fetch(`/api/casos/${id}/archive`, { method: 'POST' });
+    if (!r.ok) {
+      alert('No se pudo archivar el proceso.');
+      return;
+    }
+    await loadData();
+  }
+
+  async function eliminarCasoRow(id: number) {
+    if (
+      !confirm(
+        '¿Eliminar este proceso? Irá a la papelera y se borrará permanentemente del sistema a los 30 días.'
+      )
+    )
+      return;
+    const r = await fetch(`/api/casos/${id}`, { method: 'DELETE' });
+    if (!r.ok) {
+      alert('No se pudo eliminar el proceso.');
+      return;
+    }
     await loadData();
   }
 
@@ -309,11 +450,11 @@ export default function JudicialDashboardPage() {
       )}
 
       <div style={{ marginTop: '32px', background: 'var(--surface)', border: '1px solid var(--line)' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '90px 120px 1.4fr 220px 150px 170px 110px 140px', padding: '12px 24px', background: 'var(--paper-dark)', fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--muted)', gap: '12px' }}>
-          <span>ESTADO</span><span>TIPO</span><span>ALIAS / CLIENTE</span><span>EXPEDIENTE</span><span>ÚLTIMA ACTUALIZACIÓN</span><span>PRÓXIMO EVENTO</span><span>PRIORIDAD</span><span>ACCIONES</span>
+        <div style={{ display: 'grid', gridTemplateColumns: '90px 120px 1.4fr 220px 150px 170px 110px 120px 130px', padding: '12px 24px', background: 'var(--paper-dark)', fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--muted)', gap: '12px' }}>
+          <span>ESTADO</span><span>TIPO</span><span>ALIAS / CLIENTE</span><span>EXPEDIENTE</span><span>ÚLTIMA ACTUALIZACIÓN</span><span>PRÓXIMO EVENTO</span><span>PRIORIDAD</span><span>CEJ</span><span>GESTIÓN</span>
         </div>
 
-        {casos.length === 0 ? (
+        {(!Array.isArray(casos) || casos.length === 0) ? (
           <div style={{ padding: '56px 24px', textAlign: 'center', fontFamily: 'var(--font-body)', color: 'var(--muted)' }}>
             No hay procesos registrados todavía.
           </div>
@@ -328,7 +469,7 @@ export default function JudicialDashboardPage() {
           const eventAlias = c.alias || c.cliente || 'Sin alias';
 
           return (
-            <div key={c.id} onClick={() => (window.location.href = `/judicial/${c.id}`)} style={{ display: 'grid', gridTemplateColumns: '90px 120px 1.4fr 220px 150px 170px 110px 140px', padding: '0 24px', minHeight: '66px', alignItems: 'center', borderBottom: '1px solid var(--line-faint)', gap: '12px', cursor: 'pointer' }}>
+            <div key={c.id} onClick={() => (window.location.href = `/judicial/${c.id}`)} style={{ display: 'grid', gridTemplateColumns: '90px 120px 1.4fr 220px 150px 170px 110px 120px 130px', padding: '0 24px', minHeight: '66px', alignItems: 'center', borderBottom: '1px solid var(--line-faint)', gap: '12px', cursor: 'pointer' }}>
               <div>
                 <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '50%', background: urgentNew ? '#991b1b' : normalNew ? '#d97706' : hasAny ? '#166534' : '#9ca3af', animation: urgentNew ? 'pulse 1.5s infinite' : undefined }} />
               </div>
@@ -380,6 +521,22 @@ export default function JudicialDashboardPage() {
                   style={{ background: 'transparent', border: '1px solid var(--line-strong)', borderRadius: 0, padding: '7px 10px', fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', cursor: pollingId === c.id ? 'not-allowed' : 'pointer', opacity: pollingId === c.id ? 0.6 : 1 }}
                 >
                   {pollingId === c.id ? '...' : 'Revisar ahora'}
+                </button>
+              </div>
+              <div onClick={e => e.stopPropagation()} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <button
+                  type="button"
+                  onClick={() => void archiveCasoRow(c.id)}
+                  style={{ background: 'transparent', border: '1px solid var(--line-strong)', padding: '5px 8px', fontFamily: 'var(--font-mono)', fontSize: '9px', textTransform: 'uppercase', cursor: 'pointer', color: 'var(--muted)' }}
+                >
+                  Archivar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void eliminarCasoRow(c.id)}
+                  style={{ background: 'transparent', border: '1px solid #991b1b', padding: '5px 8px', fontFamily: 'var(--font-mono)', fontSize: '9px', textTransform: 'uppercase', cursor: 'pointer', color: '#991b1b' }}
+                >
+                  Eliminar
                 </button>
               </div>
             </div>

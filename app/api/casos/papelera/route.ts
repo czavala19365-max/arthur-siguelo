@@ -1,0 +1,12 @@
+import { getCasosPapelera } from '@/lib/db'
+
+export const runtime = 'nodejs'
+
+export async function GET() {
+  try {
+    return Response.json(getCasosPapelera())
+  } catch (error) {
+    console.error('[API] GET /casos/papelera error:', error)
+    return Response.json({ error: 'Error al obtener la papelera' }, { status: 500 })
+  }
+}

@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useEffect, useMemo, useState, useCallback } from 'react';
+import { use, useEffect, useMemo, useState, useCallback, type MouseEvent } from 'react';
 import Link from 'next/link';
 import CalendarButtons from '@/components/CalendarButtons';
 import { formatPartesDisplay } from '@/lib/format-partes-judicial';
@@ -15,7 +15,55 @@ interface Movimiento {
   sumilla: string | null;
   urgencia: 'alta' | 'normal' | 'info';
   ai_sugerencia: string | null;
+  tiene_documento: number;
+  documento_url: string | null;
 }
+
+/** Documentos locales (estáticos) o proxy para URLs antiguas de Cloudinary. */
+function getCloudinaryDownloadUrl(url: string): string {
+  if (url.startsWith('/documentos/')) return url;
+  if (url.startsWith('https://res.cloudinary.com')) {
+    return `/api/documentos?url=${encodeURIComponent(url)}`;
+  }
+  try {
+    const { hostname } = new URL(url);
+    if (hostname.includes('cloudinary.com')) {
+      return `/api/documentos?url=${encodeURIComponent(url)}`;
+    }
+  } catch {
+    return url;
+  }
+  return url;
+}
+
+async function downloadCloudinaryJudicialDoc(e: MouseEvent<HTMLAnchorElement>, rawUrl: string) {
+  const href = getCloudinaryDownloadUrl(rawUrl);
+  if (!href.startsWith('/api/documentos')) return;
+  e.preventDefault();
+  try {
+    const res = await fetch(href, { mode: 'cors', credentials: 'omit' });
+    if (!res.ok) throw new Error(String(res.status));
+    const blob = await res.blob();
+    let name = 'documento.pdf';
+    try {
+      const seg = new URL(href).pathname.split('/').pop();
+      if (seg) name = decodeURIComponent(seg.split('?')[0]);
+    } catch {
+      /* usar default */
+    }
+    const objUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = objUrl;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(objUrl);
+  } catch {
+    window.open(href, '_blank', 'noopener,noreferrer');
+  }
+}
+
 interface Audiencia { id: number; descripcion: string; fecha: string; tipo: string | null; }
 interface Escrito { id: number; tipo: string; contenido: string; created_at: string; }
 interface CasoDetail {
@@ -68,7 +116,23 @@ export default function JudicialCaseDetail({ params }: { params: Promise<{ id: s
 
   useEffect(() => { void loadData(); }, [loadData]);
 
-  const lastMov = caso?.movimientos?.[0] || null;
+  const movimientosSortedDesc = useMemo(() => {
+    const list = caso?.movimientos;
+    if (!list?.length) return [];
+    const ts = (s: string | null) => {
+      if (!s) return 0;
+      const m = s.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      if (m) {
+        const ms = new Date(parseInt(m[3], 10), parseInt(m[2], 10) - 1, parseInt(m[1], 10)).getTime();
+        return Number.isNaN(ms) ? 0 : ms;
+      }
+      const u = new Date(s).getTime();
+      return Number.isNaN(u) ? 0 : u;
+    };
+    return [...list].sort((a, b) => ts(b.fecha) - ts(a.fecha));
+  }, [caso?.movimientos]);
+
+  const lastMov = movimientosSortedDesc[0] || null;
   const totalMov = caso?.movimientos?.length || 0;
   const daysInProcess = useMemo(() => {
     if (!caso?.ultimo_movimiento_fecha) return 0;
@@ -173,7 +237,7 @@ export default function JudicialCaseDetail({ params }: { params: Promise<{ id: s
 
       {tab === 'movimientos' && (
         <div style={{ paddingLeft: '20px', borderLeft: '1px solid var(--line-mid)' }}>
-          {caso.movimientos.map(m => (
+          {movimientosSortedDesc.map(m => (
             <div key={m.id} style={{ position: 'relative', padding: '0 0 22px 14px' }}>
               <div style={{ position: 'absolute', left: '-5px', top: '6px', width: '9px', height: '9px', borderRadius: '50%', background: colorUrgencia(m.urgencia) }} />
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px' }}>
@@ -182,6 +246,13 @@ export default function JudicialCaseDetail({ params }: { params: Promise<{ id: s
                   <span style={{ display: 'inline-block', marginTop: '6px', border: `1px solid ${colorUrgencia(m.urgencia)}`, color: colorUrgencia(m.urgencia), padding: '3px 8px', fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase' }}>{m.acto || 'Movimiento'}</span>
                   <p style={{ fontFamily: 'var(--font-body)', fontSize: '14px', marginTop: '8px' }}>{m.sumilla}</p>
                   {m.ai_sugerencia && <p style={{ fontFamily: 'var(--font-body)', fontSize: '13px', color: 'var(--accent-navy)', fontStyle: 'italic' }}>Arthur-IA: {m.ai_sugerencia}</p>}
+                  {m.tiene_documento === 1 && m.documento_url ? (
+                    <a href={getCloudinaryDownloadUrl(m.documento_url)} target="_blank" rel="noopener noreferrer" onClick={e => void downloadCloudinaryJudicialDoc(e, m.documento_url!)} style={{ display: 'inline-block', marginTop: '6px', border: '1px solid var(--accent-navy)', color: 'var(--accent-navy)', padding: '4px 10px', fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', textDecoration: 'none', cursor: 'pointer' }}>
+                      Ver documento
+                    </a>
+                  ) : m.tiene_documento === 1 ? (
+                    <span style={{ display: 'inline-block', marginTop: '6px', fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--muted)' }}>Documento no disponible</span>
+                  ) : null}
                 </div>
                 <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--muted)', whiteSpace: 'nowrap' }}>Folio: {m.folio || '—'}</div>
               </div>

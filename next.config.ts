@@ -10,6 +10,7 @@ const nextConfig: NextConfig = {
     'puppeteer-extra-plugin-stealth',
     '2captcha-ts',
     '@captcha-libs/capsolver',
+    'cloudinary',
   ],
 };
 

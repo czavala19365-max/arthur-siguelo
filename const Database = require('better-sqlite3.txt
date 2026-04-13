@@ -1,0 +1,13 @@
+const Database = require('better-sqlite3');
+const db = new Database('./data/arthur.db');
+
+const tables = db.prepare(
+  "SELECT name FROM sqlite_master WHERE type='table'"
+).all();
+
+console.log('Tablas encontradas:', tables.map(t => t.name));
+
+tables.forEach(t => {
+  const cols = db.prepare('PRAGMA table_info(' + t.name + ')').all();
+  console.log('\n' + t.name + ':', cols.map(c => c.name));
+});

@@ -4,8 +4,20 @@ import { Solver } from '2captcha-ts'
 import type { Browser, Page } from 'playwright'
 import crypto from 'crypto'
 import fs from 'fs'
+import path from 'path'
+import { uploadPdfToSupabase } from './supabase-storage'
 
-chromium.use(StealthPlugin())
+/** Aplicar stealth solo al abrir el navegador (evita fallos al importar el módulo en Next/API). */
+let cejStealthApplied = false
+function applyCejStealthOnce() {
+  if (cejStealthApplied) return
+  cejStealthApplied = true
+  try {
+    chromium.use(StealthPlugin())
+  } catch (e) {
+    console.warn('[CEJ] Stealth plugin no aplicado:', e instanceof Error ? e.message : String(e))
+  }
+}
 
 const CEJ_SEARCH_URL = 'https://cej.pj.gob.pe/cej/forms/busquedaform.html'
 const CEJ_DETAIL_URL = 'https://cej.pj.gob.pe/cej/forms/detalleform.html'
@@ -325,76 +337,257 @@ async function parseActuaciones(page: Page): Promise<CejActuacion[]> {
   await page.waitForTimeout(2000)
 
   const parsed = await page.evaluate(() => {
-    const results: Array<{
-      numero: string
-      fecha: string
-      acto: string
-      folio: string
-      sumilla: string
-      tieneDocumento: boolean
-      documentoUrl: string
-      tieneResolucion: boolean
-    }> = []
+      const results: Array<{
+        numero: string
+        fecha: string
+        acto: string
+        folio: string
+        sumilla: string
+        tieneDocumento: boolean
+        documentoUrl: string
+        tieneResolucion: boolean
+      }> = []
+      const debugLines: string[] = []
 
-    const panels = document.querySelectorAll('[id^="pnlSeguimiento"]')
-    panels.forEach((panel) => {
-      if (!panel.classList.contains('cpnlSeguimiento')) return
+      debugLines.push(
+        '[CEJ parseActuaciones] Detección de documento — heurística en todos los <a href> del panel:',
+        `  • PDF: href contiene .pdf, /pdf, formato=pdf, type=pdf, application/pdf (minúsculas)`,
+        `  • Alternativo: href contiene documento, descarga, visor, verdoc`,
+        `  • documento_url = enlace PDF si hay; si no, el alternativo. Paneles: [id^="pnlSeguimiento"] + cpnlSeguimiento`
+      )
 
-      const numero = panel.querySelector('.esquina')?.textContent?.trim() || ''
+      const panels = document.querySelectorAll('[id^="pnlSeguimiento"]')
+      let actIdx = 0
+      panels.forEach((panel) => {
+        if (!panel.classList.contains('cpnlSeguimiento')) return
 
-      const labels = panel.querySelectorAll('.roptionss, .roptionss-corto')
-      let fecha = ''
-      let resolucion = ''
-      let acto = ''
-      let sumilla = ''
-      let proveido = ''
+        const numero = panel.querySelector('.esquina')?.textContent?.trim() || ''
 
-      labels.forEach((label) => {
-        const txt = label.textContent?.trim().toLowerCase() || ''
-        const next = label.nextElementSibling
-        const val = next?.textContent?.trim() || ''
-        if (txt.includes('fecha')) fecha = val
-        if (txt === 'resolución:' || txt === 'resolucion:') resolucion = val
-        if (txt === 'acto:') acto = val
-        if (txt === 'sumilla:') sumilla = val
-        if (txt === 'proveido:') proveido = val
+        const labels = panel.querySelectorAll('.roptionss, .roptionss-corto')
+        let fecha = ''
+        let resolucion = ''
+        let acto = ''
+        let sumilla = ''
+        let proveido = ''
+
+        labels.forEach((label) => {
+          const txt = label.textContent?.trim().toLowerCase() || ''
+          const next = label.nextElementSibling
+          const val = next?.textContent?.trim() || ''
+          if (txt.includes('fecha')) fecha = val
+          if (txt === 'resolución:' || txt === 'resolucion:') resolucion = val
+          if (txt === 'acto:') acto = val
+          if (txt === 'sumilla:') sumilla = val
+          if (txt === 'proveido:') proveido = val
+        })
+
+        let sumillaFinal = sumilla
+        if (proveido) {
+          sumillaFinal = sumilla ? `${sumilla} | Proveído: ${proveido}` : `Proveído: ${proveido}`
+        }
+
+        const anchors = Array.from(panel.querySelectorAll('a[href]')) as HTMLAnchorElement[]
+        let docPdf: HTMLAnchorElement | null = null
+        let docOther: HTMLAnchorElement | null = null
+        for (const a of anchors) {
+          const u = (a.href || '').toLowerCase()
+          const rel = (a.getAttribute('href') || '').toLowerCase()
+          if (
+            !docPdf &&
+            (u.includes('.pdf') ||
+              rel.includes('.pdf') ||
+              u.includes('/pdf') ||
+              u.includes('formato=pdf') ||
+              u.includes('type=pdf') ||
+              u.includes('application/pdf'))
+          ) {
+            docPdf = a
+          }
+          if (
+            !docOther &&
+            (u.includes('documento') ||
+              u.includes('descarga') ||
+              u.includes('visor') ||
+              u.includes('verdoc') ||
+              rel.includes('documento'))
+          ) {
+            docOther = a
+          }
+        }
+        const docUrl = (docPdf || docOther)?.href || ''
+        const tienePdf = !!docPdf
+        const tieneDocLink = !!docOther
+        const tieneDocumento = !!(docPdf || docOther)
+
+        let motivo = ''
+        if (!tieneDocumento) {
+          motivo =
+            'tiene_documento=false — ningún <a href> del panel coincide con PDF (case-insensitive) ni patrones documento/descarga/visor'
+        } else if (tienePdf && tieneDocLink && docPdf !== docOther) {
+          motivo =
+            'tiene_documento=true — enlace tipo PDF y otro tipo documento; documento_url prioriza PDF'
+        } else if (tienePdf) {
+          motivo = 'tiene_documento=true — enlace con indicadores de PDF en href'
+        } else {
+          motivo =
+            'tiene_documento=true — solo enlace documento/descarga/visor (sin .pdf explícito); documento_url = ese href'
+        }
+
+        const snippetPdf = docPdf?.outerHTML?.slice(0, 220) || '(ningún ancla tipo PDF)'
+        const snippetDoc =
+          docOther && docOther !== docPdf ? docOther.outerHTML?.slice(0, 220) || '' : '(mismo que PDF o ningún otro)'
+
+        const actoShort = acto.length > 60 ? acto.slice(0, 60) + '…' : acto
+
+        if (!(numero || fecha || acto || sumillaFinal)) return
+
+        actIdx += 1
+        debugLines.push(
+          `[CEJ parseActuaciones] actuación #${actIdx} numero="${numero}" fecha="${fecha}" acto="${actoShort}"`
+        )
+        debugLines.push(`  → ${motivo}`)
+        debugLines.push(`  → HTML ancla PDF (heurística): ${snippetPdf}`)
+        debugLines.push(`  → HTML ancla doc alternativa: ${snippetDoc}`)
+        if (docUrl) debugLines.push(`  → documento_url (completa): ${docUrl}`)
+        else debugLines.push(`  → documento_url: (vacío)`)
+
+        const actoL = acto.toLowerCase()
+        const sumL = sumillaFinal.toLowerCase()
+        const tieneResolucion =
+          !!resolucion ||
+          actoL.includes('resoluc') ||
+          actoL.includes('sentenc') ||
+          sumL.includes('resoluc') ||
+          sumL.includes('sentencia')
+
+        results.push({
+          numero,
+          fecha,
+          acto,
+          folio: '',
+          sumilla: sumillaFinal,
+          tieneDocumento,
+          documentoUrl: docUrl || '',
+          tieneResolucion,
+        })
       })
 
-      let sumillaFinal = sumilla
-      if (proveido) {
-        sumillaFinal = sumilla ? `${sumilla} | Proveído: ${proveido}` : `Proveído: ${proveido}`
-      }
+      debugLines.push(`[CEJ parseActuaciones] total actuaciones con datos: ${results.length}`)
+      return { results, debugLines }
+ }).catch(() => ({
+    results: [] as CejActuacion[],
+    debugLines: ['[CEJ parseActuaciones] page.evaluate falló — sin datos'],
+  }))
 
-      const docA = panel.querySelector('a[href*=".pdf"]')
-      const docUrl = docA ? (docA as HTMLAnchorElement).href || '' : ''
-      const tieneDocumento = !!(docUrl || panel.querySelector('a[href*="documento"]'))
-      const actoL = acto.toLowerCase()
-      const sumL = sumillaFinal.toLowerCase()
-      const tieneResolucion =
-        !!resolucion ||
-        actoL.includes('resoluc') ||
-        actoL.includes('sentenc') ||
-        sumL.includes('resoluc') ||
-        sumL.includes('sentencia')
+  console.log(
+    '[CEJ parseActuaciones] paneles: document.querySelectorAll(\'[id^="pnlSeguimiento"]\') + classList.contains("cpnlSeguimiento")'
+  )
+  for (const line of parsed.debugLines) {
+    console.log(line)
+  }
 
-      if (!(numero || fecha || acto || sumillaFinal)) return
+  return parsed.results as CejActuacion[]
+}
 
-      results.push({
-        numero,
-        fecha,
-        acto,
-        folio: '',
-        sumilla: sumillaFinal,
-        tieneDocumento,
-        documentoUrl: docUrl,
-        tieneResolucion,
-      })
+function sanitizeFilename(s: string): string {
+  return s.replace(/[^a-zA-Z0-9_-]/g, '_').replace(/_+/g, '_').substring(0, 80)
+}
+
+function bufferLooksLikePdf(buf: Buffer): boolean {
+  return buf.length >= 4 && buf.subarray(0, 4).toString('ascii') === '%PDF'
+}
+
+/** Descarga el binario del enlace CEJ: primero fetch en el contexto del navegador (cookies/JS), luego request de Playwright. */
+async function downloadCejDocumentBuffer(page: Page, docUrl: string): Promise<Buffer | null> {
+  const referer = page.url().startsWith('http') ? page.url() : CEJ_DETAIL_URL
+
+  type EvalResult =
+    | { ok: true; bytes: number[] }
+    | { ok: false; status: number; message?: string }
+
+  const evaluated = await page
+    .evaluate(
+      async ({ url, ref }) => {
+        try {
+          const r = await fetch(url, {
+            credentials: 'include',
+            mode: 'cors',
+            cache: 'no-store',
+            headers: { Accept: 'application/pdf,*/*', Referer: ref },
+          })
+          if (!r.ok) return { ok: false as const, status: r.status }
+          const ab = await r.arrayBuffer()
+          return { ok: true as const, bytes: Array.from(new Uint8Array(ab)) }
+        } catch (e) {
+          return {
+            ok: false as const,
+            status: 0,
+            message: e instanceof Error ? e.message : String(e),
+          }
+        }
+      },
+      { url: docUrl, ref: referer }
+    )
+    .catch((e: Error) => {
+      console.warn('[CEJ] In-page doc fetch error:', e.message)
+      return { ok: false as const, status: 0, message: e.message } as EvalResult
     })
 
-    return results
-  }).catch(() => [] as CejActuacion[])
+  if (evaluated.ok && evaluated.bytes.length > 0) {
+    return Buffer.from(evaluated.bytes)
+  }
+  if (!evaluated.ok && 'message' in evaluated && evaluated.message) {
+    console.warn(`[CEJ] In-page doc fetch: ${evaluated.message} status=${evaluated.status}`)
+  }
 
-  return parsed as CejActuacion[]
+  const res = await page.request.get(docUrl, {
+    timeout: 30_000,
+    headers: {
+      Referer: referer,
+      Accept: 'application/pdf,application/octet-stream;q=0.9,*/*;q=0.8',
+    },
+  })
+  if (!res.ok()) {
+    console.warn(`[CEJ] Doc download HTTP ${res.status()} for ${docUrl}`)
+    return null
+  }
+  return Buffer.from(await res.body())
+}
+
+
+async function uploadActuacionDocuments(
+  page: Page,
+  actuaciones: CejActuacion[],
+  numeroExpediente: string
+): Promise<void> {
+  for (const a of actuaciones) {
+    if (!a.tieneDocumento || !a.documentoUrl) continue
+    try {
+      const buf = await downloadCejDocumentBuffer(page, a.documentoUrl)
+      if (!buf) {
+        a.documentoUrl = ''
+        continue
+      }
+      if (!bufferLooksLikePdf(buf)) {
+        const sniff = buf.subarray(0, 200).toString('utf8').replace(/\s+/g, ' ').slice(0, 120)
+        console.warn(
+          `[CEJ] Respuesta no es PDF (HTML/captcha u otro). bytes=${buf.length} head="${sniff}" url=${a.documentoUrl}`
+        )
+        a.documentoUrl = ''
+        continue
+      }
+      const uploadedUrl = await uploadPdfToSupabase(buf, numeroExpediente, a.fecha ?? '', a.acto ?? '')
+      if (uploadedUrl) {
+        a.documentoUrl = uploadedUrl
+        console.log(`[CEJ] Doc saved: ${uploadedUrl}`)
+      } else {
+        a.documentoUrl = ''
+      }
+    } catch (err) {
+      console.error('[CEJ] Doc upload error:', err instanceof Error ? err.message : String(err))
+      a.documentoUrl = ''
+    }
+  }
 }
 
 async function parseCaseHeader(page: Page): Promise<Partial<CejCaseData>> {
@@ -672,6 +865,8 @@ async function scrapeResultsPage(page: Page, baseResult: CejCaseData, numeroExpe
 
   const hashInput = actuaciones.slice(0, 5).map(a => `${a.fecha}|${a.acto}|${a.sumilla}`).join(';')
   const hash = crypto.createHash('md5').update(hashInput || numeroExpediente).digest('hex')
+
+  await uploadActuacionDocuments(page, actuaciones, numeroExpediente)
 
   return { ...baseResult, ...headerData, actuaciones, totalActuaciones: actuaciones.length, hash, portalDown: false }
 }
@@ -1034,6 +1229,7 @@ async function tryDirectAccess(
 ): Promise<CejCaseData | null> {
   let browser: Browser | null = null
   try {
+    applyCejStealthOnce()
     browser = await chromium.launch(cejChromiumLaunchOptions()) as unknown as Browser
 
     const context = await browser.newContext({
@@ -1121,8 +1317,13 @@ export async function scrapeCEJ(numeroExpediente: string, parte: string): Promis
 }
 
 async function _scrapeCEJ(numeroExpediente: string, maxRetries: number, parte: string): Promise<CejCaseData> {
-  // Vercel: Playwright not supported
-  if (process.env.VERCEL === '1') {
+  // Serverless (Vercel producción/preview): sin Playwright. En `next dev` NODE_ENV=development → no se bloquea
+  // aunque tengas VERCEL=1 por error en .env. Para forzar scrape con `next start` local: CEJ_FORCE_PLAYWRIGHT=1
+  const vercelServerless =
+    process.env.VERCEL === '1' &&
+    process.env.NODE_ENV !== 'development' &&
+    process.env.CEJ_FORCE_PLAYWRIGHT !== '1'
+  if (vercelServerless) {
     return {
       numeroExpediente,
       organoJurisdiccional: '', distritoJudicial: '', juez: '',
@@ -1162,6 +1363,7 @@ async function _scrapeCEJ(numeroExpediente: string, maxRetries: number, parte: s
     try {
       console.log(`[CEJ] hCaptcha attempt ${attempt}/${maxRetries} — ${numeroExpediente}`)
 
+      applyCejStealthOnce()
       browser = await chromium.launch(cejChromiumLaunchOptions()) as unknown as Browser
 
       const context = await browser.newContext({

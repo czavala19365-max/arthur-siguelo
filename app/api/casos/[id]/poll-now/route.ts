@@ -3,7 +3,8 @@ import {
   getCasoById,
   getMovimientosByCaso,
   logNotificacionJudicial,
-  updateCaso
+  updateCaso,
+  updateMovimientoJudicial
 } from '@/lib/db'
 import { scrapeCEJ } from '@/lib/cej-scraper'
 import { clasificarMovimientoCEJ } from '@/lib/ai-service'
@@ -43,11 +44,21 @@ export async function POST(
     const existing = getMovimientosByCaso(casoId)
     const existingKeys = new Set(existing.map(m => movementKey(m)))
 
-    const movimientos = result.actuaciones.map(a => ({
+    console.log('[POLL] result.hash:', result.hash)
+    console.log('[POLL] result.actuaciones count:', result.actuaciones?.length ?? 'undefined')
+    console.log('[POLL] primera actuacion:', JSON.stringify(result.actuaciones?.[0], null, 2))
+
+    const actuaciones = Array.isArray(result.actuaciones) ? result.actuaciones : []
+
+    console.log('[POLL] existing movimientos en BD:', existing.length)
+    console.log('[POLL] existingKeys sample:', [...existingKeys].slice(0, 2))
+    const movimientos = actuaciones.map(a => ({
       fecha: a.fecha,
       acto: a.acto,
       folio: a.folio,
       sumilla: a.sumilla,
+      tieneDocumento: a.tieneDocumento,
+      documentoUrl: a.documentoUrl,
     }))
     const ultimoMovimiento =
       movimientos.length > 0
@@ -56,26 +67,40 @@ export async function POST(
     const etapaProcesal = result.etapa || result.estadoProceso || ''
 
     const nuevos = movimientos.filter(m => !existingKeys.has(movementKey(m)))
-    const enriched = []
+    console.log('[POLL] nuevos a insertar:', nuevos.length)
 
+    // 1) Guardar TODOS los nuevos en BD inmediatamente (sin IA)
+    const inserted: Array<{ id: number; mov: (typeof nuevos)[0] }> = []
     for (const mov of nuevos) {
-      const cls = await clasificarMovimientoCEJ(
-        mov.acto,
-        mov.sumilla,
-        caso.numero_expediente
-      ).catch(() => ({ urgencia: 'info' as const, sugerencia: 'Revisar movimiento en CEJ.' }))
-
-      addMovimientoJudicial(casoId, {
+      const rowId = addMovimientoJudicial(casoId, {
         fecha: mov.fecha,
         acto: mov.acto,
         folio: mov.folio,
         sumilla: mov.sumilla,
         es_nuevo: true,
-        urgencia: cls.urgencia,
-        ai_sugerencia: cls.sugerencia,
+        urgencia: 'info',
+        ai_sugerencia: null,
+        tiene_documento: mov.tieneDocumento,
+        documento_url: mov.documentoUrl || null,
       })
+      inserted.push({ id: rowId, mov })
+    }
+    console.log('[POLL] insertados en BD:', inserted.length)
 
-      enriched.push({ ...mov, urgencia: cls.urgencia, sugerencia: cls.sugerencia })
+    // 2) Clasificar con IA solo el más reciente
+    const enriched: Array<{ acto: string; sumilla: string; urgencia: 'alta' | 'normal' | 'info'; sugerencia: string }> = []
+    if (inserted.length > 0) {
+      const first = inserted[0]
+      const cls = await clasificarMovimientoCEJ(
+        first.mov.acto,
+        first.mov.sumilla,
+        caso.numero_expediente
+      ).catch(() => ({ urgencia: 'info' as const, sugerencia: 'Revisar movimiento en CEJ.' }))
+
+      // 3) Actualizar solo esa fila con el resultado de IA
+      updateMovimientoJudicial(first.id, { urgencia: cls.urgencia, ai_sugerencia: cls.sugerencia })
+
+      enriched.push({ acto: first.mov.acto, sumilla: first.mov.sumilla, urgencia: cls.urgencia, sugerencia: cls.sugerencia })
     }
 
     const last = ultimoMovimiento

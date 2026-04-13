@@ -35,6 +35,18 @@ const IconChat = () => (
   </svg>
 );
 
+const IconFolder = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M2.5 4.5h4l1.5 2h6a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1z" />
+  </svg>
+);
+
+const IconTrash = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M2.5 4h11M6.5 4V2.5h3V4M5.5 4l1 10h3l1-10" />
+  </svg>
+);
+
 export default function JudicialSidebar() {
   const pathname = usePathname();
   const router = useRouter();
@@ -56,12 +68,17 @@ export default function JudicialSidebar() {
 
   const links = [
     { href: '/judicial', label: 'Mis Procesos', Icon: IconGrid },
+    { href: '/judicial/archivados', label: 'Archivados', Icon: IconFolder },
+    { href: '/judicial/papelera', label: 'Eliminados', Icon: IconTrash },
     { href: '/judicial/agenda', label: 'Agenda', Icon: IconCalendar },
     { href: '/judicial/alertas', label: 'Alertas', Icon: IconBell },
     { href: '/judicial/chat', label: 'Chat IA', Icon: IconChat },
   ];
 
-  const isActive = (href: string) => (href === '/judicial' ? pathname === '/judicial' : pathname.startsWith(href));
+  const isActive = (href: string) => {
+    if (href === '/judicial') return pathname === '/judicial';
+    return pathname === href || pathname.startsWith(`${href}/`);
+  };
 
   return (
     <>

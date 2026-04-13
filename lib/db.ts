@@ -1,10 +1,45 @@
-import Database from 'better-sqlite3';
-import path from 'path';
-import fs from 'fs';
+import { createRequire } from 'node:module';
+import path from 'node:path';
+import fs from 'node:fs';
 
-let _db: Database.Database | null = null;
+type SqliteDatabaseCtor = typeof import('better-sqlite3');
+type SqliteDatabase = InstanceType<SqliteDatabaseCtor>;
 
-function getDb(): Database.Database {
+/**
+ * Resolver `better-sqlite3` desde la raíz del proyecto (`node_modules`).
+ * `createRequire(import.meta.url)` en chunks `.next/server/...` no resuelve dependencias nativas.
+ */
+const requireSqlite = createRequire(path.join(process.cwd(), 'package.json'));
+
+function loadBetterSqliteConstructor(): SqliteDatabaseCtor {
+  const mod = requireSqlite('better-sqlite3') as unknown;
+  if (typeof mod === 'function') return mod as SqliteDatabaseCtor;
+  const wrapped = mod as { default?: unknown };
+  if (typeof wrapped?.default === 'function') return wrapped.default as SqliteDatabaseCtor;
+  throw new Error('better-sqlite3: could not load native constructor');
+}
+
+let _db: SqliteDatabase | null = null;
+
+/** Elimina de la BD los casos en papelera (>30 días en deleted_at) y sus filas relacionadas. */
+function purgeJudicialCasosPapelera(db: SqliteDatabase): void {
+  const ids = db
+    .prepare(
+      `SELECT id FROM casos
+       WHERE deleted_at IS NOT NULL
+         AND datetime(deleted_at) <= datetime('now', '-30 days')`
+    )
+    .all() as { id: number }[];
+  for (const { id } of ids) {
+    db.prepare('DELETE FROM movimientos WHERE caso_id = ?').run(id);
+    db.prepare('DELETE FROM audiencias WHERE caso_id = ?').run(id);
+    db.prepare('DELETE FROM escritos_judiciales WHERE caso_id = ?').run(id);
+    db.prepare('DELETE FROM notificaciones_judiciales WHERE caso_id = ?').run(id);
+    db.prepare('DELETE FROM casos WHERE id = ?').run(id);
+  }
+}
+
+function getDb(): SqliteDatabase {
   if (!_db) {
     const isVercel = !!process.env.VERCEL;
     const dbPath = isVercel
@@ -14,6 +49,7 @@ function getDb(): Database.Database {
     if (!fs.existsSync(dataDir)) {
       fs.mkdirSync(dataDir, { recursive: true });
     }
+    const Database = loadBetterSqliteConstructor();
     _db = new Database(dbPath);
     _db.pragma('journal_mode = WAL');
     _db.pragma('foreign_keys = ON');
@@ -22,7 +58,7 @@ function getDb(): Database.Database {
   return _db;
 }
 
-function initSchema(db: Database.Database) {
+function initSchema(db: SqliteDatabase) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS tramites (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -216,6 +252,21 @@ function initSchema(db: Database.Database) {
   if (!movColNames.has('ai_analisis')) {
     db.exec('ALTER TABLE movimientos ADD COLUMN ai_analisis TEXT');
   }
+
+  const casoCols = db.prepare('PRAGMA table_info(casos)').all() as { name: string }[];
+  const casoColNames = new Set(casoCols.map(c => c.name));
+  if (!casoColNames.has('archived_at')) {
+    db.exec('ALTER TABLE casos ADD COLUMN archived_at TEXT');
+  }
+  if (!casoColNames.has('deleted_at')) {
+    db.exec('ALTER TABLE casos ADD COLUMN deleted_at TEXT');
+  }
+  db.prepare(`
+    UPDATE casos SET deleted_at = datetime('now'), archived_at = NULL
+    WHERE activo = 0 AND archived_at IS NULL AND deleted_at IS NULL
+  `).run();
+
+  purgeJudicialCasosPapelera(db);
 
   // Purge tramites deleted > 30 days ago
   db.prepare(`
@@ -468,6 +519,8 @@ export interface Caso {
   activo: number;
   last_checked: string | null;
   created_at: string;
+  archived_at: string | null;
+  deleted_at: string | null;
 }
 
 export interface MovimientoJudicial {
@@ -520,9 +573,39 @@ export interface NotificacionJudicial {
 }
 
 export function getAllCasosActivos(): Caso[] {
-  return getDb().prepare(
-    'SELECT * FROM casos WHERE activo = 1 ORDER BY created_at DESC'
-  ).all() as Caso[];
+  const db = getDb();
+  purgeJudicialCasosPapelera(db);
+  return db
+    .prepare(
+      `SELECT * FROM casos
+       WHERE activo = 1 AND archived_at IS NULL AND deleted_at IS NULL
+       ORDER BY created_at DESC`
+    )
+    .all() as Caso[];
+}
+
+export function getCasosArchivados(): Caso[] {
+  const db = getDb();
+  purgeJudicialCasosPapelera(db);
+  return db
+    .prepare(
+      `SELECT * FROM casos
+       WHERE archived_at IS NOT NULL AND deleted_at IS NULL
+       ORDER BY archived_at DESC`
+    )
+    .all() as Caso[];
+}
+
+export function getCasosPapelera(): Caso[] {
+  const db = getDb();
+  purgeJudicialCasosPapelera(db);
+  return db
+    .prepare(
+      `SELECT * FROM casos
+       WHERE deleted_at IS NOT NULL
+       ORDER BY deleted_at DESC`
+    )
+    .all() as Caso[];
 }
 
 export function getCasoById(id: number): Caso | null {
@@ -576,8 +659,44 @@ export function updateCaso(id: number, data: Partial<Caso>) {
   db.prepare(`UPDATE casos SET ${setClause} WHERE id = ?`).run(...values, id);
 }
 
+/** Mueve el caso a la papelera (30 días hasta borrado definitivo). */
+export function moveCasoToPapelera(id: number) {
+  getDb()
+    .prepare(
+      `UPDATE casos SET activo = 0, deleted_at = datetime('now'), archived_at = NULL WHERE id = ?`
+    )
+    .run(id);
+}
+
+export function archiveCaso(id: number) {
+  getDb()
+    .prepare(
+      `UPDATE casos SET activo = 0, archived_at = datetime('now'), deleted_at = NULL WHERE id = ?`
+    )
+    .run(id);
+}
+
+export function restoreCasoFromArchive(id: number) {
+  getDb()
+    .prepare(
+      `UPDATE casos SET activo = 1, archived_at = NULL
+       WHERE id = ? AND archived_at IS NOT NULL AND deleted_at IS NULL`
+    )
+    .run(id);
+}
+
+export function restoreCasoFromPapelera(id: number) {
+  getDb()
+    .prepare(
+      `UPDATE casos SET activo = 1, deleted_at = NULL
+       WHERE id = ? AND deleted_at IS NOT NULL`
+    )
+    .run(id);
+}
+
+/** @deprecated Usar moveCasoToPapelera */
 export function softDeleteCaso(id: number) {
-  getDb().prepare('UPDATE casos SET activo = 0 WHERE id = ?').run(id);
+  moveCasoToPapelera(id);
 }
 
 export function getMovimientosByCaso(casoId: number): MovimientoJudicial[] {
@@ -625,6 +744,17 @@ export function addMovimientoJudicial(
     data.ai_analisis ?? null
   );
   return result.lastInsertRowid as number;
+}
+
+export function updateMovimientoJudicial(
+  id: number,
+  data: Partial<Pick<MovimientoJudicial, 'urgencia' | 'ai_sugerencia' | 'ai_analisis'>>
+) {
+  const entries = Object.entries(data).filter(([, v]) => v !== undefined);
+  if (entries.length === 0) return;
+  const setClause = entries.map(([k]) => `${k} = ?`).join(', ');
+  const values = entries.map(([, v]) => v);
+  getDb().prepare(`UPDATE movimientos SET ${setClause} WHERE id = ?`).run(...values, id);
 }
 
 export function getAudienciasByCaso(casoId: number): AudienciaJudicial[] {
@@ -690,16 +820,23 @@ export function logNotificacionJudicial(
 
 export function getCasosStats() {
   const db = getDb();
-  const total = (db.prepare('SELECT COUNT(*) as c FROM casos').get() as { c: number }).c;
-  const activos = (db.prepare('SELECT COUNT(*) as c FROM casos WHERE activo = 1').get() as { c: number }).c;
-  const conAlerta = (db.prepare(
-    "SELECT COUNT(DISTINCT caso_id) as c FROM movimientos WHERE es_nuevo = 1 AND urgencia = 'alta'"
-  ).get() as { c: number }).c;
+  const activeFilter = `activo = 1 AND archived_at IS NULL AND deleted_at IS NULL`;
+  const total = (db.prepare(`SELECT COUNT(*) as c FROM casos WHERE ${activeFilter}`).get() as { c: number }).c;
+  const activos = total;
+  const conAlerta = (db
+    .prepare(
+      `SELECT COUNT(DISTINCT m.caso_id) as c
+       FROM movimientos m
+       JOIN casos c ON c.id = m.caso_id
+       WHERE m.es_nuevo = 1 AND m.urgencia = 'alta'
+         AND c.activo = 1 AND c.archived_at IS NULL AND c.deleted_at IS NULL`
+    )
+    .get() as { c: number }).c;
   const proximasAudiencias = (db.prepare(`
     SELECT COUNT(*) as c
     FROM audiencias a
     JOIN casos c ON c.id = a.caso_id
-    WHERE c.activo = 1
+    WHERE c.activo = 1 AND c.archived_at IS NULL AND c.deleted_at IS NULL
       AND a.completado = 0
       AND date(a.fecha) BETWEEN date('now') AND date('now', '+7 day')
   `).get() as { c: number }).c;

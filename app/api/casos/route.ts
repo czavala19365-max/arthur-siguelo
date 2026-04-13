@@ -1,6 +1,103 @@
-import { addMovimientoJudicial, createCaso, getAllCasosActivos, updateCaso } from '@/lib/db'
+import { after } from 'next/server'
+import { addMovimientoJudicial, createCaso, getAllCasosActivos, updateCaso, updateMovimientoJudicial, type Caso } from '@/lib/db'
 import { clasificarMovimientoCEJ } from '@/lib/ai-service'
-import { scrapeCEJ } from '@/lib/cej-scraper'
+
+export const runtime = 'nodejs'
+
+type ScrapeFn = (typeof import('@/lib/cej-scraper'))['scrapeCEJ']
+
+/** Sincroniza CEJ → DB (misma lógica que el POST antiguo, pero puede ejecutarse en segundo plano). */
+async function runInitialCejSync(caso: Caso, scrapeCEJ: ScrapeFn) {
+  let scrapeResult: Awaited<ReturnType<ScrapeFn>> | null = null
+  try {
+    scrapeResult = await scrapeCEJ(caso.numero_expediente, caso.partes ?? '')
+  } catch (err) {
+    console.error('[API] Initial CEJ poll error (background):', err)
+    updateCaso(caso.id, { last_checked: new Date().toISOString() })
+    return
+  }
+
+  if (!scrapeResult || scrapeResult.portalDown) {
+    updateCaso(caso.id, { last_checked: scrapeResult?.scrapedAt ?? new Date().toISOString() })
+    return
+  }
+
+  if (scrapeResult.captchaDetected && !scrapeResult.captchaSolved) {
+    updateCaso(caso.id, { last_checked: scrapeResult.scrapedAt })
+    return
+  }
+
+  const actuaciones = Array.isArray(scrapeResult.actuaciones) ? scrapeResult.actuaciones : []
+  const partesScrape = Array.isArray(scrapeResult.partes) ? scrapeResult.partes : []
+
+  const movimientos = actuaciones.map(a => ({
+    fecha: a.fecha,
+    acto: a.acto,
+    folio: a.folio,
+    sumilla: a.sumilla,
+    tieneDocumento: a.tieneDocumento,
+    documentoUrl: a.documentoUrl,
+  }))
+
+  const first =
+    movimientos.length > 0
+      ? [...movimientos].sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())[0]
+      : null
+
+  const etapaProcesal = scrapeResult.etapa || scrapeResult.estadoProceso || ''
+  const partesText = partesScrape.map(p => `${p.rol}: ${p.nombre}`).join(' | ') || null
+
+  updateCaso(caso.id, {
+    ultimo_movimiento: first?.sumilla || first?.acto || null,
+    ultimo_movimiento_fecha: first?.fecha || null,
+    etapa_procesal: etapaProcesal || null,
+    juez: scrapeResult.juez || null,
+    organo_jurisdiccional: scrapeResult.organoJurisdiccional || null,
+    partes: partesText,
+    estado_hash: scrapeResult.hash || null,
+    last_checked: scrapeResult.scrapedAt,
+  })
+
+  const rows: Array<{
+    id: number
+    mov: (typeof movimientos)[0]
+  }> = []
+  for (const mov of movimientos) {
+    try {
+      const rowId = addMovimientoJudicial(caso.id, {
+        fecha: mov.fecha,
+        acto: mov.acto,
+        folio: mov.folio,
+        sumilla: mov.sumilla,
+        es_nuevo: true,
+        urgencia: 'info',
+        ai_sugerencia: null,
+        tiene_documento: mov.tieneDocumento,
+        documento_url: mov.documentoUrl || null,
+      })
+      rows.push({ id: rowId, mov })
+    } catch (movErr) {
+      console.error('[API] addMovimientoJudicial failed (background):', movErr)
+    }
+  }
+
+  console.log(`[API] CEJ sync: caso ${caso.id} — ${rows.length} filas guardadas; clasificando IA…`)
+
+  for (const { id, mov } of rows) {
+    const cls = await clasificarMovimientoCEJ(
+      mov.acto ?? '',
+      mov.sumilla ?? '',
+      caso.numero_expediente
+    ).catch(() => ({ urgencia: 'info' as const, sugerencia: 'Revisar movimiento en CEJ.' }))
+    try {
+      updateMovimientoJudicial(id, { urgencia: cls.urgencia, ai_sugerencia: cls.sugerencia })
+    } catch (e) {
+      console.error('[API] updateMovimientoJudicial failed:', e)
+    }
+  }
+
+  console.log(`[API] CEJ sync finished for caso ${caso.id}: ${movimientos.length} movimientos persistidos`)
+}
 
 export async function GET() {
   try {
@@ -16,6 +113,7 @@ export async function POST(request: Request) {
   try {
     const body = await request.json() as Record<string, unknown>
 
+    const pollHours = Number(body.polling_frequency_hours ?? 4)
     const caso = createCaso({
       numero_expediente: String(body.numero_expediente ?? ''),
       distrito_judicial: String(body.distrito_judicial ?? 'Lima'),
@@ -25,93 +123,55 @@ export async function POST(request: Request) {
       cliente: body.cliente ? String(body.cliente) : null,
       alias: body.alias ? String(body.alias) : null,
       prioridad: (body.prioridad as 'alta' | 'media' | 'baja') || 'baja',
-      polling_frequency_hours: Number(body.polling_frequency_hours ?? 4),
+      polling_frequency_hours: Number.isFinite(pollHours) && pollHours > 0 ? pollHours : 4,
       whatsapp_number: body.whatsapp_number ? String(body.whatsapp_number) : null,
       email: body.email ? String(body.email) : null,
       activo: 1,
       estado: 'activo',
     })
 
-    // Await CEJ scraping (blocks until done or timeout)
-    let scrapeResult: Awaited<ReturnType<typeof scrapeCEJ>> | null = null
+    let scrapeCEJ: (typeof import('@/lib/cej-scraper'))['scrapeCEJ']
     try {
-      scrapeResult = await scrapeCEJ(caso.numero_expediente, caso.partes ?? '')
-    } catch (err) {
-      console.error('[API] Initial CEJ poll error:', err)
+      const mod = await import('@/lib/cej-scraper')
+      scrapeCEJ = mod.scrapeCEJ
+    } catch (modErr) {
+      console.error('[API] POST /casos: no se pudo cargar el módulo CEJ (Playwright/stealth):', modErr)
+      updateCaso(caso.id, { last_checked: new Date().toISOString() })
+      return Response.json(
+        {
+          ...caso,
+          success: true,
+          portalDown: true,
+          message:
+            'Caso guardado en la base de datos. La consulta automática al CEJ no está disponible en este entorno (revisa consola del servidor).',
+        },
+        { status: 201 }
+      )
     }
 
-    if (!scrapeResult || scrapeResult.portalDown) {
-      updateCaso(caso.id, { last_checked: scrapeResult?.scrapedAt ?? new Date().toISOString() })
-      return Response.json({
-        ...caso,
-        success: true,
-        portalDown: true,
-        message: 'Caso guardado. Portal CEJ no disponible ahora.',
-      }, { status: 201 })
-    }
-
-    if (scrapeResult.captchaDetected && !scrapeResult.captchaSolved) {
-      updateCaso(caso.id, { last_checked: scrapeResult.scrapedAt })
-      return Response.json({
-        ...caso,
-        success: true,
-        captchaFailed: true,
-        message: 'Caso guardado. Captcha no resuelto — reintentará en próxima revisión.',
-      }, { status: 201 })
-    }
-
-    // Scraping succeeded — update caso with real data
-    const movimientos = scrapeResult.actuaciones.map(a => ({
-      fecha: a.fecha,
-      acto: a.acto,
-      folio: a.folio,
-      sumilla: a.sumilla,
-    }))
-
-    const first =
-      movimientos.length > 0
-        ? [...movimientos].sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())[0]
-        : null
-
-    const etapaProcesal = scrapeResult.etapa || scrapeResult.estadoProceso || ''
-    const partesText = scrapeResult.partes.map(p => `${p.rol}: ${p.nombre}`).join(' | ') || null
-
-    updateCaso(caso.id, {
-      ultimo_movimiento: first?.sumilla || first?.acto || null,
-      ultimo_movimiento_fecha: first?.fecha || null,
-      etapa_procesal: etapaProcesal || null,
-      juez: scrapeResult.juez || null,
-      organo_jurisdiccional: scrapeResult.organoJurisdiccional || null,
-      partes: partesText,
-      estado_hash: scrapeResult.hash || null,
-      last_checked: scrapeResult.scrapedAt,
-    })
-
-    for (const mov of movimientos.slice(0, 10)) {
-      const cls = await clasificarMovimientoCEJ(
-        mov.acto,
-        mov.sumilla,
-        caso.numero_expediente
-      ).catch(() => ({ urgencia: 'info' as const, sugerencia: 'Revisar movimiento en CEJ.' }))
-
-      addMovimientoJudicial(caso.id, {
-        fecha: mov.fecha,
-        acto: mov.acto,
-        folio: mov.folio,
-        sumilla: mov.sumilla,
-        es_nuevo: true,
-        urgencia: cls.urgencia,
-        ai_sugerencia: cls.sugerencia,
+    // No esperar al scrape: `after()` asegura que Next ejecute el trabajo tras enviar la respuesta (no se pierde como con void suelto).
+    after(() =>
+      runInitialCejSync(caso, scrapeCEJ).catch(err => {
+        console.error('[API] runInitialCejSync error:', err)
       })
-    }
+    )
 
-    return Response.json({
-      ...caso,
-      success: true,
-      movimientosCount: movimientos.length,
-    }, { status: 201 })
+    return Response.json(
+      {
+        ...caso,
+        success: true,
+        syncPending: true,
+        message:
+          'Caso guardado. Sincronizando con el CEJ en segundo plano (1–3 min). La lista se actualizará al terminar.',
+      },
+      { status: 201 }
+    )
   } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error)
     console.error('[API] POST /casos error:', error)
-    return Response.json({ error: 'Error al crear proceso judicial' }, { status: 500 })
+    return Response.json(
+      { error: 'Error al crear proceso judicial', detail: process.env.NODE_ENV === 'development' ? msg : undefined },
+      { status: 500 }
+    )
   }
 }
