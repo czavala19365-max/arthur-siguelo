@@ -1,4 +1,4 @@
-import nodemailer from 'nodemailer'
+import { Resend } from 'resend'
 import type { MovimientoJudicialAlerta, NivelUrgencia } from '../alert-service'
 
 function buildSubject(m: MovimientoJudicialAlerta): string {
@@ -108,32 +108,28 @@ export async function enviarEmail(
   destinatario: string,
   movimiento: MovimientoJudicialAlerta
 ): Promise<boolean> {
-  const host = process.env.EMAIL_HOST
-  const port = parseInt(process.env.EMAIL_PORT || '587')
-  const user = process.env.EMAIL_USER
-  const pass = process.env.EMAIL_PASS
-  const from = process.env.EMAIL_FROM || user
+  const apiKey = process.env.RESEND_API_KEY
+  const fromEmail = process.env.RESEND_FROM_EMAIL
 
-  if (!host || !user || !pass) {
-    console.warn('[Email] Credenciales de email no configuradas')
+  if (!apiKey || !fromEmail) {
+    console.warn('[Email] RESEND_API_KEY o RESEND_FROM_EMAIL no configurados')
     return false
   }
 
   try {
-    const transporter = nodemailer.createTransport({
-      host,
-      port,
-      secure: port === 465,
-      auth: { user, pass },
-    })
-
-    await transporter.sendMail({
-      from: `"Arthur-IA Judicial" <${from}>`,
+    const resend = new Resend(apiKey)
+    const { error } = await resend.emails.send({
+      from: `Arthur-IA Judicial <${fromEmail}>`,
       to: destinatario,
       subject: buildSubject(movimiento),
       html: buildHtml(movimiento),
       text: buildText(movimiento),
     })
+
+    if (error) {
+      console.error('[Email] Resend:', error.message)
+      return false
+    }
 
     console.log(`[Email] Enviado a ${destinatario}`)
     return true

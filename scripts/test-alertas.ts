@@ -14,10 +14,10 @@ const movimientoPrueba = {
 const configPrueba = {
   usuarioId: 'test-user',
   email: process.env.TEST_ALERT_EMAIL || 'jorge@ejemplo.com',
-  telefonoCelular: process.env.TEST_ALERT_PHONE || '+51999999999',
-  telegramChatId: process.env.TEST_ALERT_TELEGRAM || '',
+  telefonoCelular: process.env.TEST_ALERT_PHONE || '+34673364097',
+  telegramChatId: process.env.TEST_ALERT_TELEGRAM || '8726463286',
   canalesActivos: {
-    email: !!process.env.EMAIL_USER,
+    email: !!(process.env.RESEND_API_KEY && process.env.RESEND_FROM_EMAIL),
     whatsapp: !!process.env.TWILIO_ACCOUNT_SID,
     telegram: !!process.env.TELEGRAM_BOT_TOKEN,
   },
