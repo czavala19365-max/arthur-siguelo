@@ -150,6 +150,7 @@ export async function POST(request: Request) {
     }
 
     // No esperar al scrape: `after()` asegura que Next ejecute el trabajo tras enviar la respuesta (no se pierde como con void suelto).
+    // La sincronización completa (movimientos + IA) vive en `runInitialCejSync` — equivalente al flujo inline de la rama bot, pero en background.
     after(() =>
       runInitialCejSync(caso, scrapeCEJ).catch(err => {
         console.error('[API] runInitialCejSync error:', err)

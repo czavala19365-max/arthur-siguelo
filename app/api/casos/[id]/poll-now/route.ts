@@ -103,11 +103,12 @@ export async function POST(
       enriched.push({ acto: first.mov.acto, sumilla: first.mov.sumilla, urgencia: cls.urgencia, sugerencia: cls.sugerencia })
     }
 
+    // `ultimoMovimiento` ordena por fecha (misma intención que `result.actuaciones[0]` en la otra rama, con orden explícito).
     const last = ultimoMovimiento
     updateCaso(casoId, {
       ultimo_movimiento: last?.sumilla || last?.acto || null,
       ultimo_movimiento_fecha: last?.fecha || null,
-      etapa_procesal: etapaProcesal || null,
+      etapa_procesal: etapaProcesal || result.etapa || null,
       juez: result.juez || null,
       estado_hash: result.hash || null,
       last_checked: result.scrapedAt,
