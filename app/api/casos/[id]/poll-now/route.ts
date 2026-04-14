@@ -2,13 +2,14 @@ import {
   addMovimientoJudicial,
   getCasoById,
   getMovimientosByCaso,
+  getAlertaConfigParaCaso,
   logNotificacionJudicial,
   updateCaso,
   updateMovimientoJudicial
 } from '@/lib/db'
 import { scrapeCEJ } from '@/lib/cej-scraper'
 import { clasificarMovimientoCEJ } from '@/lib/ai-service'
-import { sendJudicialEmail, sendJudicialWhatsApp } from '@/lib/notifications'
+import { enviarAlertaMovimiento, type NivelUrgencia } from '@/lib/alert-service'
 
 function movementKey(m: { fecha?: string | null; acto?: string | null; folio?: string | null; sumilla?: string | null }) {
   return `${m.fecha || ''}|${m.acto || ''}|${m.folio || ''}|${m.sumilla || ''}`
@@ -114,31 +115,31 @@ export async function POST(
       last_checked: result.scrapedAt,
     })
 
-    const alta = enriched.find(m => m.urgencia === 'alta')
-    if (alta) {
-      const suggestion = alta.sugerencia || 'Revisar inmediatamente este movimiento judicial.'
-      if (caso.whatsapp_number) {
-        const ok = await sendJudicialWhatsApp(
-          caso.whatsapp_number,
-          caso.alias || caso.cliente || `Caso ${caso.id}`,
-          alta.acto,
-          'alta',
-          suggestion,
-          caso.id
+    if (enriched.length > 0) {
+      const movToAlert = enriched[0]
+      const suggestion = movToAlert.sugerencia || 'Revisar este movimiento judicial.'
+      const urgenciaMap: Record<string, NivelUrgencia> = { alta: 'alta', normal: 'media', info: 'baja' }
+      const nivel: NivelUrgencia = urgenciaMap[movToAlert.urgencia] ?? 'baja'
+      const alertConfig = getAlertaConfigParaCaso(casoId)
+
+      if (alertConfig) {
+        const result = await enviarAlertaMovimiento(
+          {
+            expedienteId: String(caso.id),
+            numeroExpediente: caso.numero_expediente,
+            descripcion: movToAlert.sumilla || movToAlert.acto,
+            nivelUrgencia: nivel,
+            sugerenciaIA: suggestion,
+            casoNombre: caso.alias || caso.cliente || undefined,
+          },
+          alertConfig
         )
-        logNotificacionJudicial(caso.id, 'whatsapp', alta.sumilla || alta.acto, 'alta', suggestion, ok)
-      }
-      if (caso.email) {
-        const ok = await sendJudicialEmail(
-          caso.email,
-          caso.alias || caso.cliente || `Caso ${caso.id}`,
-          alta.acto,
-          alta.sumilla,
-          'alta',
-          suggestion,
-          caso.id
-        )
-        logNotificacionJudicial(caso.id, 'email', alta.sumilla || alta.acto, 'alta', suggestion, ok)
+        for (const canal of result.canalesExitosos) {
+          logNotificacionJudicial(caso.id, canal, movToAlert.sumilla || movToAlert.acto, nivel, suggestion, true)
+        }
+        if (!result.enviado) {
+          logNotificacionJudicial(caso.id, 'ninguno', movToAlert.sumilla || movToAlert.acto, nivel, suggestion, false)
+        }
       }
     }
 

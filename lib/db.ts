@@ -883,6 +883,48 @@ export function getCasosStats() {
   return { total, activos, conAlerta, proximasAudiencias };
 }
 
+// ── Alert config helper ─────────────────────────────────────────────────────
+
+import type { AlertaConfig } from './alert-service'
+
+/**
+ * Construye la config de alertas para un caso judicial.
+ * Lee email/whatsapp de la tabla `casos`.
+ * Si la tabla `bot_users` existe y tiene un registro vinculado, lee telegram_chat_id.
+ */
+export function getAlertaConfigParaCaso(casoId: number): AlertaConfig | null {
+  const db = getDb();
+  const caso = db.prepare('SELECT id, email, whatsapp_number FROM casos WHERE id = ?').get(casoId) as
+    | { id: number; email: string | null; whatsapp_number: string | null }
+    | undefined;
+  if (!caso) return null;
+
+  let telegramChatId: string | undefined;
+  try {
+    const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='bot_users'").all();
+    if (tables.length > 0) {
+      const row = db
+        .prepare('SELECT chat_id FROM bot_users WHERE caso_id = ? LIMIT 1')
+        .get(casoId) as { chat_id: string } | undefined;
+      if (row) telegramChatId = String(row.chat_id);
+    }
+  } catch {
+    // bot_users may not have caso_id column — ignore gracefully
+  }
+
+  return {
+    usuarioId: String(caso.id),
+    email: caso.email || undefined,
+    telefonoCelular: caso.whatsapp_number || undefined,
+    telegramChatId,
+    canalesActivos: {
+      email: !!caso.email,
+      whatsapp: !!caso.whatsapp_number,
+      telegram: !!telegramChatId,
+    },
+  };
+}
+
 export default getDb;
 
 // ── SUNARP Síguelo module ─────────────────────────────────────────────────────
