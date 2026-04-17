@@ -45,7 +45,7 @@ export async function PUT(
     const casoId = Number.parseInt(id, 10)
     const body = await request.json() as Record<string, unknown>
 
-    const allowed = ['alias', 'prioridad', 'whatsapp_number', 'email', 'polling_frequency_hours']
+    const allowed = ['alias', 'prioridad', 'whatsapp_number', 'email', 'polling_frequency_hours', 'parte_procesal']
     const updates: Record<string, unknown> = {}
     for (const key of allowed) {
       if (key in body) updates[key] = body[key]

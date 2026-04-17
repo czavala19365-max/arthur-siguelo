@@ -120,6 +120,7 @@ export async function POST(request: Request) {
       organo_jurisdiccional: body.organo_jurisdiccional ? String(body.organo_jurisdiccional) : null,
       tipo_proceso: body.tipo_proceso ? String(body.tipo_proceso) : null,
       partes: body.parte ? String(body.parte) : null,
+      parte_procesal: body.parte_procesal ? String(body.parte_procesal) : null,
       cliente: body.cliente ? String(body.cliente) : null,
       alias: body.alias ? String(body.alias) : null,
       prioridad: (body.prioridad as 'alta' | 'media' | 'baja') || 'baja',

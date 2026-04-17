@@ -1,9 +1,11 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-)
+function getSupabaseClient() {
+  const url = process.env.SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_KEY
+  if (!url || !key) return null
+  return createClient(url, key)
+}
 
 export async function uploadPdfToSupabase(
   buffer: Buffer,
@@ -12,6 +14,12 @@ export async function uploadPdfToSupabase(
   acto: string
 ): Promise<string | null> {
   try {
+    const supabase = getSupabaseClient()
+    if (!supabase) {
+      console.error('[Supabase] SUPABASE_URL or SUPABASE_SERVICE_KEY not set')
+      return null
+    }
+
     const sanitize = (s: string) => s.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80)
     const fileName = `${sanitize(fecha)}-${sanitize(acto)}.pdf`
     const filePath = `${sanitize(numeroExpediente)}/${fileName}`

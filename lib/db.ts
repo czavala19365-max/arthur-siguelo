@@ -147,7 +147,8 @@ function initSchema(db: SqliteDatabase) {
       email TEXT,
       activo INTEGER DEFAULT 1,
       last_checked TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
+      created_at TEXT DEFAULT (datetime('now')),
+      parte_procesal TEXT
     );
 
     CREATE TABLE IF NOT EXISTS movimientos (
@@ -299,6 +300,11 @@ function initSchema(db: SqliteDatabase) {
   }
   if (!casoColNames.has('deleted_at')) {
     db.exec('ALTER TABLE casos ADD COLUMN deleted_at TEXT');
+  }
+  try {
+    db.exec('ALTER TABLE casos ADD COLUMN parte_procesal TEXT');
+  } catch {
+    /* columna ya existe */
   }
   db.prepare(`
     UPDATE casos SET deleted_at = datetime('now'), archived_at = NULL
@@ -560,6 +566,7 @@ export interface Caso {
   created_at: string;
   archived_at: string | null;
   deleted_at: string | null;
+  parte_procesal?: string | null;
 }
 
 export interface MovimientoJudicial {

@@ -120,7 +120,7 @@ export default function JudicialDashboardPage() {
   const [activeTab, setActiveTab] = useState<'codigo' | 'filtros'>('codigo');
   const [expFields, setExpFields] = useState({ sec: '', ano: CURRENT_YEAR, dist: '', tipo: '', esp: '', juz: '' });
   const [form, setForm] = useState({
-    parte: '',
+    parte_procesal: '',
     filtro_distrito: 'Lima',
     filtro_ano: CURRENT_YEAR,
     filtro_numero: '',
@@ -223,7 +223,7 @@ export default function JudicialDashboardPage() {
     setActiveTab('codigo');
     setExpFields({ sec: '', ano: CURRENT_YEAR, dist: '', tipo: '', esp: '', juz: '' });
     setForm({
-      parte: '',
+      parte_procesal: '',
       filtro_distrito: 'Lima',
       filtro_ano: CURRENT_YEAR,
       filtro_numero: '',
@@ -258,7 +258,7 @@ export default function JudicialDashboardPage() {
 
     const payload: Record<string, unknown> = {
       numero_expediente,
-      parte: form.parte,
+      parte_procesal: form.parte_procesal,
       alias: form.alias || null,
       searchType: activeTab,
       whatsapp_number: form.whatsapp_number || null,
@@ -667,17 +667,17 @@ export default function JudicialDashboardPage() {
                 </p>
 
                 <label style={labelStyle}>
-                  APELLIDO PATERNO Y APELLIDO MATERNO O RAZÓN SOCIAL <span style={{ color: '#991b1b' }}>*</span>
+                  PARTE PROCESAL (PARA BÚSQUEDA EN CEJ) <span style={{ color: '#991b1b' }}>*</span>
                 </label>
                 <input
-                  value={form.parte}
-                  onChange={e => setForm(p => ({ ...p, parte: e.target.value }))}
-                  placeholder="Tal como aparece en las resoluciones"
+                  value={form.parte_procesal}
+                  onChange={e => setForm(p => ({ ...p, parte_procesal: e.target.value }))}
+                  placeholder="Ej: GARCIA LOPEZ o CONSTRUCTORA ANDINA SAC"
                   required
                   style={inputStyle}
                 />
                 <p style={{ fontFamily: 'var(--font-body)', fontSize: '11px', color: 'var(--muted)', marginTop: -12, marginBottom: '16px' }}>
-                  (*) Dato obligatorio requerido por el CEJ
+                  Ingresa el apellido paterno y materno, o la razón social exactamente como aparece en el CEJ
                 </p>
               </div>
             )}
@@ -719,17 +719,17 @@ export default function JudicialDashboardPage() {
                 </select>
 
                 <label style={labelStyle}>
-                  APELLIDO PATERNO Y APELLIDO MATERNO O RAZÓN SOCIAL <span style={{ color: '#991b1b' }}>*</span>
+                  PARTE PROCESAL (PARA BÚSQUEDA EN CEJ) <span style={{ color: '#991b1b' }}>*</span>
                 </label>
                 <input
-                  value={form.parte}
-                  onChange={e => setForm(p => ({ ...p, parte: e.target.value }))}
-                  placeholder="Tal como aparece en las resoluciones"
+                  value={form.parte_procesal}
+                  onChange={e => setForm(p => ({ ...p, parte_procesal: e.target.value }))}
+                  placeholder="Ej: GARCIA LOPEZ o CONSTRUCTORA ANDINA SAC"
                   required
                   style={inputStyle}
                 />
                 <p style={{ fontFamily: 'var(--font-body)', fontSize: '11px', color: 'var(--muted)', marginTop: -12, marginBottom: '16px' }}>
-                  (*) Dato obligatorio requerido por el CEJ
+                  Ingresa el apellido paterno y materno, o la razón social exactamente como aparece en el CEJ
                 </p>
               </div>
             )}
