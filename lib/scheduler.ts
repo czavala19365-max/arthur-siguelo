@@ -119,7 +119,7 @@ async function runLoop() {
 async function runJudicialLoop() {
   while (true) {
     try {
-      const casos = getAllCasosActivos()
+      const casos = await getAllCasosActivos()
       for (const caso of casos) {
         try {
           const intervalMs = (caso.polling_frequency_hours || 4) * 60 * 60 * 1000
@@ -132,12 +132,12 @@ async function runJudicialLoop() {
 
           if (!parte) {
             console.warn(`[Scheduler Judicial] Caso ${caso.id} (${caso.alias}) sin parte_procesal configurada — saltando`)
-            updateCaso(caso.id, { last_checked: new Date().toISOString() })
+            await updateCaso(caso.id, { last_checked: new Date().toISOString() })
             continue
           }
 
           const result = await scrapeCEJ(caso.numero_expediente, parte)
-          updateCaso(caso.id, { last_checked: new Date().toISOString() })
+          await updateCaso(caso.id, { last_checked: new Date().toISOString() })
           if (!result || result.portalDown || !result.actuaciones?.length) continue
 
           const ultimaActuacion = result.actuaciones[0]
@@ -145,7 +145,7 @@ async function runJudicialLoop() {
           const changed = nuevoHash !== (caso.estado_hash || '') && nuevoHash !== ''
           if (!changed) continue
 
-          addMovimientoJudicial(caso.id, {
+          await addMovimientoJudicial(caso.id, {
             fecha: ultimaActuacion.fecha,
             acto: ultimaActuacion.acto,
             folio: ultimaActuacion.folio || '',
@@ -154,7 +154,7 @@ async function runJudicialLoop() {
             urgencia: 'info',
           })
 
-          updateCaso(caso.id, {
+          await updateCaso(caso.id, {
             estado_hash: nuevoHash,
             ultimo_movimiento: ultimaActuacion.acto,
             ultimo_movimiento_fecha: ultimaActuacion.fecha,
@@ -174,7 +174,7 @@ async function runJudicialLoop() {
             ? 'alta'
             : 'normal'
 
-          const alertaConfig = getAlertaConfigParaCaso(caso.id)
+          const alertaConfig = await getAlertaConfigParaCaso(caso.id)
           const whatsappNum = alertaConfig?.telefonoCelular || caso.whatsapp_number
           const emailDest = alertaConfig?.email || caso.email
 
@@ -187,7 +187,7 @@ async function runJudicialLoop() {
               sugerencia,
               caso.id,
             ).catch(() => false)
-            logNotificacionJudicial(caso.id, 'whatsapp', ultimaActuacion.acto || '', urgencia, sugerencia, ok)
+            await logNotificacionJudicial(caso.id, 'whatsapp', ultimaActuacion.acto || '', urgencia, sugerencia, ok)
           }
           if (emailDest) {
             const ok = await sendJudicialEmail(
@@ -199,7 +199,7 @@ async function runJudicialLoop() {
               sugerencia,
               caso.id,
             ).catch(() => false)
-            logNotificacionJudicial(caso.id, 'email', ultimaActuacion.acto || '', urgencia, sugerencia, ok)
+            await logNotificacionJudicial(caso.id, 'email', ultimaActuacion.acto || '', urgencia, sugerencia, ok)
           }
 
           await sleep(3000)

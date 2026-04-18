@@ -22,13 +22,14 @@ export async function POST(
   try {
     const { id } = await params
     const casoId = Number.parseInt(id, 10)
-    const caso = getCasoById(casoId)
+    const caso = await getCasoById(casoId)
 
     if (!caso) {
       return Response.json({ error: 'Caso no encontrado' }, { status: 404 })
     }
 
-    const result = await scrapeCEJ(caso.numero_expediente, caso.partes ?? '')
+    const parte = caso.parte_procesal?.trim() || caso.partes || ''
+    const result = await scrapeCEJ(caso.numero_expediente, parte)
 
     if (result.portalDown) {
       return Response.json({
@@ -42,7 +43,7 @@ export async function POST(
     }
 
     const changed = result.hash !== (caso.estado_hash || '') && result.hash !== ''
-    const existing = getMovimientosByCaso(casoId)
+    const existing = await getMovimientosByCaso(casoId)
     const existingKeys = new Set(existing.map(m => movementKey(m)))
 
     console.log('[POLL] result.hash:', result.hash)
@@ -73,7 +74,7 @@ export async function POST(
     // 1) Guardar TODOS los nuevos en BD inmediatamente (sin IA)
     const inserted: Array<{ id: number; mov: (typeof nuevos)[0] }> = []
     for (const mov of nuevos) {
-      const rowId = addMovimientoJudicial(casoId, {
+      const rowId = await addMovimientoJudicial(casoId, {
         fecha: mov.fecha,
         acto: mov.acto,
         folio: mov.folio,
@@ -99,14 +100,14 @@ export async function POST(
       ).catch(() => ({ urgencia: 'info' as const, sugerencia: 'Revisar movimiento en CEJ.' }))
 
       // 3) Actualizar solo esa fila con el resultado de IA
-      updateMovimientoJudicial(first.id, { urgencia: cls.urgencia, ai_sugerencia: cls.sugerencia })
+      await updateMovimientoJudicial(first.id, { urgencia: cls.urgencia, ai_sugerencia: cls.sugerencia })
 
       enriched.push({ acto: first.mov.acto, sumilla: first.mov.sumilla, urgencia: cls.urgencia, sugerencia: cls.sugerencia })
     }
 
     // `ultimoMovimiento` ordena por fecha (misma intención que `result.actuaciones[0]` en la otra rama, con orden explícito).
     const last = ultimoMovimiento
-    updateCaso(casoId, {
+    await updateCaso(casoId, {
       ultimo_movimiento: last?.sumilla || last?.acto || null,
       ultimo_movimiento_fecha: last?.fecha || null,
       etapa_procesal: etapaProcesal || result.etapa || null,
@@ -120,10 +121,10 @@ export async function POST(
       const suggestion = movToAlert.sugerencia || 'Revisar este movimiento judicial.'
       const urgenciaMap: Record<string, NivelUrgencia> = { alta: 'alta', normal: 'media', info: 'baja' }
       const nivel: NivelUrgencia = urgenciaMap[movToAlert.urgencia] ?? 'baja'
-      const alertConfig = getAlertaConfigParaCaso(casoId)
+      const alertConfig = await getAlertaConfigParaCaso(casoId)
 
       if (alertConfig) {
-        const result = await enviarAlertaMovimiento(
+        const alertaResult = await enviarAlertaMovimiento(
           {
             expedienteId: String(caso.id),
             numeroExpediente: caso.numero_expediente,
@@ -134,11 +135,11 @@ export async function POST(
           },
           alertConfig
         )
-        for (const canal of result.canalesExitosos) {
-          logNotificacionJudicial(caso.id, canal, movToAlert.sumilla || movToAlert.acto, nivel, suggestion, true)
+        for (const canal of alertaResult.canalesExitosos) {
+          await logNotificacionJudicial(caso.id, canal, movToAlert.sumilla || movToAlert.acto, nivel, suggestion, true)
         }
-        if (!result.enviado) {
-          logNotificacionJudicial(caso.id, 'ninguno', movToAlert.sumilla || movToAlert.acto, nivel, suggestion, false)
+        if (!alertaResult.enviado) {
+          await logNotificacionJudicial(caso.id, 'ninguno', movToAlert.sumilla || movToAlert.acto, nivel, suggestion, false)
         }
       }
     }

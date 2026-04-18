@@ -21,24 +21,6 @@ function loadBetterSqliteConstructor(): SqliteDatabaseCtor {
 
 let _db: SqliteDatabase | null = null;
 
-/** Elimina de la BD los casos en papelera (>30 días en deleted_at) y sus filas relacionadas. */
-function purgeJudicialCasosPapelera(db: SqliteDatabase): void {
-  const ids = db
-    .prepare(
-      `SELECT id FROM casos
-       WHERE deleted_at IS NOT NULL
-         AND datetime(deleted_at) <= datetime('now', '-30 days')`
-    )
-    .all() as { id: number }[];
-  for (const { id } of ids) {
-    db.prepare('DELETE FROM movimientos WHERE caso_id = ?').run(id);
-    db.prepare('DELETE FROM audiencias WHERE caso_id = ?').run(id);
-    db.prepare('DELETE FROM escritos_judiciales WHERE caso_id = ?').run(id);
-    db.prepare('DELETE FROM notificaciones_judiciales WHERE caso_id = ?').run(id);
-    db.prepare('DELETE FROM casos WHERE id = ?').run(id);
-  }
-}
-
 function getDb(): SqliteDatabase {
   if (!_db) {
     const isVercel = !!process.env.VERCEL;
@@ -122,84 +104,6 @@ function initSchema(db: SqliteDatabase) {
       success INTEGER DEFAULT 1
     );
 
-    CREATE TABLE IF NOT EXISTS casos (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      numero_expediente TEXT NOT NULL,
-      distrito_judicial TEXT NOT NULL,
-      organo_jurisdiccional TEXT,
-      juez TEXT,
-      tipo_proceso TEXT,
-      especialidad TEXT,
-      etapa_procesal TEXT,
-      partes TEXT,
-      cliente TEXT,
-      alias TEXT,
-      monto TEXT,
-      prioridad TEXT DEFAULT 'baja',
-      estado TEXT DEFAULT 'activo',
-      ultimo_movimiento TEXT,
-      ultimo_movimiento_fecha TEXT,
-      proximo_evento TEXT,
-      proximo_evento_fecha TEXT,
-      estado_hash TEXT,
-      polling_frequency_hours INTEGER DEFAULT 4,
-      whatsapp_number TEXT,
-      email TEXT,
-      activo INTEGER DEFAULT 1,
-      last_checked TEXT,
-      created_at TEXT DEFAULT (datetime('now')),
-      parte_procesal TEXT
-    );
-
-    CREATE TABLE IF NOT EXISTS movimientos (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      caso_id INTEGER NOT NULL REFERENCES casos(id),
-      numero TEXT,
-      fecha TEXT,
-      acto TEXT,
-      folio TEXT,
-      sumilla TEXT,
-      tiene_documento INTEGER DEFAULT 0,
-      documento_url TEXT,
-      tiene_resolucion INTEGER DEFAULT 0,
-      es_nuevo INTEGER DEFAULT 1,
-      urgencia TEXT DEFAULT 'info',
-      ai_sugerencia TEXT,
-      ai_analisis TEXT,
-      scraped_at TEXT DEFAULT (datetime('now'))
-    );
-
-    CREATE TABLE IF NOT EXISTS audiencias (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      caso_id INTEGER NOT NULL REFERENCES casos(id),
-      descripcion TEXT NOT NULL,
-      fecha TEXT NOT NULL,
-      tipo TEXT,
-      completado INTEGER DEFAULT 0,
-      google_calendar_link TEXT,
-      outlook_link TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
-    );
-
-    CREATE TABLE IF NOT EXISTS escritos_judiciales (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      caso_id INTEGER NOT NULL REFERENCES casos(id),
-      tipo TEXT NOT NULL,
-      contenido TEXT NOT NULL,
-      created_at TEXT DEFAULT (datetime('now'))
-    );
-
-    CREATE TABLE IF NOT EXISTS notificaciones_judiciales (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      caso_id INTEGER REFERENCES casos(id),
-      canal TEXT NOT NULL,
-      movimiento_descripcion TEXT,
-      urgencia TEXT,
-      ai_sugerencia TEXT,
-      enviado_at TEXT DEFAULT (datetime('now')),
-      success INTEGER DEFAULT 1
-    );
-
     CREATE TABLE IF NOT EXISTS titulos_sunarp (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       oficina_registral TEXT NOT NULL,
@@ -273,45 +177,6 @@ function initSchema(db: SqliteDatabase) {
   if (!colNames.has('deleted_at')) {
     db.exec('ALTER TABLE tramites ADD COLUMN deleted_at TEXT');
   }
-
-  // Migrate: add new movimientos columns if missing
-  const movCols = db.prepare("PRAGMA table_info(movimientos)").all() as { name: string }[];
-  const movColNames = new Set(movCols.map(c => c.name));
-  if (!movColNames.has('numero')) {
-    db.exec('ALTER TABLE movimientos ADD COLUMN numero TEXT');
-  }
-  if (!movColNames.has('tiene_documento')) {
-    db.exec('ALTER TABLE movimientos ADD COLUMN tiene_documento INTEGER DEFAULT 0');
-  }
-  if (!movColNames.has('documento_url')) {
-    db.exec('ALTER TABLE movimientos ADD COLUMN documento_url TEXT');
-  }
-  if (!movColNames.has('tiene_resolucion')) {
-    db.exec('ALTER TABLE movimientos ADD COLUMN tiene_resolucion INTEGER DEFAULT 0');
-  }
-  if (!movColNames.has('ai_analisis')) {
-    db.exec('ALTER TABLE movimientos ADD COLUMN ai_analisis TEXT');
-  }
-
-  const casoCols = db.prepare('PRAGMA table_info(casos)').all() as { name: string }[];
-  const casoColNames = new Set(casoCols.map(c => c.name));
-  if (!casoColNames.has('archived_at')) {
-    db.exec('ALTER TABLE casos ADD COLUMN archived_at TEXT');
-  }
-  if (!casoColNames.has('deleted_at')) {
-    db.exec('ALTER TABLE casos ADD COLUMN deleted_at TEXT');
-  }
-  try {
-    db.exec('ALTER TABLE casos ADD COLUMN parte_procesal TEXT');
-  } catch {
-    /* columna ya existe */
-  }
-  db.prepare(`
-    UPDATE casos SET deleted_at = datetime('now'), archived_at = NULL
-    WHERE activo = 0 AND archived_at IS NULL AND deleted_at IS NULL
-  `).run();
-
-  purgeJudicialCasosPapelera(db);
 
   // Purge tramites deleted > 30 days ago
   db.prepare(`
@@ -536,403 +401,41 @@ export function saveDocument(tramiteId: number, tipo: string, contenido: string)
   `).run(tramiteId, tipo, contenido);
 }
 
-// ── Judicial module helpers ───────────────────────────────────────────────────
+// ── Judicial module (Supabase: SUPABASE_URL + SUPABASE_SERVICE_KEY) ───────────
 
-export interface Caso {
-  id: number;
-  numero_expediente: string;
-  distrito_judicial: string;
-  organo_jurisdiccional: string | null;
-  juez: string | null;
-  tipo_proceso: string | null;
-  especialidad: string | null;
-  etapa_procesal: string | null;
-  partes: string | null;
-  cliente: string | null;
-  alias: string | null;
-  monto: string | null;
-  prioridad: 'alta' | 'media' | 'baja';
-  estado: 'activo' | 'concluido' | 'archivado';
-  ultimo_movimiento: string | null;
-  ultimo_movimiento_fecha: string | null;
-  proximo_evento: string | null;
-  proximo_evento_fecha: string | null;
-  estado_hash: string | null;
-  polling_frequency_hours: number;
-  whatsapp_number: string | null;
-  email: string | null;
-  activo: number;
-  last_checked: string | null;
-  created_at: string;
-  archived_at: string | null;
-  deleted_at: string | null;
-  parte_procesal?: string | null;
-}
+export type {
+  Caso,
+  MovimientoJudicial,
+  AudienciaJudicial,
+  EscritoJudicial,
+  NotificacionJudicial,
+} from './judicial-db';
 
-export interface MovimientoJudicial {
-  id: number;
-  caso_id: number;
-  numero: string | null;
-  fecha: string | null;
-  acto: string | null;
-  folio: string | null;
-  sumilla: string | null;
-  tiene_documento: number;
-  documento_url: string | null;
-  tiene_resolucion: number;
-  es_nuevo: number;
-  urgencia: 'alta' | 'normal' | 'info';
-  ai_sugerencia: string | null;
-  ai_analisis: string | null;
-  scraped_at: string;
-}
-
-export interface AudienciaJudicial {
-  id: number;
-  caso_id: number;
-  descripcion: string;
-  fecha: string;
-  tipo: string | null;
-  completado: number;
-  google_calendar_link: string | null;
-  outlook_link: string | null;
-  created_at: string;
-}
-
-export interface EscritoJudicial {
-  id: number;
-  caso_id: number;
-  tipo: string;
-  contenido: string;
-  created_at: string;
-}
-
-export interface NotificacionJudicial {
-  id: number;
-  caso_id: number | null;
-  canal: string;
-  movimiento_descripcion: string | null;
-  urgencia: string | null;
-  ai_sugerencia: string | null;
-  enviado_at: string;
-  success: number;
-}
-
-export function getAllCasosActivos(): Caso[] {
-  const db = getDb();
-  purgeJudicialCasosPapelera(db);
-  return db
-    .prepare(
-      `SELECT * FROM casos
-       WHERE activo = 1 AND archived_at IS NULL AND deleted_at IS NULL
-       ORDER BY created_at DESC`
-    )
-    .all() as Caso[];
-}
-
-export function getCasosArchivados(): Caso[] {
-  const db = getDb();
-  purgeJudicialCasosPapelera(db);
-  return db
-    .prepare(
-      `SELECT * FROM casos
-       WHERE archived_at IS NOT NULL AND deleted_at IS NULL
-       ORDER BY archived_at DESC`
-    )
-    .all() as Caso[];
-}
-
-export function getCasosPapelera(): Caso[] {
-  const db = getDb();
-  purgeJudicialCasosPapelera(db);
-  return db
-    .prepare(
-      `SELECT * FROM casos
-       WHERE deleted_at IS NOT NULL
-       ORDER BY deleted_at DESC`
-    )
-    .all() as Caso[];
-}
-
-export function getCasoById(id: number): Caso | null {
-  return getDb().prepare('SELECT * FROM casos WHERE id = ?').get(id) as Caso | null;
-}
-
-export function createCaso(data: Partial<Caso>): Caso {
-  const db = getDb();
-  const result = db.prepare(`
-    INSERT INTO casos (
-      numero_expediente, distrito_judicial, organo_jurisdiccional, juez, tipo_proceso,
-      especialidad, etapa_procesal, partes, cliente, alias, monto, prioridad, estado,
-      ultimo_movimiento, ultimo_movimiento_fecha, proximo_evento, proximo_evento_fecha,
-      estado_hash, polling_frequency_hours, whatsapp_number, email, activo, last_checked
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    data.numero_expediente,
-    data.distrito_judicial,
-    data.organo_jurisdiccional ?? null,
-    data.juez ?? null,
-    data.tipo_proceso ?? null,
-    data.especialidad ?? null,
-    data.etapa_procesal ?? null,
-    data.partes ?? null,
-    data.cliente ?? null,
-    data.alias ?? null,
-    data.monto ?? null,
-    data.prioridad ?? 'baja',
-    data.estado ?? 'activo',
-    data.ultimo_movimiento ?? null,
-    data.ultimo_movimiento_fecha ?? null,
-    data.proximo_evento ?? null,
-    data.proximo_evento_fecha ?? null,
-    data.estado_hash ?? null,
-    data.polling_frequency_hours ?? 4,
-    data.whatsapp_number ?? null,
-    data.email ?? null,
-    data.activo ?? 1,
-    data.last_checked ?? null
-  );
-
-  return getCasoById(result.lastInsertRowid as number)!;
-}
-
-export function updateCaso(id: number, data: Partial<Caso>) {
-  const db = getDb();
-  const fields = Object.keys(data).filter(k => k !== 'id');
-  if (fields.length === 0) return;
-  const setClause = fields.map(f => `${f} = ?`).join(', ');
-  const values = fields.map(f => (data as Record<string, unknown>)[f]);
-  db.prepare(`UPDATE casos SET ${setClause} WHERE id = ?`).run(...values, id);
-}
-
-/** Mueve el caso a la papelera (30 días hasta borrado definitivo). */
-export function moveCasoToPapelera(id: number) {
-  getDb()
-    .prepare(
-      `UPDATE casos SET activo = 0, deleted_at = datetime('now'), archived_at = NULL WHERE id = ?`
-    )
-    .run(id);
-}
-
-export function archiveCaso(id: number) {
-  getDb()
-    .prepare(
-      `UPDATE casos SET activo = 0, archived_at = datetime('now'), deleted_at = NULL WHERE id = ?`
-    )
-    .run(id);
-}
-
-export function restoreCasoFromArchive(id: number) {
-  getDb()
-    .prepare(
-      `UPDATE casos SET activo = 1, archived_at = NULL
-       WHERE id = ? AND archived_at IS NOT NULL AND deleted_at IS NULL`
-    )
-    .run(id);
-}
-
-export function restoreCasoFromPapelera(id: number) {
-  getDb()
-    .prepare(
-      `UPDATE casos SET activo = 1, deleted_at = NULL
-       WHERE id = ? AND deleted_at IS NOT NULL`
-    )
-    .run(id);
-}
-
-/** @deprecated Usar moveCasoToPapelera */
-export function softDeleteCaso(id: number) {
-  moveCasoToPapelera(id);
-}
-
-export function getMovimientosByCaso(casoId: number): MovimientoJudicial[] {
-  return getDb().prepare(
-    'SELECT * FROM movimientos WHERE caso_id = ? ORDER BY scraped_at DESC, id DESC'
-  ).all(casoId) as MovimientoJudicial[];
-}
-
-export function addMovimientoJudicial(
-  casoId: number,
-  data: {
-    numero?: string | null;
-    fecha?: string | null;
-    acto?: string | null;
-    folio?: string | null;
-    sumilla?: string | null;
-    tiene_documento?: boolean;
-    documento_url?: string | null;
-    tiene_resolucion?: boolean;
-    es_nuevo?: boolean;
-    urgencia?: 'alta' | 'normal' | 'info';
-    ai_sugerencia?: string | null;
-    ai_analisis?: string | null;
-  }
-): number {
-  const result = getDb().prepare(`
-    INSERT INTO movimientos
-      (caso_id, numero, fecha, acto, folio, sumilla,
-       tiene_documento, documento_url, tiene_resolucion,
-       es_nuevo, urgencia, ai_sugerencia, ai_analisis)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    casoId,
-    data.numero ?? null,
-    data.fecha ?? null,
-    data.acto ?? null,
-    data.folio ?? null,
-    data.sumilla ?? null,
-    data.tiene_documento ? 1 : 0,
-    data.documento_url ?? null,
-    data.tiene_resolucion ? 1 : 0,
-    data.es_nuevo === false ? 0 : 1,
-    data.urgencia ?? 'info',
-    data.ai_sugerencia ?? null,
-    data.ai_analisis ?? null
-  );
-  return result.lastInsertRowid as number;
-}
-
-export function updateMovimientoJudicial(
-  id: number,
-  data: Partial<Pick<MovimientoJudicial, 'urgencia' | 'ai_sugerencia' | 'ai_analisis'>>
-) {
-  const entries = Object.entries(data).filter(([, v]) => v !== undefined);
-  if (entries.length === 0) return;
-  const setClause = entries.map(([k]) => `${k} = ?`).join(', ');
-  const values = entries.map(([, v]) => v);
-  getDb().prepare(`UPDATE movimientos SET ${setClause} WHERE id = ?`).run(...values, id);
-}
-
-export function getAudienciasByCaso(casoId: number): AudienciaJudicial[] {
-  return getDb().prepare(
-    'SELECT * FROM audiencias WHERE caso_id = ? ORDER BY fecha ASC'
-  ).all(casoId) as AudienciaJudicial[];
-}
-
-export function getAllAudienciasPendientes(): Array<AudienciaJudicial & { alias: string | null; tipo_proceso: string | null }> {
-  return getDb().prepare(`
-    SELECT a.*, c.alias, c.tipo_proceso
-    FROM audiencias a
-    JOIN casos c ON a.caso_id = c.id
-    WHERE a.completado = 0 AND c.activo = 1
-    ORDER BY a.fecha ASC
-  `).all() as Array<AudienciaJudicial & { alias: string | null; tipo_proceso: string | null }>;
-}
-
-export function addAudienciaJudicial(
-  casoId: number,
-  descripcion: string,
-  fecha: string,
-  tipo?: string
-) {
-  getDb().prepare(`
-    INSERT INTO audiencias (caso_id, descripcion, fecha, tipo)
-    VALUES (?, ?, ?, ?)
-  `).run(casoId, descripcion, fecha, tipo ?? null);
-}
-
-export function getEscritosByCaso(casoId: number): EscritoJudicial[] {
-  return getDb().prepare(
-    'SELECT * FROM escritos_judiciales WHERE caso_id = ? ORDER BY created_at DESC'
-  ).all(casoId) as EscritoJudicial[];
-}
-
-export function saveEscritoJudicial(casoId: number, tipo: string, contenido: string) {
-  getDb().prepare(`
-    INSERT INTO escritos_judiciales (caso_id, tipo, contenido)
-    VALUES (?, ?, ?)
-  `).run(casoId, tipo, contenido);
-}
-
-export function getNotificacionesJudicialesByCaso(casoId: number, limit = 5): NotificacionJudicial[] {
-  return getDb().prepare(
-    'SELECT * FROM notificaciones_judiciales WHERE caso_id = ? ORDER BY enviado_at DESC LIMIT ?'
-  ).all(casoId, limit) as NotificacionJudicial[];
-}
-
-export function logNotificacionJudicial(
-  casoId: number,
-  canal: string,
-  movimientoDescripcion: string,
-  urgencia: string,
-  aiSugerencia: string,
-  success: boolean
-) {
-  getDb().prepare(`
-    INSERT INTO notificaciones_judiciales (caso_id, canal, movimiento_descripcion, urgencia, ai_sugerencia, success)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(casoId, canal, movimientoDescripcion, urgencia, aiSugerencia, success ? 1 : 0);
-}
-
-export function getCasosStats() {
-  const db = getDb();
-  const activeFilter = `activo = 1 AND archived_at IS NULL AND deleted_at IS NULL`;
-  const total = (db.prepare(`SELECT COUNT(*) as c FROM casos WHERE ${activeFilter}`).get() as { c: number }).c;
-  const activos = total;
-  const conAlerta = (db
-    .prepare(
-      `SELECT COUNT(DISTINCT m.caso_id) as c
-       FROM movimientos m
-       JOIN casos c ON c.id = m.caso_id
-       WHERE m.es_nuevo = 1 AND m.urgencia = 'alta'
-         AND c.activo = 1 AND c.archived_at IS NULL AND c.deleted_at IS NULL`
-    )
-    .get() as { c: number }).c;
-  const proximasAudiencias = (db.prepare(`
-    SELECT COUNT(*) as c
-    FROM audiencias a
-    JOIN casos c ON c.id = a.caso_id
-    WHERE c.activo = 1 AND c.archived_at IS NULL AND c.deleted_at IS NULL
-      AND a.completado = 0
-      AND date(a.fecha) BETWEEN date('now') AND date('now', '+7 day')
-  `).get() as { c: number }).c;
-
-  return { total, activos, conAlerta, proximasAudiencias };
-}
-
-// ── Alert config helper ─────────────────────────────────────────────────────
-
-import type { AlertaConfig } from './alert-service'
-
-/**
- * Construye la config de alertas para un caso judicial.
- * Lee email/whatsapp de la tabla `casos`.
- * Si la tabla `bot_users` existe y tiene un registro vinculado, lee telegram_chat_id.
- */
-export function getAlertaConfigParaCaso(casoId: number): AlertaConfig | null {
-  const db = getDb();
-  const caso = db.prepare('SELECT id, email, whatsapp_number FROM casos WHERE id = ?').get(casoId) as
-    | { id: number; email: string | null; whatsapp_number: string | null }
-    | undefined;
-  if (!caso) return null;
-
-  let telegramChatId: string | undefined;
-  try {
-    const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='bot_users'").all();
-    if (tables.length > 0) {
-      const row = db
-        .prepare('SELECT chat_id FROM bot_users WHERE caso_id = ? LIMIT 1')
-        .get(casoId) as { chat_id: string } | undefined;
-      if (row) telegramChatId = String(row.chat_id);
-    }
-  } catch {
-    // bot_users may not have caso_id column — ignore gracefully
-  }
-
-  return {
-    usuarioId: String(caso.id),
-    email: caso.email || undefined,
-    telefonoCelular: caso.whatsapp_number || undefined,
-    telegramChatId,
-    canalesActivos: {
-      email: !!caso.email,
-      whatsapp: !!caso.whatsapp_number,
-      telegram: !!telegramChatId,
-    },
-  };
-}
-
-export default getDb;
+export {
+  getAllCasosActivos,
+  getCasosArchivados,
+  getCasosPapelera,
+  getCasoById,
+  createCaso,
+  updateCaso,
+  moveCasoToPapelera,
+  archiveCaso,
+  restoreCasoFromArchive,
+  restoreCasoFromPapelera,
+  softDeleteCaso,
+  getMovimientosByCaso,
+  addMovimientoJudicial,
+  updateMovimientoJudicial,
+  getAudienciasByCaso,
+  getAllAudienciasPendientes,
+  addAudienciaJudicial,
+  getEscritosByCaso,
+  saveEscritoJudicial,
+  getNotificacionesJudicialesByCaso,
+  logNotificacionJudicial,
+  getCasosStats,
+  getAlertaConfigParaCaso,
+} from './judicial-db';
 
 // ── SUNARP Síguelo module ─────────────────────────────────────────────────────
 
@@ -1015,3 +518,5 @@ export function getHistorialSunarp(tituloId: number): HistorialSunarp[] {
     'SELECT * FROM historial_estados_sunarp WHERE titulo_id = ? ORDER BY detectado_en DESC LIMIT 20'
   ).all(tituloId) as HistorialSunarp[];
 }
+
+export default getDb;

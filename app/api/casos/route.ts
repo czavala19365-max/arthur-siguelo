@@ -9,21 +9,22 @@ type ScrapeFn = (typeof import('@/lib/cej-scraper'))['scrapeCEJ']
 /** Sincroniza CEJ → DB (misma lógica que el POST antiguo, pero puede ejecutarse en segundo plano). */
 async function runInitialCejSync(caso: Caso, scrapeCEJ: ScrapeFn) {
   let scrapeResult: Awaited<ReturnType<ScrapeFn>> | null = null
+  const parte = caso.parte_procesal?.trim() || caso.partes || ''
   try {
-    scrapeResult = await scrapeCEJ(caso.numero_expediente, caso.partes ?? '')
+    scrapeResult = await scrapeCEJ(caso.numero_expediente, parte)
   } catch (err) {
     console.error('[API] Initial CEJ poll error (background):', err)
-    updateCaso(caso.id, { last_checked: new Date().toISOString() })
+    await updateCaso(caso.id, { last_checked: new Date().toISOString() })
     return
   }
 
   if (!scrapeResult || scrapeResult.portalDown) {
-    updateCaso(caso.id, { last_checked: scrapeResult?.scrapedAt ?? new Date().toISOString() })
+    await updateCaso(caso.id, { last_checked: scrapeResult?.scrapedAt ?? new Date().toISOString() })
     return
   }
 
   if (scrapeResult.captchaDetected && !scrapeResult.captchaSolved) {
-    updateCaso(caso.id, { last_checked: scrapeResult.scrapedAt })
+    await updateCaso(caso.id, { last_checked: scrapeResult.scrapedAt })
     return
   }
 
@@ -47,7 +48,7 @@ async function runInitialCejSync(caso: Caso, scrapeCEJ: ScrapeFn) {
   const etapaProcesal = scrapeResult.etapa || scrapeResult.estadoProceso || ''
   const partesText = partesScrape.map(p => `${p.rol}: ${p.nombre}`).join(' | ') || null
 
-  updateCaso(caso.id, {
+  await updateCaso(caso.id, {
     ultimo_movimiento: first?.sumilla || first?.acto || null,
     ultimo_movimiento_fecha: first?.fecha || null,
     etapa_procesal: etapaProcesal || null,
@@ -64,7 +65,7 @@ async function runInitialCejSync(caso: Caso, scrapeCEJ: ScrapeFn) {
   }> = []
   for (const mov of movimientos) {
     try {
-      const rowId = addMovimientoJudicial(caso.id, {
+      const rowId = await addMovimientoJudicial(caso.id, {
         fecha: mov.fecha,
         acto: mov.acto,
         folio: mov.folio,
@@ -90,7 +91,7 @@ async function runInitialCejSync(caso: Caso, scrapeCEJ: ScrapeFn) {
       caso.numero_expediente
     ).catch(() => ({ urgencia: 'info' as const, sugerencia: 'Revisar movimiento en CEJ.' }))
     try {
-      updateMovimientoJudicial(id, { urgencia: cls.urgencia, ai_sugerencia: cls.sugerencia })
+      await updateMovimientoJudicial(id, { urgencia: cls.urgencia, ai_sugerencia: cls.sugerencia })
     } catch (e) {
       console.error('[API] updateMovimientoJudicial failed:', e)
     }
@@ -101,7 +102,7 @@ async function runInitialCejSync(caso: Caso, scrapeCEJ: ScrapeFn) {
 
 export async function GET() {
   try {
-    const casos = getAllCasosActivos()
+    const casos = await getAllCasosActivos()
     return Response.json(casos)
   } catch (error) {
     console.error('[API] GET /casos error:', error)
@@ -114,7 +115,7 @@ export async function POST(request: Request) {
     const body = await request.json() as Record<string, unknown>
 
     const pollHours = Number(body.polling_frequency_hours ?? 4)
-    const caso = createCaso({
+    const caso = await createCaso({
       numero_expediente: String(body.numero_expediente ?? ''),
       distrito_judicial: String(body.distrito_judicial ?? 'Lima'),
       organo_jurisdiccional: body.organo_jurisdiccional ? String(body.organo_jurisdiccional) : null,
@@ -137,7 +138,7 @@ export async function POST(request: Request) {
       scrapeCEJ = mod.scrapeCEJ
     } catch (modErr) {
       console.error('[API] POST /casos: no se pudo cargar el módulo CEJ (Playwright/stealth):', modErr)
-      updateCaso(caso.id, { last_checked: new Date().toISOString() })
+      await updateCaso(caso.id, { last_checked: new Date().toISOString() })
       return Response.json(
         {
           ...caso,

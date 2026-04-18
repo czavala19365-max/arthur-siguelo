@@ -120,11 +120,38 @@ class CapSolverImageSolver implements CaptchaSolver {
   }
 }
 
+/** CEJ image captcha: CapSolver first; 2captcha only if CapSolver fails or if only TWOCAPTCHA is set. */
+class CapSolverImageWithTwoCaptchaFallback implements CaptchaSolver {
+  async solve(imageBase64: string): Promise<string> {
+    const capKey = process.env.CAPSOLVER_API_KEY?.trim()
+    const twoKey = process.env.TWOCAPTCHA_API_KEY?.trim()
+
+    if (capKey) {
+      try {
+        return await new CapSolverImageSolver(capKey).solve(imageBase64)
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        console.warn('[CEJ] CapSolver image captcha failed:', msg)
+        if (!twoKey) throw e
+        console.log('[CEJ] Image captcha: falling back to 2captcha')
+        return await new TwoCaptchaImageSolver(twoKey).solve(imageBase64)
+      }
+    }
+
+    if (twoKey) return await new TwoCaptchaImageSolver(twoKey).solve(imageBase64)
+    throw new Error('No CAPTCHA provider configured. Set CAPSOLVER_API_KEY (CEJ) or TWOCAPTCHA_API_KEY as fallback.')
+  }
+}
+
 function getImageCaptchaSolver(): CaptchaSolver {
-  // Prefer 2Captcha for CEJ image captcha; fallback to CapSolver OCR if needed.
-  if (process.env.TWOCAPTCHA_API_KEY) return new TwoCaptchaImageSolver(process.env.TWOCAPTCHA_API_KEY)
-  if (process.env.CAPSOLVER_API_KEY) return new CapSolverImageSolver(process.env.CAPSOLVER_API_KEY)
-  throw new Error('No CAPTCHA provider configured. Set TWOCAPTCHA_API_KEY or CAPSOLVER_API_KEY.')
+  const capKey = process.env.CAPSOLVER_API_KEY?.trim()
+  const twoKey = process.env.TWOCAPTCHA_API_KEY?.trim()
+  if (!capKey && !twoKey) {
+    throw new Error(
+      'No CAPTCHA provider configured. Set CAPSOLVER_API_KEY (primary for CEJ) or TWOCAPTCHA_API_KEY (fallback).',
+    )
+  }
+  return new CapSolverImageWithTwoCaptchaFallback()
 }
 
 async function refreshImageCaptcha(page: Page) {

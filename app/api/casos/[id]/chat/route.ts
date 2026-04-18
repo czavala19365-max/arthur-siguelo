@@ -12,7 +12,7 @@ export async function POST(
   try {
     const { id } = await params
     const casoId = Number.parseInt(id, 10)
-    const caso = getCasoById(casoId)
+    const caso = await getCasoById(casoId)
     if (!caso) {
       return Response.json({ error: 'Caso no encontrado' }, { status: 404 })
     }
@@ -31,7 +31,7 @@ export async function POST(
     )
 
     if (result.isComplete && result.documentContent) {
-      saveEscritoJudicial(casoId, body.tipo || 'escrito_generico', result.documentContent)
+      await saveEscritoJudicial(casoId, body.tipo || 'escrito_generico', result.documentContent)
     }
 
     return Response.json(result)

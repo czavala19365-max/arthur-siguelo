@@ -9,16 +9,16 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     if (!Number.isFinite(casoId)) {
       return Response.json({ error: 'ID no válido' }, { status: 400 })
     }
-    const caso = getCasoById(casoId)
+    const caso = await getCasoById(casoId)
     if (!caso) return Response.json({ error: 'Caso no encontrado' }, { status: 404 })
 
-    if (caso.deleted_at) restoreCasoFromPapelera(casoId)
-    else if (caso.archived_at) restoreCasoFromArchive(casoId)
+    if (caso.deleted_at) await restoreCasoFromPapelera(casoId)
+    else if (caso.archived_at) await restoreCasoFromArchive(casoId)
     else {
       return Response.json({ error: 'El caso no está archivado ni en la papelera' }, { status: 400 })
     }
 
-    return Response.json({ success: true, caso: getCasoById(casoId) })
+    return Response.json({ success: true, caso: await getCasoById(casoId) })
   } catch (error) {
     console.error('[API] POST /casos/[id]/restore error:', error)
     return Response.json({ error: 'Error al restaurar' }, { status: 500 })
