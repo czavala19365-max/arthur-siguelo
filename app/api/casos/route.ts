@@ -1,4 +1,4 @@
-import { after } from 'next/server'
+import { after, NextResponse } from 'next/server'
 import { addMovimientoJudicial, createCaso, getAllCasosActivos, updateCaso, updateMovimientoJudicial, type Caso } from '@/lib/db'
 import { clasificarMovimientoCEJ } from '@/lib/ai-service'
 
@@ -106,7 +106,13 @@ export async function GET() {
     return Response.json(casos)
   } catch (error) {
     console.error('[API] GET /casos error:', error)
-    return Response.json({ error: 'Error al obtener procesos judiciales' }, { status: 500 })
+    return NextResponse.json(
+      {
+        error: 'Error al obtener procesos judiciales',
+        details: error instanceof Error ? error.message : String(error),
+      },
+      { status: 500 },
+    )
   }
 }
 
