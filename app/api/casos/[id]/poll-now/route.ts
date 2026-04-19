@@ -7,9 +7,61 @@ import {
   updateCaso,
   updateMovimientoJudicial
 } from '@/lib/db'
-import { scrapeCEJ } from '@/lib/cej-scraper'
+import type { CejCaseData } from '@/lib/cej-scraper'
 import { clasificarMovimientoCEJ } from '@/lib/ai-service'
 import { enviarAlertaMovimiento, type NivelUrgencia } from '@/lib/alert-service'
+
+const CEJ_FETCH_TIMEOUT_MS = 180_000
+
+async function fetchCejFromScraperService(numero: string, parte: string): Promise<CejCaseData> {
+  const scraperUrl = process.env.CEJ_SCRAPER_URL?.trim()
+  if (!scraperUrl) {
+    const { scrapeCEJ } = await import('@/lib/cej-scraper')
+    return scrapeCEJ(numero, parte)
+  }
+
+  const url = `${scraperUrl.replace(/\/$/, '')}/scrape`
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ numero, parte }),
+    signal: AbortSignal.timeout(CEJ_FETCH_TIMEOUT_MS),
+  })
+
+  let data: unknown = {}
+  try {
+    data = await res.json()
+  } catch {
+    data = {}
+  }
+
+  if (!res.ok) {
+    const body = data as { error?: string; details?: string }
+    const msg = body.details || body.error || res.statusText || `HTTP ${res.status}`
+    console.error('[POLL] CEJ scraper service error:', res.status, msg)
+    return {
+      numeroExpediente: numero,
+      organoJurisdiccional: '',
+      distritoJudicial: '',
+      juez: '',
+      especialidad: '',
+      proceso: '',
+      etapa: '',
+      estadoProceso: '',
+      partes: [],
+      actuaciones: [],
+      totalActuaciones: 0,
+      hash: '',
+      portalDown: true,
+      captchaDetected: false,
+      captchaSolved: false,
+      scrapedAt: new Date().toISOString(),
+      error: msg,
+    }
+  }
+
+  return data as CejCaseData
+}
 
 function movementKey(m: { fecha?: string | null; acto?: string | null; folio?: string | null; sumilla?: string | null }) {
   return `${m.fecha || ''}|${m.acto || ''}|${m.folio || ''}|${m.sumilla || ''}`
@@ -29,7 +81,7 @@ export async function POST(
     }
 
     const parte = caso.parte_procesal?.trim() || caso.partes || ''
-    const result = await scrapeCEJ(caso.numero_expediente, parte)
+    const result = await fetchCejFromScraperService(caso.numero_expediente, parte)
 
     if (result.portalDown) {
       return Response.json({
