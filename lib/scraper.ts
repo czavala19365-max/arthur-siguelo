@@ -535,6 +535,8 @@ export async function detalleTituloSunarp(params: {
     token:         null,
   }
 
+  console.log('[detalleTitulo] payload:', JSON.stringify(innerPayload))
+
   const response = await fetch(DETALLE_TITULO_API, {
     method: 'POST',
     headers: {
@@ -562,7 +564,12 @@ export async function detalleTituloSunarp(params: {
   const data = JSON.parse(decrypt(encryptedResponse.cmVzcG9uc2U)) as Record<string, unknown>
 
   if (data.codigoRespuesta !== '0000') {
-    throw new Error(`Error SIGUELO ${data.codigoRespuesta}: ${data.descripcionRespuesta}`)
+    const desc = data.descripcionRespuesta as string ?? 'Error desconocido'
+    // 0002 = título no encontrado en SUNARP (año o número incorrecto, o título no digitalizado)
+    if (data.codigoRespuesta === '0002') {
+      throw new Error(`Título no encontrado en SUNARP para ${innerPayload.anioTitulo}/${innerPayload.numeroTitulo} — ${desc}`)
+    }
+    throw new Error(`Error SIGUELO ${data.codigoRespuesta}: ${desc}`)
   }
 
   return (data.lstDetalleTitulo as DetalleCronologiaEntry[]) ?? []
