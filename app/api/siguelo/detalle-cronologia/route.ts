@@ -27,6 +27,7 @@ export async function GET(request: NextRequest) {
       anio_titulo:       titulo.anio_titulo,
       numero_titulo:     titulo.numero_titulo,
       tipo_registro:     titulo.tipo_registro,
+      area_registral:    titulo.area_registral,
     })
     return NextResponse.json({ entries })
   } catch (err) {

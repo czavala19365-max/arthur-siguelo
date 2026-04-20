@@ -517,6 +517,7 @@ export async function detalleTituloSunarp(params: {
   anio_titulo: number
   numero_titulo: string
   tipo_registro?: string | null
+  area_registral?: string | null
 }): Promise<DetalleCronologiaEntry[]> {
   const key = params.oficina_registral.toUpperCase().trim()
   const oficina = OFICINAS[key]
@@ -524,12 +525,14 @@ export async function detalleTituloSunarp(params: {
 
   const numeroTitulo = params.numero_titulo.padStart(8, '0')
 
+  // SUNARP espera areaRegistral como tipoRegistro (confirmado en bundle Angular de SIGUELO:
+  // obtenerDetalleTitulo(e) se llama con e = lstTitulo[0].areaRegistral y asigna a.tipoRegistro = e)
   const innerPayload = {
     codigoZona:    oficina.zona,
     codigoOficina: oficina.oficina,
     anioTitulo:    String(params.anio_titulo),
     numeroTitulo,
-    tipoRegistro:  params.tipo_registro ?? '',
+    tipoRegistro:  params.area_registral ?? params.tipo_registro ?? '',
     ip:            '0.0.0.0',
     userApp:       'sigue+',
     userCrea:      'sigue+',
