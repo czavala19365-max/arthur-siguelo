@@ -21,6 +21,45 @@ const decrypt = (data: string): string => {
 }
 
 /**
+ * Lanza Puppeteer, navega a SIGUELO y devuelve las cookies de sesión de Cloudflare.
+ * Reutilizado por consultarTitulo y detalleTituloSunarp para evitar bloqueos geo-IP.
+ */
+async function obtenerCookiesSiguelo(): Promise<string> {
+  const executablePath =
+    process.env.CHROME_EXECUTABLE_PATH ??
+    (await chromium.executablePath(
+      'https://github.com/Sparticuz/chromium/releases/download/v123.0.1/chromium-v123.0.1-pack.tar'
+    ))
+
+  const browser = await puppeteer.launch({
+    args: chromium.args,
+    executablePath,
+    headless: true,
+    defaultViewport: { width: 1280, height: 720 },
+  })
+
+  try {
+    const page = await browser.newPage()
+    await page.setUserAgent(
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+    )
+    await page.goto(SIGUELO_URL, { waitUntil: 'networkidle2', timeout: 30_000 })
+
+    // Aceptar modal de términos si aparece
+    await page.waitForSelector('.btn-sunarp-cyan', { timeout: 8_000 })
+      .then(() => page.click('.btn-sunarp-cyan'))
+      .catch(() => { /* Modal no presente */ })
+
+    await new Promise(r => setTimeout(r, 1_500))
+
+    const cookieList = await page.cookies()
+    return cookieList.map(c => `${c.name}=${c.value}`).join('; ')
+  } finally {
+    await browser.close().catch(() => {})
+  }
+}
+
+/**
  * Tabla de oficinas registrales.
  * Fuente: https://utilitarios-sunarp-production.apps.paas.sunarp.gob.pe/componentes/api/cboOficinasSiguelo/1
  * Formato: nombreOficina → { zona, oficina } (2 dígitos cada uno)
@@ -134,51 +173,14 @@ export async function consultarTitulo(params: ScraperParams): Promise<ScraperRes
   const solver = new Solver(apiKey)
 
   // ── 1. Puppeteer: cookies + IP pública ────────────────────────────────────
-  // En producción (Vercel/Lambda) @sparticuz/chromium extrae su binario a /tmp.
-  // En local se puede apuntar a Chrome instalado con CHROME_EXECUTABLE_PATH.
-  const executablePath =
-    process.env.CHROME_EXECUTABLE_PATH ??
-    (await chromium.executablePath(
-      'https://github.com/Sparticuz/chromium/releases/download/v123.0.1/chromium-v123.0.1-pack.tar'
-    ))
+  const cookies = await obtenerCookiesSiguelo()
 
-  const browser = await puppeteer.launch({
-    args: chromium.args,
-    executablePath,
-    headless: true,
-    defaultViewport: { width: 1280, height: 720 },
-  })
-
-  let cookies: string
+  // Obtener IP pública desde el contexto del servidor (sin Puppeteer extra)
   let ipPc = '0.0.0.0'
   try {
-    const page = await browser.newPage()
-    await page.setUserAgent(
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
-    )
-    await page.goto(SIGUELO_URL, { waitUntil: 'networkidle2', timeout: 30_000 })
-
-    // Aceptar modal de términos y condiciones
-    await page.waitForSelector('.btn-sunarp-cyan', { timeout: 8_000 })
-      .then(() => page.click('.btn-sunarp-cyan'))
-      .catch(() => { /* Modal no presente */ })
-
-    await new Promise(r => setTimeout(r, 1_500))
-
-    // Obtener IP pública (igual que hace la app: api.ipify.org)
-    try {
-      const ipRes = await page.evaluate(() =>
-        fetch('https://api.ipify.org/?format=json').then(r => r.json())
-      ) as { ip: string }
-      ipPc = ipRes.ip
-    } catch { /* IP no crítica */ }
-
-    const cookieList = await page.cookies()
-    cookies = cookieList.map(c => `${c.name}=${c.value}`).join('; ')
-  } finally {
-    // Ignorar errores EPERM en Windows cuando el antivirus bloquea limpieza de archivos temporales
-    await browser.close().catch(() => {})
-  }
+    const ipRes = await fetch('https://api.ipify.org/?format=json').then(r => r.json()) as { ip: string }
+    ipPc = ipRes.ip
+  } catch { /* IP no crítica */ }
 
   // ── 2. Resolver Cloudflare Turnstile con 2captcha ─────────────────────────
   const captchaResult = await solver.cloudflareTurnstile({
@@ -535,13 +537,16 @@ export async function detalleTituloSunarp(params: {
     token:         null,
   }
 
-  console.log('[detalleTitulo] payload:', JSON.stringify(innerPayload))
+  // Obtener cookies de sesión de Cloudflare — necesarias para que SUNARP acepte
+  // requests desde IPs fuera de Perú (ej: servidores Vercel en US)
+  const cookies = await obtenerCookiesSiguelo()
 
   const response = await fetch(DETALLE_TITULO_API, {
     method: 'POST',
     headers: {
       'Content-Type':    'application/json',
       'X-IBM-Client-Id': IBM_CLIENT_ID,
+      Cookie:            cookies,
       Origin:            'https://siguelo.sunarp.gob.pe',
       Referer:           SIGUELO_URL,
     },
