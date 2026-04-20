@@ -68,10 +68,15 @@ function EmptyState({ text }: { text: string }) {
 
 function getEtapaStyle(etapa: string): React.CSSProperties {
   const u = (etapa ?? '').toUpperCase()
-  if (u.includes('CAJA'))         return { background: '#dbeafe', color: '#1d4ed8' }
-  if (u.includes('CALIFICACION')) return { background: '#fef3c7', color: '#92400e' }
-  if (u.includes('MESA'))         return { background: '#d1fae5', color: '#065f46' }
+  if (u.includes('CAJA'))                               return { background: '#dbeafe', color: '#1d4ed8' }
+  if (u.includes('CALIFICACION') || u.includes('CALIFICACIÓN')) return { background: '#fef3c7', color: '#92400e' }
+  if (u.includes('MESA'))                               return { background: '#d1fae5', color: '#065f46' }
   if (u.includes('APELACION') || u.includes('APELACI')) return { background: '#fce7f3', color: '#9d174d' }
+  if (u.includes('DIGITACION') || u.includes('DIGITACIÓN')) return { background: '#e0f2fe', color: '#0369a1' }
+  if (u.includes('ASIGNACION') || u.includes('ASIGNACIÓN')) return { background: '#ede9fe', color: '#5b21b6' }
+  if (u.includes('SECCION') || u.includes('SECCIÓN'))   return { background: '#fff7ed', color: '#c2410c' }
+  if (u.includes('UNIDAD'))                             return { background: '#f1f5f9', color: '#475569' }
+  if (u.includes('USUARIO'))                            return { background: '#f8fafc', color: '#64748b' }
   return { background: 'var(--surface)', color: 'var(--muted)' }
 }
 
@@ -87,7 +92,6 @@ export default function TituloDetailModal({
   const [cronologia, setCronologia]       = useState<DetalleCronologiaEntry[] | null>(null)
   const [loadingCron, setLoadingCron]     = useState(false)
   const [cronError, setCronError]         = useState<string | null>(null)
-  const [cronAuthRequired, setCronAuthRequired] = useState(false)
 
   // Cerrar con Escape
   useEffect(() => {
@@ -96,21 +100,17 @@ export default function TituloDetailModal({
     return () => window.removeEventListener('keydown', handler)
   }, [onClose])
 
-  // Cargar cronología al activar esa pestaña (solo una vez)
+  // Cargar cronología al activar esa pestaña (solo una vez; se puede reintentar desde el botón)
   useEffect(() => {
     if (activeTab !== 'cronologia' || cronologia !== null || loadingCron || cronError) return
     setLoadingCron(true)
     fetch(`/api/siguelo/detalle-cronologia?id=${titulo.id}`)
       .then(r => r.json())
-      .then((data: { entries?: DetalleCronologiaEntry[]; error?: string; authRequired?: boolean }) => {
-        if (data.error) {
-          setCronError(data.error)
-          setCronAuthRequired(!!data.authRequired)
-        } else {
-          setCronologia(data.entries ?? [])
-        }
+      .then((data: { entries?: DetalleCronologiaEntry[]; error?: string }) => {
+        if (data.error) setCronError(data.error)
+        else setCronologia(data.entries ?? [])
       })
-      .catch(() => setCronError('Error al cargar la cronología.'))
+      .catch(() => setCronError('Error de red al cargar la cronología.'))
       .finally(() => setLoadingCron(false))
   }, [activeTab, titulo.id, cronologia, loadingCron, cronError])
 
@@ -486,29 +486,33 @@ export default function TituloDetailModal({
                 </div>
               )}
 
-              {cronError && (
+              {cronError && !loadingCron && (
                 <div style={{
                   padding: '20px 16px',
                   border: '1px solid var(--line)',
                   background: 'var(--surface)',
+                  display: 'flex', flexDirection: 'column', gap: '12px',
                 }}>
                   <div style={{
                     fontFamily: 'var(--font-body)', fontSize: '13px',
-                    color: cronAuthRequired ? 'var(--muted)' : '#dc2626',
-                    lineHeight: 1.6, marginBottom: cronAuthRequired ? '12px' : 0,
+                    color: '#dc2626', lineHeight: 1.6,
                   }}>
                     {cronError}
                   </div>
-                  {cronAuthRequired && (
-                    <div style={{
+                  <button
+                    onClick={() => { setCronError(null) }}
+                    style={{
+                      alignSelf: 'flex-start',
+                      padding: '6px 14px',
+                      border: '1px solid var(--line)',
+                      background: 'var(--paper)',
                       fontFamily: 'var(--font-mono)', fontSize: '10px',
                       textTransform: 'uppercase', letterSpacing: '0.08em',
-                      color: 'var(--muted)',
-                    }}>
-                      El endpoint detalleTitulo de SUNARP requiere un token de sesión autenticado.
-                      Esta funcionalidad no está disponible en consultas anónimas.
-                    </div>
-                  )}
+                      color: 'var(--ink)', cursor: 'pointer',
+                    }}
+                  >
+                    Reintentar
+                  </button>
                 </div>
               )}
 
@@ -529,24 +533,25 @@ export default function TituloDetailModal({
                         textTransform: 'uppercase', letterSpacing: '0.12em',
                         color: 'var(--muted)',
                       }}>
-                        <th style={{ fontWeight: 500, width: '48px' }}>#</th>
+                        <th style={{ fontWeight: 500, width: '44px' }}>#</th>
                         <th style={{ fontWeight: 500 }}>Etapa</th>
-                        <th style={{ fontWeight: 500 }}>Estado</th>
-                        <th style={{ fontWeight: 500 }}>Fecha</th>
-                        <th style={{ fontWeight: 500 }}>Documento</th>
+                        <th style={{ fontWeight: 500 }}>Detalle</th>
+                        <th style={{ fontWeight: 500, whiteSpace: 'nowrap' }}>Fecha</th>
+                        <th style={{ fontWeight: 500, width: '80px' }}></th>
                       </tr>
                     </thead>
                     <tbody>
                       {cronologia.map((entry, i) => {
-                        const estadoS = getEstadoStyle(entry.desEstado)
-                        const etapaS  = getEtapaStyle(entry.etapa)
+                        const etapaS = getEtapaStyle(entry.etapa)
+                        const responsable = (entry.responsable ?? '').trim()
+                        const isEsquela = (entry.documento2 ?? '').toUpperCase().includes('ESQUELA')
                         return (
                           <tr
                             key={i}
                             style={{ background: i % 2 === 1 ? 'var(--surface)' : 'var(--paper)' }}
                           >
                             <td style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--muted)' }}>
-                              {entry.secuencia || i + 1}
+                              {entry.secuencia || String(i + 1).padStart(3, '0')}
                             </td>
                             <td>
                               <span style={{
@@ -559,30 +564,56 @@ export default function TituloDetailModal({
                               </span>
                             </td>
                             <td>
-                              <span style={{
-                                display: 'inline-block', padding: '2px 8px',
-                                background: estadoS?.bg ?? 'var(--surface)',
-                                color: estadoS?.text ?? 'var(--muted)',
-                                fontFamily: 'var(--font-mono)', fontSize: '9px',
-                                fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em',
+                              <div style={{
+                                fontFamily: 'var(--font-body)', fontSize: '13px',
+                                color: 'var(--ink)', lineHeight: 1.35,
                               }}>
-                                {entry.desEstado}
-                              </span>
+                                {entry.area || entry.desEstado}
+                              </div>
+                              {entry.desEstado && entry.area && entry.desEstado !== entry.area && (
+                                <div style={{
+                                  fontFamily: 'var(--font-mono)', fontSize: '9px',
+                                  textTransform: 'uppercase', letterSpacing: '0.06em',
+                                  color: 'var(--muted)', marginTop: '2px',
+                                }}>
+                                  {entry.desEstado}
+                                </div>
+                              )}
+                              {responsable && (
+                                <div style={{
+                                  fontFamily: 'var(--font-body)', fontSize: '11px',
+                                  color: 'var(--muted)', marginTop: '2px',
+                                }}>
+                                  {responsable}
+                                </div>
+                              )}
                             </td>
                             <td style={{ fontFamily: 'var(--font-body)', fontSize: '12px', color: 'var(--muted)', whiteSpace: 'nowrap' }}>
                               {entry.fecha ?? '—'}
                             </td>
                             <td>
-                              {entry.documento2 ? (
-                                <span style={{
-                                  fontFamily: 'var(--font-mono)', fontSize: '9px',
-                                  textTransform: 'uppercase', letterSpacing: '0.06em',
-                                  color: 'var(--muted)',
-                                }}>
-                                  {entry.documento2}
-                                  {entry.tipoEsquela2 ? ` (${entry.tipoEsquela2})` : ''}
-                                </span>
-                              ) : '—'}
+                              {isEsquela && (
+                                <a
+                                  href={`/api/descargar-esquela?id=${titulo.id}&tipoEsquela=${entry.tipoEsquela2 ?? ''}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  title={`Descargar ${entry.documento2}`}
+                                  style={{
+                                    display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                    padding: '3px 8px',
+                                    background: 'var(--ink)', color: 'var(--paper)',
+                                    fontFamily: 'var(--font-mono)', fontSize: '9px',
+                                    textTransform: 'uppercase', letterSpacing: '0.06em',
+                                    textDecoration: 'none', borderRadius: '2px',
+                                  }}
+                                >
+                                  <svg width="10" height="10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                      d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+                                  </svg>
+                                  PDF
+                                </a>
+                              )}
                             </td>
                           </tr>
                         )

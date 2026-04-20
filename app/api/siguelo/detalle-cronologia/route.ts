@@ -5,9 +5,8 @@ import { detalleTituloSunarp } from '@/lib/scraper'
 /**
  * GET /api/siguelo/detalle-cronologia?id={tituloId}
  *
- * Intenta obtener la cronología de movimientos del título desde SUNARP.
- * NOTA: El endpoint requiere token de sesión; si SUNARP lo rechaza por auth
- * se devuelve un error descriptivo en lugar de 500.
+ * Obtiene la cronología de movimientos del título desde SUNARP.
+ * El campo token se envía como null (aceptado por la API pública de SUNARP).
  */
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
@@ -32,20 +31,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ entries })
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Error al obtener cronología.'
-    const isAuthError =
-      msg.toLowerCase().includes('rechazado') ||
-      msg.toLowerCase().includes('token') ||
-      msg.toLowerCase().includes('autenticaci') ||
-      msg.toLowerCase().includes('sesion') ||
-      msg.toLowerCase().includes('acceso')
-    return NextResponse.json(
-      {
-        error: isAuthError
-          ? 'Cronología no disponible — requiere autenticación en SUNARP'
-          : msg,
-        authRequired: isAuthError,
-      },
-      { status: 422 }
-    )
+    return NextResponse.json({ error: msg }, { status: 422 })
   }
 }
