@@ -117,8 +117,8 @@ export async function getTitulosEnriquecidos(): Promise<Titulo[]> {
     // (historial viene ordenado por detectado_en DESC, así que el primer match es el más reciente)
     const lastCalif = entries.find(e => normEstadoSimple(e.estado_nuevo) === 'EN CALIFICACION')
 
-    // Hay reingreso si existe al menos un OBSERVADO o LIQUIDADO en historial
-    const esReingreso = entries.some(e => {
+    // Fallback: si no hay valor DB de es_reingreso, inferir desde historial
+    const esReingresoHistorial = entries.some(e => {
       const n = normEstadoSimple(e.estado_nuevo)
       return n === 'OBSERVADO' || n === 'LIQUIDADO'
     })
@@ -128,15 +128,16 @@ export async function getTitulosEnriquecidos(): Promise<Titulo[]> {
       console.log(`[getTitulosEnriquecidos] ${t.numero_titulo} id=${t.id}`)
       console.log(`  historial entries total: ${entries.length}`)
       console.log(`  lastCalif: ${JSON.stringify(lastCalif ?? null)}`)
-      console.log(`  fecha_ultimo_calificacion: ${lastCalif?.detectado_en ?? null}`)
-      console.log(`  es_reingreso: ${esReingreso}`)
-      console.log(`  fecha_ingreso_calificacion (DB): ${t.fecha_ingreso_calificacion ?? null}`)
+      console.log(`  fecha_ultimo_calificacion (historial): ${lastCalif?.detectado_en ?? null}`)
+      console.log(`  fecha_ingreso_calificacion (DB/cronología): ${t.fecha_ingreso_calificacion ?? null}`)
+      console.log(`  es_reingreso DB: ${t.es_reingreso ?? null} | historial fallback: ${esReingresoHistorial}`)
     }
 
     return {
       ...t,
       fecha_ultimo_calificacion: lastCalif?.detectado_en ?? null,
-      es_reingreso: esReingreso,
+      // Preferir valor DB (viene de cronología SUNARP); historial como fallback
+      es_reingreso: t.es_reingreso ?? esReingresoHistorial,
     }
   })
 }
@@ -153,6 +154,7 @@ export type ExtraSunarpData = {
   pagos?: PagoSunarp[] | null
   actos?: string[] | null
   fecha_ingreso_calificacion?: string | null
+  es_reingreso?: boolean | null
 }
 
 export async function actualizarEstadoTitulo(
@@ -181,6 +183,7 @@ export async function actualizarEstadoTitulo(
     if (extra.pagos              !== undefined) updates.pagos              = extra.pagos
     if (extra.actos              !== undefined) updates.actos              = extra.actos
     if (extra.fecha_ingreso_calificacion !== undefined) updates.fecha_ingreso_calificacion = extra.fecha_ingreso_calificacion
+    if (extra.es_reingreso              !== undefined) updates.es_reingreso              = extra.es_reingreso
   }
 
   const { error } = await supabase

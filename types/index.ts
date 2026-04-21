@@ -57,9 +57,9 @@ export type Titulo = {
   actos?: string[] | null
   last_state_change?: string | null
   fecha_ingreso_calificacion?: string | null
+  es_reingreso?: boolean | null
   // Campos computados server-side (no existen en la tabla)
   fecha_ultimo_calificacion?: string | null
-  es_reingreso?: boolean
 }
 
 export type TituloFormState = {
