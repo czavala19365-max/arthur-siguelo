@@ -63,15 +63,31 @@ export default function SigueloHeaderButtons() {
   // ── Actualizar estado de títulos ─────────────────────────────────────────
   async function ejecutarActualizacion() {
     setUpdate({ phase: 'loading' })
+    let res: Response
     try {
-      const res  = await fetch('/api/siguelo/actualizar-estado', { method: 'POST' })
-      const data = await res.json() as CronResumen & { error?: string }
-      if (!res.ok) throw new Error(data.error ?? `Error ${res.status}`)
-      setUpdate({ phase: 'done', resumen: data })
-      router.refresh()
-    } catch (err) {
-      setUpdate({ phase: 'error', message: err instanceof Error ? err.message : 'Error al actualizar.' })
+      res = await fetch('/api/siguelo/actualizar-estado', { method: 'POST' })
+    } catch {
+      setUpdate({ phase: 'error', message: 'No se pudo conectar con el servidor.' })
+      return
     }
+
+    // Siempre intentar parsear JSON — si el servidor devuelve HTML (error fatal de Next.js)
+    // capturarlo aquí y mostrar un mensaje claro en lugar de una excepción críptica
+    let data: (CronResumen & { error?: string }) | null = null
+    try {
+      data = await res.json() as CronResumen & { error?: string }
+    } catch {
+      setUpdate({ phase: 'error', message: `Error del servidor (HTTP ${res.status}). Revisa los logs de Vercel para más detalles.` })
+      return
+    }
+
+    if (!res.ok) {
+      setUpdate({ phase: 'error', message: data?.error ?? `Error ${res.status}` })
+      return
+    }
+
+    setUpdate({ phase: 'done', resumen: data as CronResumen })
+    router.refresh()
   }
 
   function closeUpdate() { setUpdate({ phase: 'idle' }) }
