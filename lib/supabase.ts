@@ -75,6 +75,61 @@ export async function createTitulo(
   return data.id as string
 }
 
+/** Normalización mínima sin importar lib/estados (evitar dependencia circular) */
+function normEstadoSimple(s: string): string {
+  return s.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
+}
+
+/**
+ * Igual que getTitulos() pero enriquece cada título con:
+ * - fecha_ultimo_calificacion : detectado_en del último cambio de estado a EN CALIFICACIÓN
+ * - es_reingreso              : true si existe algún historial de OBSERVADO o LIQUIDADO previo
+ *
+ * Se hace en 2 queries (titulos + historial bulk) para no N+1.
+ */
+export async function getTitulosEnriquecidos(): Promise<Titulo[]> {
+  const titulos = await getTitulos()
+  if (titulos.length === 0) return []
+
+  const ids = titulos.map(t => t.id)
+
+  const { data: historial } = await supabase
+    .from('historial_estados')
+    .select('titulo_id, estado_nuevo, detectado_en')
+    .in('titulo_id', ids)
+    .order('detectado_en', { ascending: false })
+
+  if (!historial || historial.length === 0) return titulos
+
+  // Agrupar por titulo_id (ya viene ordenado desc por fecha)
+  type HEntry = { estado_nuevo: string; detectado_en: string }
+  const byTitulo: Record<string, HEntry[]> = {}
+  for (const h of historial) {
+    const tid = h.titulo_id as string
+    if (!byTitulo[tid]) byTitulo[tid] = []
+    byTitulo[tid].push({ estado_nuevo: h.estado_nuevo as string, detectado_en: h.detectado_en as string })
+  }
+
+  return titulos.map(t => {
+    const entries = byTitulo[t.id] ?? []
+
+    // Primera entrada (más reciente) con estado EN CALIFICACIÓN
+    const lastCalif = entries.find(e => normEstadoSimple(e.estado_nuevo) === 'EN CALIFICACION')
+
+    // Hay reingreso si existe al menos un OBSERVADO o LIQUIDADO en historial
+    const esReingreso = entries.some(e => {
+      const n = normEstadoSimple(e.estado_nuevo)
+      return n === 'OBSERVADO' || n === 'LIQUIDADO'
+    })
+
+    return {
+      ...t,
+      fecha_ultimo_calificacion: lastCalif?.detectado_en ?? null,
+      es_reingreso: esReingreso,
+    }
+  })
+}
+
 export type ExtraSunarpData = {
   fecha_presentacion?: string | null
   fecha_vencimiento?: string | null
@@ -127,6 +182,13 @@ export async function registrarCambioEstado(
 ): Promise<void> {
   const { error } = await supabase.from('historial_estados').insert([entrada])
   if (error) throw new Error(error.message)
+
+  // Marcar el momento del último cambio de estado para el badge "ACTUALIZADO"
+  const { error: err2 } = await supabase
+    .from('titulos')
+    .update({ last_state_change: new Date().toISOString() })
+    .eq('id', entrada.titulo_id)
+  if (err2) throw new Error(err2.message)
 }
 
 export async function getUltimoEstado(titulo_id: string): Promise<string | null> {

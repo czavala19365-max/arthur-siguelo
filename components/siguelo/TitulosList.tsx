@@ -1,12 +1,12 @@
-import { getTitulos } from '@/lib/supabase'
+import { getTitulosEnriquecidos } from '@/lib/supabase'
 import TitulosClientView from './TitulosClientView'
 
 export default async function TitulosList() {
   let errorMsg: string | null = null
-  let titulos: Awaited<ReturnType<typeof getTitulos>> = []
+  let titulos: Awaited<ReturnType<typeof getTitulosEnriquecidos>> = []
 
   try {
-    titulos = await getTitulos()
+    titulos = await getTitulosEnriquecidos()
   } catch (err) {
     errorMsg = err instanceof Error ? err.message : 'Error al cargar los títulos.'
   }

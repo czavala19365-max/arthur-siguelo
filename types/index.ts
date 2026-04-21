@@ -55,6 +55,10 @@ export type Titulo = {
   indi_suspension?: string | null
   pagos?: PagoSunarp[] | null
   actos?: string[] | null
+  last_state_change?: string | null
+  // Campos computados server-side (no existen en la tabla)
+  fecha_ultimo_calificacion?: string | null
+  es_reingreso?: boolean
 }
 
 export type TituloFormState = {

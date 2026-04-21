@@ -4,13 +4,14 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { getEstadoStyle, ESTADOS_CON_ESQUELA, LABEL_ESQUELA, normalizarEstado, ESTADO_PLURAL } from '@/lib/estados'
 import { archivarTituloAction, eliminarTituloLogicoAction } from '@/app/actions'
+import { parsearFecha, calcularDiasHabiles, formatFechaPE, colorPorFecha } from '@/lib/dias-habiles'
 import TituloDetailModal from './TituloDetailModal'
 import type { Titulo } from '@/types'
 
 // ── Íconos ────────────────────────────────────────────────────────────────────
 
 const DownloadIcon = () => (
-  <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ flexShrink: 0 }}>
+  <svg width="11" height="11" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ flexShrink: 0 }}>
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
   </svg>
 )
@@ -26,53 +27,6 @@ const TrashIcon = () => (
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
   </svg>
 )
-
-// ── Downloads en fila ─────────────────────────────────────────────────────────
-
-function RowDownloads({ titulo }: { titulo: Titulo }) {
-  const estadoNorm = normalizarEstado(titulo.ultimo_estado ?? '')
-  const tieneEsquela = ESTADOS_CON_ESQUELA.has(estadoNorm) && !!titulo.area_registral
-  const tieneAsiento = estadoNorm === 'INSCRITO' && !!titulo.area_registral
-  const label = LABEL_ESQUELA[estadoNorm]
-
-  if (!tieneEsquela && !tieneAsiento) return null
-
-  const linkStyle: React.CSSProperties = {
-    display: 'inline-flex', alignItems: 'center', gap: '4px',
-    fontFamily: 'var(--font-mono)', fontSize: '12px',
-    textTransform: 'uppercase', letterSpacing: '0.06em',
-    textDecoration: 'none',
-  }
-
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-      {tieneEsquela && label && (
-        <a
-          href={`/api/descargar-esquela?id=${titulo.id}&index=0`}
-          target="_blank"
-          rel="noopener noreferrer"
-          title={`Descargar ${label.singular}`}
-          style={{ ...linkStyle, color: '#065f46' }}
-        >
-          <DownloadIcon />
-          {label.singular}
-        </a>
-      )}
-      {tieneAsiento && (
-        <a
-          href={`/api/descargar-asiento?id=${titulo.id}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          title="Descargar asiento de inscripción"
-          style={{ ...linkStyle, color: '#4c1d95' }}
-        >
-          <DownloadIcon />
-          Asiento(s)
-        </a>
-      )}
-    </div>
-  )
-}
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
 
@@ -97,6 +51,109 @@ function Toast({ message, onHide }: { message: string; onHide: () => void }) {
   )
 }
 
+// ── Helpers de fechas ─────────────────────────────────────────────────────────
+
+type SemaforoColor = 'red' | 'orange' | 'green' | 'neutral'
+
+const SEMAFORO_COLOR: Record<SemaforoColor, string> = {
+  red: '#b91c1c', orange: '#92400e', green: '#166534', neutral: 'var(--muted)',
+}
+const SEMAFORO_BG: Record<SemaforoColor, string> = {
+  red: '#fee2e2', orange: '#fef3c7', green: '#dcfce7', neutral: 'transparent',
+}
+
+function FechaTxt({ value }: { value: string | null | undefined }) {
+  if (!value) return <span style={{ color: 'var(--muted)', fontFamily: 'var(--font-mono)', fontSize: '12px' }}>—</span>
+  const d = parsearFecha(value)
+  const texto = d ? formatFechaPE(d) : value.split(' ')[0]
+  return <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--ink)' }}>{texto}</span>
+}
+
+function FechaMaxBadge({ fecha }: { fecha: Date | null }) {
+  if (!fecha) return <span style={{ color: 'var(--muted)', fontFamily: 'var(--font-mono)', fontSize: '12px' }}>—</span>
+  const color = colorPorFecha(fecha)
+  return (
+    <span style={{
+      display: 'inline-block',
+      background: SEMAFORO_BG[color],
+      color: SEMAFORO_COLOR[color],
+      fontFamily: 'var(--font-mono)', fontSize: '12px', fontWeight: 700,
+      padding: '2px 6px', borderRadius: '2px',
+    }}>
+      {formatFechaPE(fecha)}
+    </span>
+  )
+}
+
+const TH_DATE: React.CSSProperties = {
+  padding: '10px 14px', fontWeight: 500, textAlign: 'left', whiteSpace: 'nowrap',
+}
+const TD_DATE: React.CSSProperties = {
+  padding: '14px 14px', whiteSpace: 'nowrap',
+}
+
+function DateHeaders({ normEstado }: { normEstado: string }) {
+  if (normEstado === 'EN CALIFICACION') return <>
+    <th style={TH_DATE}>Fec. Pres.</th>
+    <th style={TH_DATE}>Fec. Vcto.</th>
+    <th style={TH_DATE}>Máx. Atención</th>
+  </>
+  if (normEstado === 'OBSERVADO') return <>
+    <th style={TH_DATE}>Fec. Pres.</th>
+    <th style={TH_DATE}>Fec. Vcto.</th>
+    <th style={TH_DATE}>Máx. Subsanar</th>
+  </>
+  if (normEstado === 'LIQUIDADO') return <>
+    <th style={TH_DATE}>Fec. Pres.</th>
+    <th style={TH_DATE}>Fec. Vcto.</th>
+    <th style={TH_DATE}>Máx. Pago</th>
+  </>
+  if (normEstado === 'INSCRITO') return <>
+    <th style={TH_DATE}>Fec. Pres.</th>
+    <th style={TH_DATE}>Fec. Vcto.</th>
+  </>
+  return null
+}
+
+function DateCells({ titulo: t, normEstado }: { titulo: Titulo; normEstado: string }) {
+  if (normEstado === 'EN CALIFICACION') {
+    // Base: último ingreso a EN CALIFICACIÓN (del historial), o fecha_presentacion como fallback
+    const fechaBase = t.fecha_ultimo_calificacion ?? t.fecha_presentacion
+    // Días: 5 si es reingreso (hubo OBSERVADO o LIQUIDADO previo), 7 si es primer ingreso
+    const dias = t.es_reingreso ? 5 : 7
+    const maxAtencion = calcularDiasHabiles(fechaBase, dias)
+    const tooltipBase = t.fecha_ultimo_calificacion ? 'último ingreso a calificación' : 'fecha de presentación'
+    return <>
+      <td style={TD_DATE}><FechaTxt value={t.fecha_presentacion} /></td>
+      <td style={TD_DATE}><FechaTxt value={t.fecha_vencimiento} /></td>
+      <td style={TD_DATE} title={`${dias} días hábiles desde ${tooltipBase}`}>
+        <FechaMaxBadge fecha={maxAtencion} />
+      </td>
+    </>
+  }
+  if (normEstado === 'OBSERVADO') {
+    const maxSubsanar = calcularDiasHabiles(t.fecha_vencimiento, 5, false)
+    return <>
+      <td style={TD_DATE}><FechaTxt value={t.fecha_presentacion} /></td>
+      <td style={TD_DATE}><FechaTxt value={t.fecha_vencimiento} /></td>
+      <td style={TD_DATE}><FechaMaxBadge fecha={maxSubsanar} /></td>
+    </>
+  }
+  if (normEstado === 'LIQUIDADO') {
+    const maxPago = calcularDiasHabiles(t.fecha_vencimiento, 5, false)
+    return <>
+      <td style={TD_DATE}><FechaTxt value={t.fecha_presentacion} /></td>
+      <td style={TD_DATE}><FechaTxt value={t.fecha_vencimiento} /></td>
+      <td style={TD_DATE}><FechaMaxBadge fecha={maxPago} /></td>
+    </>
+  }
+  if (normEstado === 'INSCRITO') return <>
+    <td style={TD_DATE}><FechaTxt value={t.fecha_presentacion} /></td>
+    <td style={TD_DATE}><FechaTxt value={t.fecha_vencimiento} /></td>
+  </>
+  return null
+}
+
 // ── Componente principal ──────────────────────────────────────────────────────
 
 export default function TituloSection({
@@ -116,6 +173,7 @@ export default function TituloSection({
 
   const estadoStyle = getEstadoStyle(estado) ?? { bg: '#F3F4F6', text: '#374151' }
   const estadoPlural = ESTADO_PLURAL[estado] ?? estado
+  const normEstado = normalizarEstado(estado)
 
   function showToast(msg: string) {
     setToast(msg)
@@ -168,8 +226,24 @@ export default function TituloSection({
     transition: 'background 0.15s, color 0.15s',
   }
 
+  const downloadLinkStyle: React.CSSProperties = {
+    display: 'inline-flex', alignItems: 'center', gap: '4px',
+    fontFamily: 'var(--font-mono)', fontSize: '11px',
+    textTransform: 'uppercase', letterSpacing: '0.06em',
+    textDecoration: 'none', padding: '3px 7px',
+    border: '1px solid', borderRadius: '3px',
+    whiteSpace: 'nowrap',
+  }
+
   return (
     <>
+      <style>{`
+        @keyframes pulse-badge {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.55; }
+        }
+      `}</style>
+
       {toast && <Toast message={toast} onHide={() => setToast(null)} />}
 
       {/* Modal de confirmación archivar/eliminar */}
@@ -313,95 +387,150 @@ export default function TituloSection({
                   <th style={{ padding: '10px 16px', fontWeight: 500, textAlign: 'left' }}>Oficina</th>
                   <th style={{ padding: '10px 16px', fontWeight: 500, textAlign: 'left' }}>Cliente</th>
                   <th style={{ padding: '10px 16px', fontWeight: 500, textAlign: 'left' }}>Asunto</th>
-                  <th style={{ padding: '10px 16px', fontWeight: 500, textAlign: 'left' }}>Descargas</th>
+                  <DateHeaders normEstado={normEstado} />
                   <th style={{ padding: '10px 24px', fontWeight: 500, textAlign: 'right' }}></th>
                 </tr>
               </thead>
               <tbody>
-                {titulos.map((t, i) => (
-                  <tr
-                    key={t.id}
-                    style={{
-                      borderTop: '1px solid var(--line-faint)',
-                      background: i % 2 === 1 ? 'var(--paper-dark)' : 'var(--surface)',
-                      transition: 'background 0.1s',
-                      opacity: processingId === t.id ? 0.4 : 1,
-                    }}
-                    onMouseOver={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(194,164,109,0.06)' }}
-                    onMouseOut={e => { (e.currentTarget as HTMLElement).style.background = i % 2 === 1 ? 'var(--paper-dark)' : 'var(--surface)' }}
-                  >
-                    <td style={{ padding: '14px 24px' }}>
-                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '15px', color: 'var(--ink)', fontWeight: 500 }}>{t.numero_titulo}</div>
-                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--muted)', marginTop: '2px' }}>{t.anio_titulo}</div>
-                    </td>
-                    <td style={{ padding: '14px 16px' }}>
-                      <span style={{ fontFamily: 'var(--font-body)', fontSize: '14px', color: 'var(--muted)' }}>
-                        {t.oficina_registral}
-                      </span>
-                    </td>
-                    <td style={{ padding: '14px 16px' }}>
-                      <span style={{ fontFamily: 'var(--font-body)', fontSize: '14px', fontWeight: 500, color: 'var(--ink)' }}>
-                        {t.nombre_cliente}
-                      </span>
-                    </td>
-                    <td style={{ padding: '14px 16px' }}>
-                      <span style={{ fontFamily: 'var(--font-body)', fontSize: '14px', color: 'var(--muted)' }}>
-                        {t.asunto ?? ''}
-                      </span>
-                    </td>
-                    <td style={{ padding: '14px 16px' }}>
-                      <RowDownloads titulo={t} />
-                    </td>
-                    <td style={{ padding: '14px 24px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'flex-end' }}>
-                        {/* Ver detalle */}
-                        <button
-                          onClick={() => setSelected(t)}
-                          style={{ ...actionsBtnBase, display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-                          onMouseOver={e => { e.currentTarget.style.background = 'var(--ink)'; e.currentTarget.style.color = 'var(--paper)' }}
-                          onMouseOut={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--ink)' }}
-                        >
-                          <svg width="11" height="11" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                          </svg>
-                          Ver detalle
-                        </button>
+                {titulos.map((t, i) => {
+                  const estadoNorm = normalizarEstado(t.ultimo_estado ?? '')
+                  const tieneEsquela = ESTADOS_CON_ESQUELA.has(estadoNorm) && !!t.area_registral
+                  const tieneAsiento = estadoNorm === 'INSCRITO' && !!t.area_registral
+                  const labelEsquela = LABEL_ESQUELA[estadoNorm]
+                  const esReciente = t.last_state_change
+                    ? (Date.now() - new Date(t.last_state_change).getTime()) < 86400000
+                    : false
 
-                        {/* Archivar */}
-                        <button
-                          onClick={() => setPendingAction({ tipo: 'archivar', titulo: t })}
-                          disabled={processingId === t.id}
-                          title="Archivar"
-                          style={iconBtnBase}
-                          onMouseOver={e => { e.currentTarget.style.background = 'rgba(194,164,109,0.12)'; e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)' }}
-                          onMouseOut={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'var(--line)'; e.currentTarget.style.color = 'var(--muted)' }}
-                        >
-                          <ArchiveIcon />
-                        </button>
+                  return (
+                    <tr
+                      key={t.id}
+                      style={{
+                        borderTop: '1px solid var(--line-faint)',
+                        background: i % 2 === 1 ? 'var(--paper-dark)' : 'var(--surface)',
+                        transition: 'background 0.1s',
+                        opacity: processingId === t.id ? 0.4 : 1,
+                      }}
+                      onMouseOver={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(194,164,109,0.06)' }}
+                      onMouseOut={e => { (e.currentTarget as HTMLElement).style.background = i % 2 === 1 ? 'var(--paper-dark)' : 'var(--surface)' }}
+                    >
+                      {/* Nº Título + badge ACTUALIZADO */}
+                      <td style={{ padding: '14px 24px' }}>
+                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '15px', color: 'var(--ink)', fontWeight: 500 }}>{t.numero_titulo}</div>
+                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--muted)', marginTop: '2px' }}>{t.anio_titulo}</div>
+                        {esReciente && (
+                          <span style={{
+                            display: 'inline-block', marginTop: '5px',
+                            background: '#bbf7d0', color: '#166534',
+                            fontFamily: 'var(--font-mono)', fontSize: '9px', fontWeight: 700,
+                            letterSpacing: '0.10em', padding: '2px 6px', borderRadius: '2px',
+                            animation: 'pulse-badge 2s ease-in-out infinite',
+                          }}>
+                            ACTUALIZADO
+                          </span>
+                        )}
+                      </td>
 
-                        {/* Eliminar (mover a eliminados) */}
-                        <button
-                          onClick={() => setPendingAction({ tipo: 'eliminar', titulo: t })}
-                          disabled={processingId === t.id}
-                          title="Mover a Eliminados"
-                          style={{
-                            ...iconBtnBase,
-                            cursor: processingId === t.id ? 'not-allowed' : 'pointer',
-                          }}
-                          onMouseOver={e => { if (!processingId) { e.currentTarget.style.background = 'rgba(220,38,38,0.08)'; e.currentTarget.style.borderColor = '#dc2626'; e.currentTarget.style.color = '#dc2626' } }}
-                          onMouseOut={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'var(--line)'; e.currentTarget.style.color = 'var(--muted)' }}
-                        >
-                          {processingId === t.id ? (
-                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px' }}>…</span>
-                          ) : (
-                            <TrashIcon />
+                      <td style={{ padding: '14px 16px' }}>
+                        <span style={{ fontFamily: 'var(--font-body)', fontSize: '14px', color: 'var(--muted)' }}>
+                          {t.oficina_registral}
+                        </span>
+                      </td>
+                      <td style={{ padding: '14px 16px' }}>
+                        <span style={{ fontFamily: 'var(--font-body)', fontSize: '14px', fontWeight: 500, color: 'var(--ink)' }}>
+                          {t.nombre_cliente}
+                        </span>
+                      </td>
+                      <td style={{ padding: '14px 16px' }}>
+                        <span style={{ fontFamily: 'var(--font-body)', fontSize: '14px', color: 'var(--muted)' }}>
+                          {t.asunto ?? ''}
+                        </span>
+                      </td>
+
+                      {/* Columnas de fechas por estado */}
+                      <DateCells titulo={t} normEstado={normEstado} />
+
+                      {/* Acciones + descargas inline */}
+                      <td style={{ padding: '14px 24px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
+                          {/* Descargas inline (solo si aplica) */}
+                          {(tieneEsquela || tieneAsiento) && (
+                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                              {tieneEsquela && labelEsquela && (
+                                <a
+                                  href={`/api/descargar-esquela?id=${t.id}&index=0`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  title={`Descargar ${labelEsquela.singular}`}
+                                  style={{ ...downloadLinkStyle, color: '#065f46', borderColor: 'rgba(6,95,70,.3)', background: '#f0fdf4' }}
+                                >
+                                  <DownloadIcon />
+                                  {labelEsquela.singular.split(' ')[0]}
+                                </a>
+                              )}
+                              {tieneAsiento && (
+                                <a
+                                  href={`/api/descargar-asiento?id=${t.id}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  title="Descargar asiento de inscripción"
+                                  style={{ ...downloadLinkStyle, color: '#4c1d95', borderColor: 'rgba(76,29,149,.3)', background: '#faf5ff' }}
+                                >
+                                  <DownloadIcon />
+                                  Asiento(s)
+                                </a>
+                              )}
+                            </div>
                           )}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+
+                          {/* Botones de acción */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <button
+                              onClick={() => setSelected(t)}
+                              style={{ ...actionsBtnBase, display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                              onMouseOver={e => { e.currentTarget.style.background = 'var(--ink)'; e.currentTarget.style.color = 'var(--paper)' }}
+                              onMouseOut={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--ink)' }}
+                            >
+                              <svg width="11" height="11" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                              </svg>
+                              Ver detalle
+                            </button>
+
+                            <button
+                              onClick={() => setPendingAction({ tipo: 'archivar', titulo: t })}
+                              disabled={processingId === t.id}
+                              title="Archivar"
+                              style={iconBtnBase}
+                              onMouseOver={e => { e.currentTarget.style.background = 'rgba(194,164,109,0.12)'; e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)' }}
+                              onMouseOut={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'var(--line)'; e.currentTarget.style.color = 'var(--muted)' }}
+                            >
+                              <ArchiveIcon />
+                            </button>
+
+                            <button
+                              onClick={() => setPendingAction({ tipo: 'eliminar', titulo: t })}
+                              disabled={processingId === t.id}
+                              title="Mover a Eliminados"
+                              style={{
+                                ...iconBtnBase,
+                                cursor: processingId === t.id ? 'not-allowed' : 'pointer',
+                              }}
+                              onMouseOver={e => { if (!processingId) { e.currentTarget.style.background = 'rgba(220,38,38,0.08)'; e.currentTarget.style.borderColor = '#dc2626'; e.currentTarget.style.color = '#dc2626' } }}
+                              onMouseOut={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'var(--line)'; e.currentTarget.style.color = 'var(--muted)' }}
+                            >
+                              {processingId === t.id ? (
+                                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px' }}>…</span>
+                              ) : (
+                                <TrashIcon />
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
