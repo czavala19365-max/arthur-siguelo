@@ -1,5 +1,5 @@
 import { after, NextResponse } from 'next/server'
-import { addMovimientoJudicial, createCaso, getAllCasosActivos, updateCaso, updateMovimientoJudicial, type Caso } from '@/lib/db'
+import { addMovimientoJudicial, createCaso, getAllCasosActivos, updateCaso, updateMovimientoJudicial, type Caso } from '@/lib/judicial-db'
 import { clasificarMovimientoCEJ } from '@/lib/ai-service'
 
 export const runtime = 'nodejs'

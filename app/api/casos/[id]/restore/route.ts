@@ -1,4 +1,4 @@
-import { getCasoById, restoreCasoFromArchive, restoreCasoFromPapelera } from '@/lib/db'
+import { getCasoById, restoreCasoFromArchive, restoreCasoFromPapelera } from '@/lib/judicial-db'
 
 export const runtime = 'nodejs'
 

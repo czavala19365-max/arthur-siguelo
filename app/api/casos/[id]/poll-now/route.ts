@@ -6,7 +6,7 @@ import {
   logNotificacionJudicial,
   updateCaso,
   updateMovimientoJudicial
-} from '@/lib/db'
+} from '@/lib/judicial-db'
 import type { CejCaseData } from '@/lib/cej-scraper'
 import { clasificarMovimientoCEJ } from '@/lib/ai-service'
 import { enviarAlertaMovimiento, type NivelUrgencia } from '@/lib/alert-service'

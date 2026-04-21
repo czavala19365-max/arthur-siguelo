@@ -1,5 +1,5 @@
 import { generarEscritoJudicial } from '@/lib/ai-service'
-import { getCasoById, saveEscritoJudicial } from '@/lib/db'
+import { getCasoById, saveEscritoJudicial } from '@/lib/judicial-db'
 
 export async function POST(
   request: Request,

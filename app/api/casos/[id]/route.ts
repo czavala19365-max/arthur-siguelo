@@ -6,7 +6,7 @@ import {
   getEscritosByCaso,
   softDeleteCaso,
   updateCaso
-} from '@/lib/db'
+} from '@/lib/judicial-db'
 
 export async function GET(
   _request: Request,

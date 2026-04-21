@@ -1,4 +1,4 @@
-import { getCasosArchivados } from '@/lib/db'
+import { getCasosArchivados } from '@/lib/judicial-db'
 
 export const runtime = 'nodejs'
 

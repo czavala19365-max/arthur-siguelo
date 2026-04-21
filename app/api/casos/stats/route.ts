@@ -1,4 +1,4 @@
-import { getCasosStats } from '@/lib/db'
+import { getCasosStats } from '@/lib/judicial-db'
 
 export async function GET() {
   try {
