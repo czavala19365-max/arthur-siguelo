@@ -179,7 +179,7 @@ export async function POST(request: Request) {
     const msg = error instanceof Error ? error.message : String(error)
     console.error('[API] POST /casos error:', error)
     return Response.json(
-      { error: 'Error al crear proceso judicial', detail: process.env.NODE_ENV === 'development' ? msg : undefined },
+      { error: 'Error al crear proceso judicial', detail: msg },
       { status: 500 }
     )
   }
