@@ -89,11 +89,12 @@ export async function GET(request: NextRequest) {
         item.cambio = true
       }
 
-      // ── Fecha real de ingreso a EN CALIFICACIÓN (desde cronología SUNARP) ─
+      // ── Fecha real de ingreso a EN CALIFICACIÓN y es_reingreso (desde cronología SUNARP) ─
       let fechaIngresoCalif: string | undefined = undefined
+      let esReingreso: boolean | undefined = undefined
       const estadoNorm = normalizarEstado(resultado.estado)
 
-      if (estadoNorm === 'EN CALIFICACION' && (hayCambio || !titulo.fecha_ingreso_calificacion)) {
+      if (estadoNorm === 'EN CALIFICACION' && (hayCambio || !titulo.fecha_ingreso_calificacion || titulo.es_reingreso == null)) {
         try {
           const cronologia = await detalleTituloSunarp({
             oficina_registral: titulo.oficina_registral,
@@ -103,6 +104,12 @@ export async function GET(request: NextRequest) {
             area_registral:    titulo.area_registral,
           })
 
+          const normStr = (s: string) =>
+            s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+
+          // es_reingreso: cualquier entrada con "reingres" en desEstado
+          esReingreso = cronologia.some(e => normStr(e.desEstado).includes('reingres'))
+
           const califEntries = cronologia.filter(
             e => normalizarEstado(e.desEstado) === 'EN CALIFICACION'
           )
@@ -110,7 +117,7 @@ export async function GET(request: NextRequest) {
           if (califEntries.length > 0) {
             califEntries.sort((a, b) => (parseInt(b.secuencia) || 0) - (parseInt(a.secuencia) || 0))
             fechaIngresoCalif = califEntries[0].fecha
-            console.log(`[cron] fecha_ingreso_calificacion para ${titulo.numero_titulo}: ${fechaIngresoCalif}`)
+            console.log(`[cron] ${titulo.numero_titulo}: fecha_ingreso_calificacion=${fechaIngresoCalif} es_reingreso=${esReingreso}`)
           }
         } catch (err) {
           console.warn(`[cron] cronología ${titulo.numero_titulo}:`, err instanceof Error ? err.message : err)
@@ -130,6 +137,7 @@ export async function GET(request: NextRequest) {
         pagos:                      resultado.lstPagos,
         actos:                      resultado.lstActos,
         fecha_ingreso_calificacion: fechaIngresoCalif,
+        es_reingreso:               esReingreso,
       })
     } catch (err) {
       item.error = err instanceof Error ? err.message : 'Error desconocido'

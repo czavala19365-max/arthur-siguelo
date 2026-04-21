@@ -81,7 +81,9 @@ export async function POST() {
         let fechaIngresoCalif: string | undefined = undefined
         const estadoNorm = normalizarEstado(resultado.estado)
 
-        if (estadoNorm === 'EN CALIFICACION' && (hayCambio || !titulo.fecha_ingreso_calificacion)) {
+        let esReingreso: boolean | undefined = undefined
+
+        if (estadoNorm === 'EN CALIFICACION' && (hayCambio || !titulo.fecha_ingreso_calificacion || titulo.es_reingreso == null)) {
           try {
             const cronologia = await detalleTituloSunarp({
               oficina_registral: titulo.oficina_registral,
@@ -91,6 +93,12 @@ export async function POST() {
               area_registral:    titulo.area_registral,
             })
 
+            const normStr = (s: string) =>
+              s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+
+            // es_reingreso: cualquier entrada con "reingres" en desEstado
+            esReingreso = cronologia.some(e => normStr(e.desEstado).includes('reingres'))
+
             const califEntries = cronologia.filter(
               e => normalizarEstado(e.desEstado) === 'EN CALIFICACION'
             )
@@ -99,7 +107,7 @@ export async function POST() {
               // Ordenar por secuencia desc para obtener la entrada más reciente
               califEntries.sort((a, b) => (parseInt(b.secuencia) || 0) - (parseInt(a.secuencia) || 0))
               fechaIngresoCalif = califEntries[0].fecha
-              console.log(`[actualizar-estado] fecha_ingreso_calificacion para ${titulo.numero_titulo}: ${fechaIngresoCalif}`)
+              console.log(`[actualizar-estado] ${titulo.numero_titulo}: fecha_ingreso_calificacion=${fechaIngresoCalif} es_reingreso=${esReingreso}`)
             }
           } catch (err) {
             // No es fatal — el título se actualiza igual, sin la fecha exacta de calificación
@@ -119,6 +127,7 @@ export async function POST() {
           pagos:                    resultado.lstPagos,
           actos:                    resultado.lstActos,
           fecha_ingreso_calificacion: fechaIngresoCalif,
+          es_reingreso:               esReingreso,
         })
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Error desconocido'
