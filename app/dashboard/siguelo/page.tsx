@@ -1,6 +1,6 @@
 import { Suspense } from 'react'
 import TitulosList from '@/components/siguelo/TitulosList'
-import SigueloAddButton from '@/components/siguelo/SigueloAddButton'
+import SigueloHeaderButtons from '@/components/siguelo/SigueloHeaderButtons'
 
 export default function SigueloPage() {
   return (
@@ -11,6 +11,8 @@ export default function SigueloPage() {
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'flex-start',
+        flexWrap: 'wrap',
+        gap: '16px',
         borderLeft: '4px solid #c2a46d',
         paddingLeft: '24px',
         marginBottom: '32px',
@@ -38,7 +40,7 @@ export default function SigueloPage() {
           </h1>
         </div>
         <Suspense fallback={null}>
-          <SigueloAddButton />
+          <SigueloHeaderButtons />
         </Suspense>
       </div>
 
