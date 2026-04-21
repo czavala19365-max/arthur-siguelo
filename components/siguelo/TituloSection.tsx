@@ -95,7 +95,6 @@ const TD_DATE: React.CSSProperties = {
 function DateHeaders({ normEstado }: { normEstado: string }) {
   if (normEstado === 'EN CALIFICACION') return <>
     <th style={TH_DATE}>Fec. Pres.</th>
-    <th style={TH_DATE}>Fec. Vcto.</th>
     <th style={TH_DATE}>Máx. Atención</th>
   </>
   if (normEstado === 'OBSERVADO') return <>
@@ -117,16 +116,16 @@ function DateHeaders({ normEstado }: { normEstado: string }) {
 
 function DateCells({ titulo: t, normEstado }: { titulo: Titulo; normEstado: string }) {
   if (normEstado === 'EN CALIFICACION') {
-    // Base: último ingreso a EN CALIFICACIÓN (del historial), o fecha_presentacion como fallback
-    const fechaBase = t.fecha_ultimo_calificacion ?? t.fecha_presentacion
-    // Días: 5 si es reingreso (hubo OBSERVADO o LIQUIDADO previo), 7 si es primer ingreso
+    // Máx. Atención = fecha_vencimiento de SUNARP.
+    // SUNARP ya calcula el plazo correcto (7 días primer ingreso / 5 reingreso)
+    // desde la fecha real de entrada a calificación — más fiable que calcularlo
+    // nosotros con el detectado_en del historial (que es cuando nuestro sistema
+    // detectó el cambio, no cuando SUNARP lo registró).
+    const maxAtencion = parsearFecha(t.fecha_vencimiento)
     const dias = t.es_reingreso ? 5 : 7
-    const maxAtencion = calcularDiasHabiles(fechaBase, dias)
-    const tooltipBase = t.fecha_ultimo_calificacion ? 'último ingreso a calificación' : 'fecha de presentación'
     return <>
       <td style={TD_DATE}><FechaTxt value={t.fecha_presentacion} /></td>
-      <td style={TD_DATE}><FechaTxt value={t.fecha_vencimiento} /></td>
-      <td style={TD_DATE} title={`${dias} días hábiles desde ${tooltipBase}`}>
+      <td style={TD_DATE} title={`Plazo SUNARP: ${dias} días hábiles desde la entrada a calificación`}>
         <FechaMaxBadge fecha={maxAtencion} />
       </td>
     </>
