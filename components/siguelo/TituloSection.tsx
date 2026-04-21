@@ -346,7 +346,7 @@ export default function TituloSection({
                     </td>
                     <td style={{ padding: '14px 16px' }}>
                       <span style={{ fontFamily: 'var(--font-body)', fontSize: '14px', color: 'var(--muted)' }}>
-                        {t.asunto ?? <span style={{ color: 'var(--line-strong)' }}>—</span>}
+                        {t.asunto ?? ''}
                       </span>
                     </td>
                     <td style={{ padding: '14px 16px' }}>

@@ -112,31 +112,34 @@ export default function SigueloHeaderButtons() {
       {/* ── Fila de botones ── */}
       <div className="sig-header-btns" style={{ display: 'flex', gap: '10px', alignItems: 'center', marginTop: '8px', flexWrap: 'wrap' }}>
 
-        {/* Actualizar Estado */}
+        {/* Actualizar */}
         <button
           className="sig-btn sig-btn-secondary"
           onClick={() => setUpdate({ phase: 'confirm' })}
           disabled={update.phase === 'loading'}
+          title="Consultar SUNARP y actualizar el estado de todos los títulos activos"
         >
           {update.phase === 'loading' ? <IconSpinner /> : <IconRefresh />}
-          Actualizar Estado
+          Actualizar
         </button>
 
-        {/* Descargar Reporte */}
+        {/* Exportar Excel */}
         <button
           className="sig-btn sig-btn-green"
           onClick={descargarExcel}
+          title="Descargar Excel con todos los títulos y sus estados actuales"
         >
           <IconDownload />
-          Descargar Reporte
+          Exportar Excel
         </button>
 
         {/* Agregar Título */}
         <button
           className="sig-btn sig-btn-primary"
           onClick={() => setAddOpen(true)}
+          title="Registrar un nuevo título para seguimiento"
         >
-          + Agregar título
+          + Agregar Título
         </button>
       </div>
 
