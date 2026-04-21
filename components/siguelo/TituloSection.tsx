@@ -95,6 +95,7 @@ const TD_DATE: React.CSSProperties = {
 function DateHeaders({ normEstado }: { normEstado: string }) {
   if (normEstado === 'EN CALIFICACION') return <>
     <th style={TH_DATE}>Fec. Pres.</th>
+    <th style={TH_DATE}>Fec. Vcto.</th>
     <th style={TH_DATE}>Máx. Atención</th>
   </>
   if (normEstado === 'OBSERVADO') return <>
@@ -116,16 +117,28 @@ function DateHeaders({ normEstado }: { normEstado: string }) {
 
 function DateCells({ titulo: t, normEstado }: { titulo: Titulo; normEstado: string }) {
   if (normEstado === 'EN CALIFICACION') {
-    // Base: fecha_ingreso_calificacion = fecha exacta de SUNARP (de la cronología),
-    // almacenada la primera vez que detectamos el estado EN CALIFICACIÓN.
-    // Fallback: fecha_presentacion (si aún no se ha hecho Actualizar desde el fix).
-    const fechaBase = t.fecha_ingreso_calificacion ?? t.fecha_presentacion
+    // Cadena de fallback para la fecha base del cálculo (de más a menos precisa):
+    // 1. fecha_ingreso_calificacion → fecha real de SUNARP desde cronología (set por Actualizar)
+    // 2. fecha_ultimo_calificacion  → detectado_en del historial (cuándo detectamos el cambio)
+    // 3. fecha_presentacion         → fecha de primera presentación (último recurso)
+    const fechaBase = t.fecha_ingreso_calificacion ?? t.fecha_ultimo_calificacion ?? t.fecha_presentacion
+    const fuente = t.fecha_ingreso_calificacion ? 'cronología SUNARP'
+      : t.fecha_ultimo_calificacion ? 'historial (detectado_en)'
+      : 'fecha de presentación'
     const dias = t.es_reingreso ? 5 : 7
     const maxAtencion = calcularDiasHabiles(fechaBase, dias)
-    const tooltipFuente = t.fecha_ingreso_calificacion ? 'cronología SUNARP' : 'fecha de presentación (ejecuta Actualizar para precisar)'
+
+    // DEBUG — visible en consola del navegador
+    console.log(`[EN CALIFICACION] ${t.numero_titulo}:`)
+    console.log(`  titulo_id: ${t.id}`)
+    console.log(`  fechaBase: ${fechaBase ?? 'null'} (fuente: ${fuente})`)
+    console.log(`  dias: ${dias} (es_reingreso: ${t.es_reingreso ?? false})`)
+    console.log(`  maxAtencion: ${maxAtencion ? formatFechaPE(maxAtencion) : 'null'}`)
+
     return <>
       <td style={TD_DATE}><FechaTxt value={t.fecha_presentacion} /></td>
-      <td style={TD_DATE} title={`${dias} días hábiles desde ingreso a calificación (${tooltipFuente})`}>
+      <td style={TD_DATE}><FechaTxt value={t.fecha_vencimiento} /></td>
+      <td style={TD_DATE} title={`${dias} días hábiles desde ingreso a calificación (${fuente})`}>
         <FechaMaxBadge fecha={maxAtencion} />
       </td>
     </>

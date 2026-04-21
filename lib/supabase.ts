@@ -114,6 +114,7 @@ export async function getTitulosEnriquecidos(): Promise<Titulo[]> {
     const entries = byTitulo[t.id] ?? []
 
     // Primera entrada (más reciente) con estado EN CALIFICACIÓN
+    // (historial viene ordenado por detectado_en DESC, así que el primer match es el más reciente)
     const lastCalif = entries.find(e => normEstadoSimple(e.estado_nuevo) === 'EN CALIFICACION')
 
     // Hay reingreso si existe al menos un OBSERVADO o LIQUIDADO en historial
@@ -121,6 +122,16 @@ export async function getTitulosEnriquecidos(): Promise<Titulo[]> {
       const n = normEstadoSimple(e.estado_nuevo)
       return n === 'OBSERVADO' || n === 'LIQUIDADO'
     })
+
+    // ── DEBUG: loguear solo títulos EN CALIFICACIÓN ──────────────────────────
+    if (normEstadoSimple(t.ultimo_estado ?? '') === 'EN CALIFICACION') {
+      console.log(`[getTitulosEnriquecidos] ${t.numero_titulo} id=${t.id}`)
+      console.log(`  historial entries total: ${entries.length}`)
+      console.log(`  lastCalif: ${JSON.stringify(lastCalif ?? null)}`)
+      console.log(`  fecha_ultimo_calificacion: ${lastCalif?.detectado_en ?? null}`)
+      console.log(`  es_reingreso: ${esReingreso}`)
+      console.log(`  fecha_ingreso_calificacion (DB): ${t.fecha_ingreso_calificacion ?? null}`)
+    }
 
     return {
       ...t,
