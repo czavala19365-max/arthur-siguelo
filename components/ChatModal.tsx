@@ -40,26 +40,156 @@ function parseMessage(raw: string): { content: string; pendingTitulo?: TituloDat
 
 function uid() { return Math.random().toString(36).slice(2) }
 
-function renderContent(text: string) {
-  const parts = text.split(/(\*\*[^*]+\*\*|📖 Base legal:[^\n]+)/g)
-  return parts.map((part, i) => {
-    if (part.startsWith('**') && part.endsWith('**')) {
-      return <strong key={i}>{part.slice(2, -2)}</strong>
+// Renders inline markdown: **bold**, `code`, [text](url)
+function renderInline(text: string): React.ReactNode {
+  const INLINE_RE = /(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\([^)]+\))/g
+  const parts = text.split(INLINE_RE)
+  return (
+    <>
+      {parts.map((part, i) => {
+        if (/^\*\*[^*]+\*\*$/.test(part)) {
+          return <strong key={i}>{part.slice(2, -2)}</strong>
+        }
+        if (/^`[^`]+`$/.test(part)) {
+          return (
+            <code key={i} style={{
+              fontFamily: 'var(--font-mono)', fontSize: '11.5px',
+              background: 'rgba(194,164,109,0.15)',
+              padding: '1px 6px', borderRadius: '3px',
+              color: 'var(--accent)', fontWeight: 700,
+            }}>
+              {part.slice(1, -1)}
+            </code>
+          )
+        }
+        const linkMatch = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/)
+        if (linkMatch) {
+          const [, linkText, linkUrl] = linkMatch
+          if (linkUrl.startsWith('/')) {
+            return (
+              <Link key={i} href={linkUrl} style={{ color: 'var(--accent)', fontWeight: 600, textDecoration: 'underline' }}>
+                {linkText}
+              </Link>
+            )
+          }
+          return (
+            <a key={i} href={linkUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)', textDecoration: 'underline' }}>
+              {linkText}
+            </a>
+          )
+        }
+        return <span key={i}>{part}</span>
+      })}
+    </>
+  )
+}
+
+function renderContent(text: string): React.ReactNode {
+  const lines = text.split('\n')
+  const nodes: React.ReactNode[] = []
+  let k = 0
+  let i = 0
+
+  while (i < lines.length) {
+    const line    = lines[i]
+    const trimmed = line.trim()
+
+    // ── Markdown table block ──────────────────────────────────────────────────
+    if (trimmed.startsWith('|')) {
+      const tableLines: string[] = []
+      while (i < lines.length && lines[i].trim().startsWith('|')) {
+        tableLines.push(lines[i])
+        i++
+      }
+      // Skip separator rows (e.g. |---|---|)
+      const dataLines = tableLines.filter(l => l.replace(/[\|\-:\s]/g, '').length > 0)
+      const rows = dataLines.map(l =>
+        l.split('|').slice(1, -1).map(c => c.trim())
+      ).filter(r => r.length > 0)
+
+      if (rows.length > 0) {
+        const [header, ...body] = rows
+        nodes.push(
+          <div key={k++} style={{ overflowX: 'auto', margin: '10px 0' }}>
+            <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+              <thead>
+                <tr style={{ borderBottom: '2px solid var(--line)', background: 'var(--paper)' }}>
+                  {header.map((h, hi) => (
+                    <th key={hi} style={{
+                      padding: '7px 12px',
+                      fontFamily: 'var(--font-mono)', fontSize: '10px',
+                      textTransform: 'uppercase', letterSpacing: '.08em',
+                      color: 'var(--muted)', textAlign: 'left', whiteSpace: 'nowrap',
+                    }}>
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {body.map((row, ri) => (
+                  <tr key={ri} style={{
+                    background: ri % 2 === 0 ? 'rgba(0,0,0,0.025)' : 'transparent',
+                    borderBottom: '1px solid var(--line)',
+                  }}>
+                    {row.map((cell, ci) => {
+                      const isPartida = ci === 1
+                      return (
+                        <td key={ci} style={{
+                          padding: '7px 12px',
+                          fontFamily: isPartida ? 'var(--font-mono)' : 'var(--font-body)',
+                          fontSize: '13px',
+                          color: isPartida ? 'var(--accent)' : 'var(--ink)',
+                          fontWeight: isPartida ? 700 : 400,
+                          whiteSpace: isPartida ? 'nowrap' : undefined,
+                        }}>
+                          {renderInline(cell)}
+                        </td>
+                      )
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
+      }
+      continue
     }
-    if (part.startsWith('📖 Base legal:')) {
-      return (
-        <span key={i} style={{
+
+    // ── 📖 Base legal block ───────────────────────────────────────────────────
+    if (trimmed.startsWith('📖 Base legal:')) {
+      nodes.push(
+        <span key={k++} style={{
           display: 'block', marginTop: '10px', padding: '8px 12px',
           background: 'rgba(194,164,109,0.1)', borderLeft: '3px solid var(--accent)',
           fontFamily: 'var(--font-mono)', fontSize: '11.5px',
           color: 'var(--ink)', lineHeight: 1.5,
         }}>
-          {part}
+          {line}
         </span>
       )
+      i++
+      continue
     }
-    return <span key={i} style={{ whiteSpace: 'pre-wrap' }}>{part}</span>
-  })
+
+    // ── Empty line → spacing ──────────────────────────────────────────────────
+    if (!trimmed) {
+      nodes.push(<div key={k++} style={{ height: '6px' }} />)
+      i++
+      continue
+    }
+
+    // ── Regular line with inline formatting ───────────────────────────────────
+    nodes.push(
+      <span key={k++} style={{ display: 'block', whiteSpace: 'pre-wrap', lineHeight: 1.65 }}>
+        {renderInline(line)}
+      </span>
+    )
+    i++
+  }
+
+  return <>{nodes}</>
 }
 
 // ── Props ────────────────────────────────────────────────────────────────────
