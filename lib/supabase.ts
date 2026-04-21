@@ -141,6 +141,7 @@ export type ExtraSunarpData = {
   indi_suspension?: string | null
   pagos?: PagoSunarp[] | null
   actos?: string[] | null
+  fecha_ingreso_calificacion?: string | null
 }
 
 export async function actualizarEstadoTitulo(
@@ -168,6 +169,7 @@ export async function actualizarEstadoTitulo(
     if (extra.indi_suspension    !== undefined) updates.indi_suspension    = extra.indi_suspension
     if (extra.pagos              !== undefined) updates.pagos              = extra.pagos
     if (extra.actos              !== undefined) updates.actos              = extra.actos
+    if (extra.fecha_ingreso_calificacion !== undefined) updates.fecha_ingreso_calificacion = extra.fecha_ingreso_calificacion
   }
 
   const { error } = await supabase

@@ -116,16 +116,16 @@ function DateHeaders({ normEstado }: { normEstado: string }) {
 
 function DateCells({ titulo: t, normEstado }: { titulo: Titulo; normEstado: string }) {
   if (normEstado === 'EN CALIFICACION') {
-    // Máx. Atención = fecha_vencimiento de SUNARP.
-    // SUNARP ya calcula el plazo correcto (7 días primer ingreso / 5 reingreso)
-    // desde la fecha real de entrada a calificación — más fiable que calcularlo
-    // nosotros con el detectado_en del historial (que es cuando nuestro sistema
-    // detectó el cambio, no cuando SUNARP lo registró).
-    const maxAtencion = parsearFecha(t.fecha_vencimiento)
+    // Base: fecha_ingreso_calificacion = fecha exacta de SUNARP (de la cronología),
+    // almacenada la primera vez que detectamos el estado EN CALIFICACIÓN.
+    // Fallback: fecha_presentacion (si aún no se ha hecho Actualizar desde el fix).
+    const fechaBase = t.fecha_ingreso_calificacion ?? t.fecha_presentacion
     const dias = t.es_reingreso ? 5 : 7
+    const maxAtencion = calcularDiasHabiles(fechaBase, dias)
+    const tooltipFuente = t.fecha_ingreso_calificacion ? 'cronología SUNARP' : 'fecha de presentación (ejecuta Actualizar para precisar)'
     return <>
       <td style={TD_DATE}><FechaTxt value={t.fecha_presentacion} /></td>
-      <td style={TD_DATE} title={`Plazo SUNARP: ${dias} días hábiles desde la entrada a calificación`}>
+      <td style={TD_DATE} title={`${dias} días hábiles desde ingreso a calificación (${tooltipFuente})`}>
         <FechaMaxBadge fecha={maxAtencion} />
       </td>
     </>
