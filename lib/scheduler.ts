@@ -1,7 +1,18 @@
-import { getAllTramites, updateTramite, addHistorial, logNotification } from '@/lib/db'
+import {
+  getAllTramites,
+  updateTramite,
+  addHistorial,
+  logNotification,
+  getAllCasosActivos,
+  updateCaso,
+  addMovimientoJudicial,
+  getAlertaConfigParaCaso,
+  logNotificacionJudicial,
+} from '@/lib/db'
 import { scrapeTitulo } from '@/lib/sunarp-scraper'
+import { scrapeCEJ } from '@/lib/cej-scraper'
 import { getNextStepSuggestion } from '@/lib/ai-service'
-import { sendWhatsApp, sendEmail } from '@/lib/notifications'
+import { sendWhatsApp, sendEmail, sendJudicialWhatsApp, sendJudicialEmail } from '@/lib/notifications'
 
 declare global {
   var _arthurSchedulerStarted: boolean
@@ -12,6 +23,7 @@ export function startScheduler() {
   global._arthurSchedulerStarted = true
   console.log('[Scheduler] Starting background polling loop')
   runLoop().catch(err => console.error('[Scheduler] Fatal loop error:', err))
+  runJudicialLoop().catch(err => console.error('[Scheduler Judicial] Fatal loop error:', err))
 }
 
 async function sleep(ms: number): Promise<void> {
@@ -101,5 +113,103 @@ async function runLoop() {
     }
 
     await sleep(5 * 60 * 1000) // check every 5 minutes
+  }
+}
+
+async function runJudicialLoop() {
+  while (true) {
+    try {
+      const casos = await getAllCasosActivos()
+      for (const caso of casos) {
+        try {
+          const intervalMs = (caso.polling_frequency_hours || 4) * 60 * 60 * 1000
+          const lastChecked = caso.last_checked ? new Date(caso.last_checked).getTime() : 0
+          if (Date.now() - lastChecked < intervalMs) continue
+
+          console.log(`[Scheduler Judicial] Polling caso ${caso.id}: ${caso.alias}`)
+
+          const parte = caso.parte_procesal?.trim() || ''
+
+          if (!parte) {
+            console.warn(`[Scheduler Judicial] Caso ${caso.id} (${caso.alias}) sin parte_procesal configurada — saltando`)
+            await updateCaso(caso.id, { last_checked: new Date().toISOString() })
+            continue
+          }
+
+          const result = await scrapeCEJ(caso.numero_expediente, parte)
+          await updateCaso(caso.id, { last_checked: new Date().toISOString() })
+          if (!result || result.portalDown || !result.actuaciones?.length) continue
+
+          const ultimaActuacion = result.actuaciones[0]
+          const nuevoHash = ultimaActuacion?.sumilla || ''
+          const changed = nuevoHash !== (caso.estado_hash || '') && nuevoHash !== ''
+          if (!changed) continue
+
+          await addMovimientoJudicial(caso.id, {
+            fecha: ultimaActuacion.fecha,
+            acto: ultimaActuacion.acto,
+            folio: ultimaActuacion.folio || '',
+            sumilla: ultimaActuacion.sumilla || '',
+            es_nuevo: true,
+            urgencia: 'info',
+          })
+
+          await updateCaso(caso.id, {
+            estado_hash: nuevoHash,
+            ultimo_movimiento: ultimaActuacion.acto,
+            ultimo_movimiento_fecha: ultimaActuacion.fecha,
+            last_checked: new Date().toISOString(),
+          })
+
+          const sugerencia = await getNextStepSuggestion(
+            ultimaActuacion.acto,
+            ultimaActuacion.sumilla || null,
+            'judicial',
+            caso.alias || '',
+          ).catch(() => '')
+
+          const urgencia = ['plazo', 'sentencia', 'audiencia'].some(w =>
+            ultimaActuacion.acto?.toLowerCase().includes(w),
+          )
+            ? 'alta'
+            : 'normal'
+
+          const alertaConfig = await getAlertaConfigParaCaso(caso.id)
+          const whatsappNum = alertaConfig?.telefonoCelular || caso.whatsapp_number
+          const emailDest = alertaConfig?.email || caso.email
+
+          if (whatsappNum) {
+            const ok = await sendJudicialWhatsApp(
+              whatsappNum,
+              caso.alias || `Caso ${caso.id}`,
+              ultimaActuacion.acto,
+              urgencia,
+              sugerencia,
+              caso.id,
+            ).catch(() => false)
+            await logNotificacionJudicial(caso.id, 'whatsapp', ultimaActuacion.acto || '', urgencia, sugerencia, ok)
+          }
+          if (emailDest) {
+            const ok = await sendJudicialEmail(
+              emailDest,
+              caso.alias || `Caso ${caso.id}`,
+              ultimaActuacion.acto,
+              ultimaActuacion.sumilla || '',
+              urgencia,
+              sugerencia,
+              caso.id,
+            ).catch(() => false)
+            await logNotificacionJudicial(caso.id, 'email', ultimaActuacion.acto || '', urgencia, sugerencia, ok)
+          }
+
+          await sleep(3000)
+        } catch (err) {
+          console.error(`[Scheduler Judicial] Error en caso ${caso.id}:`, err)
+        }
+      }
+    } catch (err) {
+      console.error('[Scheduler Judicial] Loop error:', err)
+    }
+    await sleep(5 * 60 * 1000)
   }
 }

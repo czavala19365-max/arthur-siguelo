@@ -1,10 +1,23 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { Titulo, HistorialEstado, PagoSunarp } from '@/types'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+let _supabase: SupabaseClient | null = null
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+function getSupabase(): SupabaseClient {
+  if (_supabase) return _supabase
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!url || !key) throw new Error('Supabase env vars not set (NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY)')
+  _supabase = createClient(url, key)
+  return _supabase
+}
+
+/** @deprecated Use getSupabase() inside functions instead of this module-level export */
+export const supabase = new Proxy({} as SupabaseClient, {
+  get(_t, prop) {
+    return (getSupabase() as unknown as Record<string | symbol, unknown>)[prop]
+  },
+})
 
 export async function getTitulos(): Promise<Titulo[]> {
   const { data, error } = await supabase
