@@ -43,13 +43,16 @@ app.get('/health/proxy', async (req, res) => {
     browser = await chromium.launch({
       headless: true,
       proxy: parseProxy(process.env.PROXY_URL),
-      args: ['--no-sandbox'],
-    })
-    const page = await browser.newPage()
-    await page.goto('https://api.ipify.org?format=json')
-    const body = await page.textContent('body')
-    const ip = JSON.parse(body).ip
-    res.json({ ok: true, ip })
+      args: ['--no-sandbox', '--ignore-certificate-errors']
+    });
+    const page = await browser.newPage();
+    await page.setExtraHTTPHeaders({});
+    const response = await page.goto('http://checkip.amazonaws.com/', {
+      waitUntil: 'domcontentloaded',
+      timeout: 30000
+    });
+    const ip = (await page.textContent('body')).trim();
+    res.json({ ok: true, ip });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message })
   } finally {
