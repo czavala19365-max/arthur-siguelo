@@ -83,17 +83,6 @@ class CapSolverImageSolver {
     async solve(imageBase64) {
         if (!this.apiKey)
             throw new Error('CAPSOLVER_API_KEY not set');
-        const bodyBytesApprox = Math.floor((imageBase64.length * 3) / 4);
-        console.log('[CEJ][CAPTCHA-DIAG] CapSolver ImageToText: base64 chars=%s approxBytes=%s', imageBase64.length, bodyBytesApprox);
-        const createPayloadNoKey = {
-            task: {
-                type: 'ImageToTextTask',
-                module: 'common',
-                websiteURL: CEJ_SEARCH_URL,
-                body: `base64(${imageBase64.length} chars)`,
-            },
-        };
-        console.log('[CEJ][CAPTCHA-DIAG] CapSolver createTask payload (no clientKey):', createPayloadNoKey);
         const create = await fetch('https://api.capsolver.com/createTask', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -107,7 +96,6 @@ class CapSolverImageSolver {
                 },
             }),
         }).then(r => r.json());
-        console.log('[CEJ][CAPTCHA-DIAG] CapSolver createTask raw response:', create);
         // ImageToText may return sync solution in createTask response (status=ready)
         const maybeSolution = create.solution?.text;
         if (maybeSolution && String(maybeSolution).trim())
@@ -124,15 +112,10 @@ class CapSolverImageSolver {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ clientKey: this.apiKey, taskId }),
             }).then(rr => rr.json());
-            console.log('[CEJ][CAPTCHA-DIAG] CapSolver getTaskResult raw response:', r);
             if (r.errorId !== 0)
                 throw new Error(`CapSolver getTaskResult failed: ${r.errorCode || 'unknown'}`);
             if (r.status === 'ready') {
                 const text = String(r.solution?.text || '').trim();
-                const confidence = r.solution?.confidence;
-                if (confidence != null) {
-                    console.log('[CEJ][CAPTCHA-DIAG] CapSolver solution confidence:', confidence);
-                }
                 if (!text)
                     throw new Error('CapSolver returned empty text');
                 return text;
@@ -195,71 +178,15 @@ async function solveImageCaptchaFromDom(page, baseResult) {
     if (!imgEl)
         return '';
     baseResult.captchaDetected = true;
-    const captchaImgSrc = await page.evaluate(() => {
-        const img = document.getElementById('captcha_image');
-        return img?.getAttribute('src') || img?.src || '';
-    }).catch(() => '');
-    console.log('[CEJ][CAPTCHA-DIAG] captcha element src:', captchaImgSrc || '(empty)');
     await page.waitForFunction(() => {
         const img = document.getElementById('captcha_image');
         return !!(img?.complete && (img?.naturalWidth ?? 0) > 10);
     }, { timeout: 10000 }).catch(() => { });
-    const imgState = await page.evaluate(() => {
-        const img = document.getElementById('captcha_image');
-        if (!img)
-            return { complete: false, naturalWidth: 0, naturalHeight: 0, currentSrc: '' };
-        return {
-            complete: !!img.complete,
-            naturalWidth: img.naturalWidth || 0,
-            naturalHeight: img.naturalHeight || 0,
-            currentSrc: img.currentSrc || img.src || '',
-        };
-    }).catch(() => ({ complete: false, naturalWidth: 0, naturalHeight: 0, currentSrc: '' }));
-    console.log('[CEJ][CAPTCHA-DIAG] captcha image load state:', imgState);
     await imgEl.scrollIntoViewIfNeeded().catch(() => { });
     await page.waitForTimeout(250);
-    console.log('[CEJ][CAPTCHA-DIAG] captcha capture method: element.screenshot()');
     const imgBuffer = await imgEl.screenshot({ type: 'jpeg', quality: 80 }).catch(() => Buffer.alloc(0));
     if (!imgBuffer.length || imgBuffer.length < 200)
         return '';
-    console.log('[CEJ][CAPTCHA-DIAG] captcha screenshot bytes:', imgBuffer.length);
-    // Save to /tmp for visual verification (best-effort; Railway/Linux).
-    try {
-        if (fs_1.default.existsSync('/tmp')) {
-            fs_1.default.accessSync('/tmp', fs_1.default.constants.W_OK);
-            const pngBuf = await imgEl.screenshot({ type: 'png' }).catch(() => Buffer.alloc(0));
-            if (pngBuf.length) {
-                fs_1.default.writeFileSync('/tmp/captcha-debug.png', pngBuf);
-                console.log('[CEJ][CAPTCHA-DIAG] saved /tmp/captcha-debug.png bytes=', pngBuf.length);
-            }
-        }
-    }
-    catch (e) {
-        console.log('[CEJ][CAPTCHA-DIAG] failed to save /tmp/captcha-debug.png:', e instanceof Error ? e.message : String(e));
-    }
-    // Optional: in debug mode, fetch Captcha.jpg directly to inspect headers (may affect captcha freshness).
-    try {
-        const cejDebugDiag = process.env.CEJ_DEBUG === 'true';
-        if (cejDebugDiag && captchaImgSrc && (captchaImgSrc.includes('Captcha') || captchaImgSrc.toLowerCase().includes('captcha'))) {
-            const abs = captchaImgSrc.startsWith('http') ? captchaImgSrc : new URL(captchaImgSrc, page.url()).toString();
-            console.log('[CEJ][CAPTCHA-DIAG] captcha fetch URL (debug):', abs);
-            const resp = await page.request.get(abs, {
-                headers: { Accept: 'image/*,*/*;q=0.8', Referer: page.url(), 'Cache-Control': 'no-cache' },
-                timeout: 15000,
-            });
-            const headers = resp.headers();
-            console.log('[CEJ][CAPTCHA-DIAG] Captcha.jpg response headers:', {
-                status: resp.status(),
-                'content-type': headers['content-type'],
-                'content-length': headers['content-length'],
-                'cache-control': headers['cache-control'],
-                etag: headers['etag'],
-            });
-        }
-    }
-    catch (e) {
-        console.log('[CEJ][CAPTCHA-DIAG] captcha fetch headers failed:', e instanceof Error ? e.message : String(e));
-    }
     const solver = getImageCaptchaSolver();
     const code = await solver.solve(imgBuffer.toString('base64'));
     baseResult.captchaSolved = !!code;
@@ -1222,68 +1149,11 @@ async function fillAndScrape(page, numeroExpediente, baseResult, parte) {
             baseResult.captchaDetected = true;
             console.log('[CEJ] Tab1 image captcha detected — solving...');
             try {
-                const captchaImgSrc = await page.evaluate(() => {
-                    const img = document.getElementById('captcha_image');
-                    return img?.getAttribute('src') || img?.src || '';
-                }).catch(() => '');
-                console.log('[CEJ][CAPTCHA-DIAG] captcha element src:', captchaImgSrc || '(empty)');
-                const imgState = await page.evaluate(() => {
-                    const img = document.getElementById('captcha_image');
-                    if (!img)
-                        return { complete: false, naturalWidth: 0, naturalHeight: 0, currentSrc: '' };
-                    return {
-                        complete: !!img.complete,
-                        naturalWidth: img.naturalWidth || 0,
-                        naturalHeight: img.naturalHeight || 0,
-                        currentSrc: img.currentSrc || img.src || '',
-                    };
-                }).catch(() => ({ complete: false, naturalWidth: 0, naturalHeight: 0, currentSrc: '' }));
-                console.log('[CEJ][CAPTCHA-DIAG] captcha image load state:', imgState);
                 await captchaImgEl.scrollIntoViewIfNeeded();
                 await page.waitForTimeout(300);
-                console.log('[CEJ][CAPTCHA-DIAG] captcha capture method: element.screenshot()');
                 const imgBuffer = await captchaImgEl.screenshot({ type: 'jpeg', quality: 80 });
                 const b64 = imgBuffer.toString('base64');
                 if (b64) {
-                    console.log('[CEJ][CAPTCHA-DIAG] captcha screenshot bytes:', imgBuffer.length);
-                    console.log('[CEJ][CAPTCHA-DIAG] captcha base64 chars:', b64.length);
-                    // Save captcha image for visual inspection (Railway/Linux: /tmp).
-                    try {
-                        if (fs_1.default.existsSync('/tmp')) {
-                            fs_1.default.accessSync('/tmp', fs_1.default.constants.W_OK);
-                            const pngBuf = await captchaImgEl.screenshot({ type: 'png' }).catch(() => Buffer.alloc(0));
-                            if (pngBuf.length) {
-                                fs_1.default.writeFileSync('/tmp/captcha-debug.png', pngBuf);
-                                console.log('[CEJ][CAPTCHA-DIAG] saved /tmp/captcha-debug.png bytes=', pngBuf.length);
-                            }
-                        }
-                    }
-                    catch (e) {
-                        console.log('[CEJ][CAPTCHA-DIAG] failed to save /tmp/captcha-debug.png:', e instanceof Error ? e.message : String(e));
-                    }
-                    // In debug mode, fetch Captcha.jpg headers (may desync captcha if CEJ regenerates per request).
-                    try {
-                        const cejDebugDiag = process.env.CEJ_DEBUG === 'true';
-                        if (cejDebugDiag && captchaImgSrc && (captchaImgSrc.includes('Captcha') || captchaImgSrc.toLowerCase().includes('captcha'))) {
-                            const abs = captchaImgSrc.startsWith('http') ? captchaImgSrc : new URL(captchaImgSrc, page.url()).toString();
-                            console.log('[CEJ][CAPTCHA-DIAG] captcha fetch URL (debug):', abs);
-                            const resp = await page.request.get(abs, {
-                                headers: { Accept: 'image/*,*/*;q=0.8', Referer: page.url(), 'Cache-Control': 'no-cache' },
-                                timeout: 15000,
-                            });
-                            const headers = resp.headers();
-                            console.log('[CEJ][CAPTCHA-DIAG] Captcha.jpg response headers:', {
-                                status: resp.status(),
-                                'content-type': headers['content-type'],
-                                'content-length': headers['content-length'],
-                                'cache-control': headers['cache-control'],
-                                etag: headers['etag'],
-                            });
-                        }
-                    }
-                    catch (e) {
-                        console.log('[CEJ][CAPTCHA-DIAG] captcha fetch headers failed:', e instanceof Error ? e.message : String(e));
-                    }
                     const code = await getImageCaptchaSolver().solve(b64);
                     const captchaInput = await page.$('#codigoCaptcha, input[name*="captcha"], input[id*="captcha"]');
                     if (captchaInput && code) {
