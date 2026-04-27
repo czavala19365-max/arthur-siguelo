@@ -137,43 +137,28 @@ export default function Sidebar({ observadosCount = 0 }: SidebarProps) {
       {/* Responsive CSS — injected once with the sidebar */}
       <style>{`
         .arthur-sidebar {
-          transform: none;
-          transition: none;
+          transform: translateX(-260px);
+          transition: transform 200ms ease;
+          box-shadow: none !important;
         }
         .arthur-hamburger {
-          display: none;
+          display: flex;
         }
         .arthur-overlay {
           display: none;
         }
         .arthur-main {
-          margin-left: 260px;
+          margin-left: 0 !important;
         }
         .arthur-sidebar-close-mobile {
-          display: none;
+          display: flex;
         }
-        @media (max-width: 767px) {
-          .arthur-sidebar {
-            transform: translateX(-260px);
-            transition: transform 200ms ease;
-            box-shadow: none !important;
-          }
-          .arthur-sidebar.is-open {
-            transform: translateX(0);
-            box-shadow: 8px 0 32px rgba(0,0,0,0.35) !important;
-          }
-          .arthur-hamburger {
-            display: flex;
-          }
-          .arthur-overlay.is-open {
-            display: block;
-          }
-          .arthur-main {
-            margin-left: 0 !important;
-          }
-          .arthur-sidebar-close-mobile {
-            display: flex;
-          }
+        .arthur-sidebar.is-open {
+          transform: translateX(0);
+          box-shadow: 8px 0 32px rgba(0,0,0,0.35) !important;
+        }
+        .arthur-overlay.is-open {
+          display: block;
         }
       `}</style>
 
@@ -184,18 +169,18 @@ export default function Sidebar({ observadosCount = 0 }: SidebarProps) {
         aria-label="Abrir menú"
         style={{
           position: 'fixed',
-          top: 0,
-          left: 0,
+          top: 10,
+          left: 10,
           zIndex: 400,
           width: '44px',
           height: '44px',
-          backgroundColor: '#0a0a0a',
-          border: '1px solid #2a2a2a',
+          backgroundColor: 'var(--paper)',
+          border: '1px solid var(--line-mid)',
           borderRadius: 0,
           cursor: 'pointer',
           alignItems: 'center',
           justifyContent: 'center',
-          color: '#c9a84c',
+          color: 'var(--ink)',
           flexShrink: 0,
           padding: 0,
         }}

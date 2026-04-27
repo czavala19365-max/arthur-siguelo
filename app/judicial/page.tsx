@@ -413,7 +413,7 @@ export default function JudicialDashboardPage() {
   const inputStyle: React.CSSProperties = { width: '100%', border: '1px solid var(--line-strong)', padding: '12px 14px', marginTop: 6, marginBottom: 16, fontFamily: 'var(--font-body)', fontSize: '13px', background: 'var(--paper)', color: 'var(--ink)', boxSizing: 'border-box' };
 
   return (
-    <div style={{ padding: '48px 64px', background: 'var(--paper)', minHeight: '100vh' }}>
+    <div style={{ padding: '48px 64px', background: 'var(--paper)', minHeight: '100%' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderLeft: '4px solid #c2a46d', paddingLeft: '24px' }}>
         <div>
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.15em', color: '#c2a46d', marginBottom: '8px' }}>

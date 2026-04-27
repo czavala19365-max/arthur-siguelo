@@ -129,21 +129,22 @@ class CapSolverImageWithTwoCaptchaFallback {
     async solve(imageBase64) {
         const capKey = process.env.CAPSOLVER_API_KEY?.trim();
         const twoKey = process.env.TWOCAPTCHA_API_KEY?.trim();
-        if (capKey) {
+        // Prefer 2captcha (human solvers) first; CapSolver only as fallback.
+        if (twoKey) {
             try {
-                return await new CapSolverImageSolver(capKey).solve(imageBase64);
+                return await new TwoCaptchaImageSolver(twoKey).solve(imageBase64);
             }
             catch (e) {
                 const msg = e instanceof Error ? e.message : String(e);
-                console.warn('[CEJ] CapSolver image captcha failed:', msg);
-                if (!twoKey)
+                console.warn('[CEJ] 2captcha image captcha failed:', msg);
+                if (!capKey)
                     throw e;
-                console.log('[CEJ] Image captcha: falling back to 2captcha');
-                return await new TwoCaptchaImageSolver(twoKey).solve(imageBase64);
+                console.log('[CEJ] Image captcha: falling back to CapSolver');
+                return await new CapSolverImageSolver(capKey).solve(imageBase64);
             }
         }
-        if (twoKey)
-            return await new TwoCaptchaImageSolver(twoKey).solve(imageBase64);
+        if (capKey)
+            return await new CapSolverImageSolver(capKey).solve(imageBase64);
         throw new Error('No CAPTCHA provider configured. Set CAPSOLVER_API_KEY (CEJ) or TWOCAPTCHA_API_KEY as fallback.');
     }
 }
@@ -184,11 +185,13 @@ async function solveImageCaptchaFromDom(page, baseResult) {
     }, { timeout: 10000 }).catch(() => { });
     await imgEl.scrollIntoViewIfNeeded().catch(() => { });
     await page.waitForTimeout(250);
-    const imgBuffer = await imgEl.screenshot({ type: 'jpeg', quality: 80 }).catch(() => Buffer.alloc(0));
+    // Screenshot PNG (lossless) → base64 for the solver.
+    const imgBuffer = await imgEl.screenshot({ type: 'png' }).catch(() => Buffer.alloc(0));
     if (!imgBuffer.length || imgBuffer.length < 200)
         return '';
+    const b64 = imgBuffer.toString('base64');
     const solver = getImageCaptchaSolver();
-    const code = await solver.solve(imgBuffer.toString('base64'));
+    const code = await solver.solve(b64);
     baseResult.captchaSolved = !!code;
     return code;
 }
@@ -804,13 +807,20 @@ async function fillAndScrape(page, numeroExpediente, baseResult, parte) {
             throw new Error('parte requerida');
         // CEJ last box (instancia/juzgado) expects 2 digits (e.g. 01, 03, 06). Do NOT strip leading zeros.
         const courtNum = String(orgCod || '').padStart(2, '0').slice(-2);
-        for (let capAttempt = 1; capAttempt <= 3; capAttempt++) {
+        for (let capAttempt = 1; capAttempt <= 6; capAttempt++) {
             // Ensure Tab 1 visible for captcha
             await page.click('a[href="#tabs-1"], a:has-text("Por filtros"), #tabs-1').catch(() => { });
             await page.waitForTimeout(350);
-            if (capAttempt > 1)
+            if (capAttempt > 1) {
+                console.log(`[CEJ] Refreshing image captcha before retry (Tab2 capAttempt ${capAttempt})`);
                 await refreshImageCaptcha(page).catch(() => { });
-            const captchaCode = await solveImageCaptchaFromDom(page, baseResult).catch(() => '');
+            }
+            const captchaCodeRaw = await solveImageCaptchaFromDom(page, baseResult).catch(() => '');
+            const captchaCode = String(captchaCodeRaw || '').trim();
+            if (captchaCode.length > 0 && captchaCode.length < 3) {
+                console.log('[CEJ] Captcha too short, retrying');
+                continue;
+            }
             // Switch to Tab 2
             await page.click('a[href="#tabs-2"], a:has-text("Por Código"), #tabs-2').catch(() => { });
             await page.waitForTimeout(800);
@@ -1149,17 +1159,26 @@ async function fillAndScrape(page, numeroExpediente, baseResult, parte) {
             baseResult.captchaDetected = true;
             console.log('[CEJ] Tab1 image captcha detected — solving...');
             try {
-                await captchaImgEl.scrollIntoViewIfNeeded();
-                await page.waitForTimeout(300);
-                const imgBuffer = await captchaImgEl.screenshot({ type: 'jpeg', quality: 80 });
-                const b64 = imgBuffer.toString('base64');
-                if (b64) {
-                    const code = await getImageCaptchaSolver().solve(b64);
-                    const captchaInput = await page.$('#codigoCaptcha, input[name*="captcha"], input[id*="captcha"]');
-                    if (captchaInput && code) {
-                        await captchaInput.fill(code);
-                        baseResult.captchaSolved = true;
-                        console.log('[CEJ] Tab1 captcha filled:', code);
+                const captchaInput = await page.$('#codigoCaptcha, input[name*="captcha"], input[id*="captcha"]');
+                if (captchaInput) {
+                    for (let capAttempt = 1; capAttempt <= 6; capAttempt++) {
+                        if (capAttempt > 1) {
+                            console.log(`[CEJ] Refreshing image captcha before retry (Tab1 capAttempt ${capAttempt})`);
+                            await refreshImageCaptcha(page).catch(() => { });
+                            await page.waitForTimeout(250);
+                        }
+                        const codeRaw = await solveImageCaptchaFromDom(page, baseResult).catch(() => '');
+                        const code = String(codeRaw || '').trim();
+                        if (code.length > 0 && code.length < 3) {
+                            console.log('[CEJ] Captcha too short, retrying');
+                            continue;
+                        }
+                        if (code) {
+                            await captchaInput.fill(code);
+                            baseResult.captchaSolved = true;
+                            console.log('[CEJ] Tab1 captcha filled:', code);
+                            break;
+                        }
                     }
                 }
             }
@@ -1513,8 +1532,15 @@ async function tryDirectAccess(numeroExpediente, baseResult, parte) {
 }
 async function scrapeCEJ(numeroExpediente, parte) {
     try {
-        const MAX_RETRIES = process.env.NODE_ENV === 'test' ? 1 : 3;
-        return await _scrapeCEJ(numeroExpediente, MAX_RETRIES, parte);
+        const MAX_RETRIES = process.env.NODE_ENV === 'test' ? 1 : 6;
+        const first = await _scrapeCEJ(numeroExpediente, MAX_RETRIES, parte);
+        if (process.env.NODE_ENV !== 'test' && first?.portalDown) {
+            console.log('[CEJ] Full retry with fresh browser session');
+            await new Promise(r => setTimeout(r, 15000));
+            const second = await _scrapeCEJ(numeroExpediente, MAX_RETRIES, parte);
+            return second;
+        }
+        return first;
     }
     catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -1653,5 +1679,5 @@ async function _scrapeCEJ(numeroExpediente, maxRetries, parte) {
                 await new Promise(r => setTimeout(r, 6000 * attempt));
         }
     }
-    return { ...baseResult, portalDown: true, error: 'Portal CEJ no disponible después de 3 intentos' };
+    return { ...baseResult, portalDown: true, error: `Portal CEJ no disponible después de ${maxRetries} intentos` };
 }

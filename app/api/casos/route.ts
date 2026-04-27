@@ -5,13 +5,61 @@ import { clasificarMovimientoCEJ } from '@/lib/ai-service'
 export const runtime = 'nodejs'
 
 type ScrapeFn = (typeof import('@/lib/cej-scraper'))['scrapeCEJ']
+type CejCaseData = import('@/lib/cej-scraper').CejCaseData
+
+async function fetchCejFromScraperService(numero: string, parte: string, scrapeCEJ: ScrapeFn): Promise<CejCaseData> {
+  const scraperUrl = process.env.CEJ_SCRAPER_URL?.trim()
+  if (!scraperUrl) return scrapeCEJ(numero, parte)
+
+  const url = `${scraperUrl.replace(/\/$/, '')}/scrape`
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ numero, parte }),
+    signal: AbortSignal.timeout(180_000),
+  })
+
+  let data: unknown = {}
+  try {
+    data = await res.json()
+  } catch {
+    data = {}
+  }
+
+  if (!res.ok) {
+    const body = data as { error?: string; details?: string }
+    const msg = body.details || body.error || res.statusText || `HTTP ${res.status}`
+    console.error('[API] CEJ scraper service error:', res.status, msg)
+    return {
+      numeroExpediente: numero,
+      organoJurisdiccional: '',
+      distritoJudicial: '',
+      juez: '',
+      especialidad: '',
+      proceso: '',
+      etapa: '',
+      estadoProceso: '',
+      partes: [],
+      actuaciones: [],
+      totalActuaciones: 0,
+      hash: '',
+      portalDown: true,
+      captchaDetected: false,
+      captchaSolved: false,
+      scrapedAt: new Date().toISOString(),
+      error: msg,
+    }
+  }
+
+  return data as CejCaseData
+}
 
 /** Sincroniza CEJ → DB (misma lógica que el POST antiguo, pero puede ejecutarse en segundo plano). */
 async function runInitialCejSync(caso: Caso, scrapeCEJ: ScrapeFn) {
   let scrapeResult: Awaited<ReturnType<ScrapeFn>> | null = null
   const parte = caso.parte_procesal?.trim() || caso.partes || ''
   try {
-    scrapeResult = await scrapeCEJ(caso.numero_expediente, parte)
+    scrapeResult = await fetchCejFromScraperService(caso.numero_expediente, parte, scrapeCEJ)
   } catch (err) {
     console.error('[API] Initial CEJ poll error (background):', err)
     await updateCaso(caso.id, { last_checked: new Date().toISOString() })
