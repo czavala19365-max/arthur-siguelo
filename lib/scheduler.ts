@@ -177,7 +177,7 @@ async function runJudicialLoop() {
 
           const alertaConfig = await getAlertaConfigParaCaso(caso.id)
           if (alertaConfig) {
-            const nivel = (urgencia === 'alta' ? 'alta' : 'media') as const
+            const nivel: 'alta' | 'media' = urgencia === 'alta' ? 'alta' : 'media'
             const descripcion = ultimaActuacion.sumilla || ultimaActuacion.acto || ''
             const alertaResult = await enviarAlertaMovimiento(
               {
