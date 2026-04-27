@@ -1,6 +1,8 @@
 import { after, NextResponse } from 'next/server'
 import { addMovimientoJudicial, createCaso, getAllCasosActivos, updateCaso, updateMovimientoJudicial, type Caso } from '@/lib/judicial-db'
 import { clasificarMovimientoCEJ } from '@/lib/ai-service'
+import { enviarAlertaMovimiento } from '@/lib/alert-service'
+import { getAlertaConfigParaCaso, logNotificacionJudicial } from '@/lib/judicial-db'
 
 export const runtime = 'nodejs'
 
@@ -132,6 +134,9 @@ async function runInitialCejSync(caso: Caso, scrapeCEJ: ScrapeFn) {
 
   console.log(`[API] CEJ sync: caso ${caso.id} — ${rows.length} filas guardadas; clasificando IA…`)
 
+  // Enviar alerta solo para el movimiento más reciente (si existe) luego de clasificarlo.
+  // Mantiene el comportamiento consistente con "Revisar ahora" (no spamear por cada fila).
+  let mostRecentToAlert: { mov: (typeof movimientos)[0]; cls: { urgencia: 'alta' | 'normal' | 'info'; sugerencia: string } } | null = null
   for (const { id, mov } of rows) {
     const cls = await clasificarMovimientoCEJ(
       mov.acto ?? '',
@@ -142,6 +147,40 @@ async function runInitialCejSync(caso: Caso, scrapeCEJ: ScrapeFn) {
       await updateMovimientoJudicial(id, { urgencia: cls.urgencia, ai_sugerencia: cls.sugerencia })
     } catch (e) {
       console.error('[API] updateMovimientoJudicial failed:', e)
+    }
+    if (!mostRecentToAlert) {
+      mostRecentToAlert = { mov, cls }
+    }
+  }
+
+  if (mostRecentToAlert) {
+    try {
+      const cfg = await getAlertaConfigParaCaso(caso.id)
+      if (cfg) {
+        const { mov, cls } = mostRecentToAlert
+        const nivel: 'alta' | 'media' | 'baja' =
+          cls.urgencia === 'alta' ? 'alta' : cls.urgencia === 'normal' ? 'media' : 'baja'
+        const descripcion = mov.sumilla || mov.acto || 'Movimiento judicial'
+        const alertaResult = await enviarAlertaMovimiento(
+          {
+            expedienteId: String(caso.id),
+            numeroExpediente: caso.numero_expediente,
+            descripcion,
+            nivelUrgencia: nivel,
+            sugerenciaIA: cls.sugerencia || 'Revisar movimiento en CEJ.',
+            casoNombre: caso.alias || caso.cliente || undefined,
+          },
+          cfg
+        )
+        for (const canal of alertaResult.canalesExitosos) {
+          await logNotificacionJudicial(caso.id, canal, descripcion, nivel, cls.sugerencia || '', true)
+        }
+        if (!alertaResult.enviado) {
+          await logNotificacionJudicial(caso.id, 'ninguno', descripcion, nivel, cls.sugerencia || '', false)
+        }
+      }
+    } catch (e) {
+      console.error('[API] Initial alert send failed:', e)
     }
   }
 

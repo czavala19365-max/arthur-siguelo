@@ -13,6 +13,7 @@ import { scrapeTitulo } from '@/lib/sunarp-scraper'
 import { scrapeCEJ } from '@/lib/cej-scraper'
 import { getNextStepSuggestion } from '@/lib/ai-service'
 import { sendWhatsApp, sendEmail, sendJudicialWhatsApp, sendJudicialEmail } from '@/lib/notifications'
+import { enviarAlertaMovimiento } from '@/lib/alert-service'
 
 declare global {
   var _arthurSchedulerStarted: boolean
@@ -175,31 +176,27 @@ async function runJudicialLoop() {
             : 'normal'
 
           const alertaConfig = await getAlertaConfigParaCaso(caso.id)
-          const whatsappNum = alertaConfig?.telefonoCelular || caso.whatsapp_number
-          const emailDest = alertaConfig?.email || caso.email
+          if (alertaConfig) {
+            const nivel = (urgencia === 'alta' ? 'alta' : 'media') as const
+            const descripcion = ultimaActuacion.sumilla || ultimaActuacion.acto || ''
+            const alertaResult = await enviarAlertaMovimiento(
+              {
+                expedienteId: String(caso.id),
+                numeroExpediente: caso.numero_expediente,
+                descripcion,
+                nivelUrgencia: nivel,
+                sugerenciaIA: sugerencia || 'Revisar movimiento en CEJ.',
+                casoNombre: caso.alias || undefined,
+              },
+              alertaConfig
+            ).catch(() => ({ enviado: false, canalesExitosos: [] as string[] }))
 
-          if (whatsappNum) {
-            const ok = await sendJudicialWhatsApp(
-              whatsappNum,
-              caso.alias || `Caso ${caso.id}`,
-              ultimaActuacion.acto,
-              urgencia,
-              sugerencia,
-              caso.id,
-            ).catch(() => false)
-            await logNotificacionJudicial(caso.id, 'whatsapp', ultimaActuacion.acto || '', urgencia, sugerencia, ok)
-          }
-          if (emailDest) {
-            const ok = await sendJudicialEmail(
-              emailDest,
-              caso.alias || `Caso ${caso.id}`,
-              ultimaActuacion.acto,
-              ultimaActuacion.sumilla || '',
-              urgencia,
-              sugerencia,
-              caso.id,
-            ).catch(() => false)
-            await logNotificacionJudicial(caso.id, 'email', ultimaActuacion.acto || '', urgencia, sugerencia, ok)
+            for (const canal of alertaResult.canalesExitosos) {
+              await logNotificacionJudicial(caso.id, canal, descripcion, nivel, sugerencia, true)
+            }
+            if (!alertaResult.enviado) {
+              await logNotificacionJudicial(caso.id, 'ninguno', descripcion, nivel, sugerencia, false)
+            }
           }
 
           await sleep(3000)
