@@ -106,29 +106,22 @@ export default function LandingPage() {
           style={{
             flexShrink: 0,
             paddingBottom: '12px',
+            paddingLeft: 'clamp(16px, 4vw, 32px)',
+            paddingRight: 'clamp(16px, 4vw, 32px)',
             fontFamily: 'var(--font-display), Georgia, serif',
             fontSize: 'clamp(12px, 1.65vw, 15px)',
             fontStyle: 'italic',
             fontWeight: 500,
             letterSpacing: '0.04em',
             color: '#c2a46d',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexWrap: 'wrap',
-            gap: '0 10px',
-            rowGap: '6px',
+            textAlign: 'center',
+            maxWidth: 'min(36em, 92vw)',
+            marginLeft: 'auto',
+            marginRight: 'auto',
+            lineHeight: 1.45,
           }}
         >
-          <span>Precisión</span>
-          <span style={{ opacity: 0.85, fontStyle: 'normal', fontSize: '0.45em', verticalAlign: 'middle' }} aria-hidden>
-            •
-          </span>
-          <span>Confianza</span>
-          <span style={{ opacity: 0.85, fontStyle: 'normal', fontSize: '0.45em', verticalAlign: 'middle' }} aria-hidden>
-            •
-          </span>
-          <span>Rapidez</span>
+          Céntrate en lo que verdaderamente importa
         </p>
       </div>
     </div>
