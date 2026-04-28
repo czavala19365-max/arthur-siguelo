@@ -108,7 +108,7 @@ export async function enviarEmail(
   destinatario: string,
   movimiento: MovimientoJudicialAlerta
 ): Promise<boolean> {
-  const apiKey = process.env.RESEND_API_KEY
+  const apiKey = process.env.RESEND_API_KEY_JUDICIAL || process.env.RESEND_API_KEY
   const fromEmail = process.env.RESEND_FROM_EMAIL
 
   if (!apiKey || !fromEmail) {
