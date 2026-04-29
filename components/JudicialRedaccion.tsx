@@ -33,6 +33,7 @@ export default function JudicialRedaccion({ expedienteId, documentId, onBack }: 
   const endRef = useRef<HTMLDivElement>(null)
 
   const isEditMode = useMemo(() => !!documentId, [documentId])
+  // En modo edición nunca se puede cambiar tipo. En modo nuevo, se bloquea una vez creado el documento.
   const tipoLocked = useMemo(() => isEditMode || !!currentDocumentId, [isEditMode, currentDocumentId])
 
   useEffect(() => {
@@ -56,16 +57,10 @@ export default function JudicialRedaccion({ expedienteId, documentId, onBack }: 
           setMessages((data?.messages || []).map(m => ({ role: m.role, content: m.content })))
           setCurrentDocumentId(documentId)
         } else {
-          // Init: create doc record and seed intro message
-          const r = await fetch('/api/documento/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ init: true, expedienteId, tipo }),
-          })
-          const data = await r.json() as { documentId?: string; initialMessage?: string }
-          if (cancelled) return
-          if (data?.documentId) setCurrentDocumentId(String(data.documentId))
-          if (data?.initialMessage) setMessages([{ role: 'assistant', content: String(data.initialMessage) }])
+          // Modo nuevo: NO crear documento todavía. Se crea al primer envío.
+          setMessages([])
+          setDocumentContent('')
+          setCurrentDocumentId(null)
         }
       } finally {
         if (!cancelled) setLoading(false)
@@ -80,17 +75,43 @@ export default function JudicialRedaccion({ expedienteId, documentId, onBack }: 
 
   async function send() {
     if (!input.trim() || isTyping) return
-    if (!currentDocumentId) return
     const userMsg = input.trim()
     setInput('')
     setMessages(prev => [...prev, { role: 'user', content: userMsg }])
     setIsTyping(true)
     try {
+      // Si aún no hay documento (modo nuevo), crearlo ahora con el tipo seleccionado
+      let docId = currentDocumentId
+      if (!docId) {
+        const initRes = await fetch('/api/documento/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ init: true, expedienteId, tipo }),
+        })
+        const initData = await initRes.json() as { documentId?: string; initialMessage?: string; error?: string }
+        if (initData?.error) {
+          setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${initData.error}` }])
+          return
+        }
+        if (initData?.documentId) {
+          docId = String(initData.documentId)
+          setCurrentDocumentId(docId)
+        }
+        // Mostrar mensaje inicial si aún no existe (historial estaba vacío)
+        if (initData?.initialMessage) {
+          setMessages(prev => {
+            const hasAnyAssistant = prev.some(m => m.role === 'assistant')
+            return hasAnyAssistant ? prev : [{ role: 'assistant', content: String(initData.initialMessage) }, ...prev]
+          })
+        }
+      }
+      if (!docId) return
+
       const res = await fetch('/api/documento/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          documentId: currentDocumentId,
+          documentId: docId,
           message: userMsg,
           currentDocument: documentContent,
         }),

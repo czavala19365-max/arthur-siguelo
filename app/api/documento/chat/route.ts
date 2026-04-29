@@ -78,6 +78,39 @@ export async function GET(req: NextRequest) {
     .order('created_at', { ascending: true })
   if (msgErr) return NextResponse.json({ error: msgErr.message }, { status: 500 })
 
+  // Si el documento fue creado antes de esta feature, puede no tener historial.
+  // Inicializamos una vez con un system prompt + mensaje "Documento cargado..." (con snapshot) para habilitar modo edición.
+  if (!msgs || msgs.length === 0) {
+    const snap = String((doc as any).contenido || '')
+    await insertMessage({ documentId, role: 'system', content: systemPrompt(), documentSnapshot: null })
+    await insertMessage({
+      documentId,
+      role: 'assistant',
+      content: 'Documento cargado. Indícame qué cambios necesitas y lo iré actualizando en tiempo real.',
+      documentSnapshot: snap || null,
+    })
+    const { data: seeded } = await supabase
+      .from('document_messages')
+      .select('id, role, content, created_at')
+      .eq('document_id', documentId)
+      .order('created_at', { ascending: true })
+    return NextResponse.json({
+      document: {
+        id: doc.id,
+        expedienteId: doc.caso_id,
+        tipo: doc.tipo,
+        currentContent: doc.contenido,
+        createdAt: doc.created_at,
+      },
+      messages: (seeded ?? []).map(m => ({
+        id: (m as any).id,
+        role: (m as any).role as Role,
+        content: (m as any).content as string,
+        createdAt: (m as any).created_at as string,
+      })),
+    })
+  }
+
   return NextResponse.json({
     document: {
       id: doc.id,
@@ -133,6 +166,7 @@ export async function POST(req: NextRequest) {
     const last = (caso as any).movimientos?.[0] as { acto?: string | null; fecha?: string | null } | undefined
     const intro = `Revisé el expediente ${caso.numero_expediente}. El último movimiento fue ${last?.acto || 'sin dato'} del ${last?.fecha || 'sin fecha'}. Para redactar tu escrito, necesito algunos datos.`
 
+    await insertMessage({ documentId: Number(inserted.id), role: 'system', content: systemPrompt(), documentSnapshot: null })
     await insertMessage({ documentId: Number(inserted.id), role: 'assistant', content: intro, documentSnapshot: null })
 
     return NextResponse.json({
