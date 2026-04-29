@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
   const buffer = await Packer.toBuffer(docx)
 
   const filename = `${safeFilePart(tipo)}_${safeFilePart(expediente)}_${todayYMD()}.docx`
-  return new Response(buffer, {
+  return new Response(new Uint8Array(buffer), {
     headers: {
       'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       'Content-Disposition': `attachment; filename="${filename}"`,
