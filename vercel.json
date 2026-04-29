@@ -11,6 +11,10 @@
     {
       "path": "/api/cron/consultar",
       "schedule": "0 1 * * *"
+    },
+    {
+      "path": "/api/cron/judicial",
+      "schedule": "0 */4 * * *"
     }
   ]
 }
