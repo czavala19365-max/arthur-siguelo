@@ -31,7 +31,7 @@ async function fetchCej(numero: string, parte: string): Promise<CejCaseData> {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ numero, parte }),
-    signal: AbortSignal.timeout(180_000),
+    signal: AbortSignal.timeout(8_000),
   })
 
   let data: unknown = {}
@@ -96,10 +96,12 @@ export async function GET(req: NextRequest) {
     }
 
     const now = Date.now()
+    const MAX_CASOS = 1
+    let procesados = 0
 
     for (const caso of casos) {
       // Hard stop to respect Vercel maxDuration
-      if (Date.now() - started > 55_000) {
+      if (Date.now() - started > 8_000) {
         results.push({ casoId: Number(caso.id), status: 'timeout_guard_stop' })
         break
       }
@@ -196,6 +198,9 @@ export async function GET(req: NextRequest) {
           status: alertaResult.enviado ? 'alerta_enviada' : 'alerta_fallida',
           canales: alertaResult.canalesExitosos,
         })
+
+        procesados++
+        if (procesados >= MAX_CASOS) break
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
         console.error(`[CronJudicial] Error caso ${caso.id}:`, msg)
