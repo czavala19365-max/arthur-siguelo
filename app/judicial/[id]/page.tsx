@@ -105,6 +105,7 @@ export default function JudicialCaseDetail({ params }: { params: Promise<{ id: s
   const [demoStep, setDemoStep] = useState<string | null>(null);
   const [showRedaccion, setShowRedaccion] = useState(false);
   const [editingDocumentId, setEditingDocumentId] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState<null | 'docx' | 'xlsx'>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -154,6 +155,33 @@ export default function JudicialCaseDetail({ params }: { params: Promise<{ id: s
     setDemoStep(null);
   }
 
+  async function downloadAyudaMemoria(format: 'docx' | 'xlsx') {
+    if (downloading) return;
+    setDownloading(format);
+    try {
+      const res = await fetch(`/api/casos/${id}/ayuda-memoria`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ format }),
+      });
+      if (!res.ok) return;
+      const blob = await res.blob();
+      const cd = res.headers.get('content-disposition') || '';
+      const match = cd.match(/filename="([^"]+)"/i);
+      const filename = match?.[1] || `Ayuda_Memoria_${id}.${format}`;
+      const objUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(objUrl);
+    } finally {
+      setDownloading(null);
+    }
+  }
+
   if (loading) return <div style={{ padding: '48px 64px', fontFamily: 'var(--font-mono)', fontSize: '11px', textTransform: 'uppercase', color: 'var(--muted)' }}>Cargando caso...</div>;
   if (!caso) return <div style={{ padding: '48px 64px', fontFamily: 'var(--font-display)', fontSize: '24px' }}>Caso no encontrado</div>;
 
@@ -184,9 +212,27 @@ export default function JudicialCaseDetail({ params }: { params: Promise<{ id: s
             </span>
           </div>
         </div>
-        <button onClick={() => void handleReviewNow()} disabled={!!demoStep} style={{ background: 'transparent', border: '1px solid var(--line-strong)', padding: '10px 20px', fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', cursor: demoStep ? 'not-allowed' : 'pointer', opacity: demoStep ? 0.7 : 1 }}>
-          {demoStep || 'Revisar ahora'}
-        </button>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <button
+            onClick={() => void downloadAyudaMemoria('docx')}
+            disabled={!!downloading || !!demoStep}
+            style={{ background: 'transparent', border: '1px solid var(--line-strong)', padding: '10px 14px', fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', cursor: downloading || demoStep ? 'not-allowed' : 'pointer', opacity: downloading || demoStep ? 0.7 : 1 }}
+            title="Descargar Ayuda Memoria en Word"
+          >
+            {downloading === 'docx' ? 'Descargando...' : 'Ayuda Memoria (Word)'}
+          </button>
+          <button
+            onClick={() => void downloadAyudaMemoria('xlsx')}
+            disabled={!!downloading || !!demoStep}
+            style={{ background: 'transparent', border: '1px solid var(--line-strong)', padding: '10px 14px', fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', cursor: downloading || demoStep ? 'not-allowed' : 'pointer', opacity: downloading || demoStep ? 0.7 : 1 }}
+            title="Descargar Ayuda Memoria en Excel"
+          >
+            {downloading === 'xlsx' ? 'Descargando...' : 'Ayuda Memoria (Excel)'}
+          </button>
+          <button onClick={() => void handleReviewNow()} disabled={!!demoStep || !!downloading} style={{ background: 'transparent', border: '1px solid var(--line-strong)', padding: '10px 20px', fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', cursor: demoStep || downloading ? 'not-allowed' : 'pointer', opacity: demoStep || downloading ? 0.7 : 1 }}>
+            {demoStep || 'Revisar ahora'}
+          </button>
+        </div>
       </div>
       <div style={{ width: '60px', height: '2px', background: 'var(--accent)', marginTop: '16px', marginBottom: '28px' }} />
 
