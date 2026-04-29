@@ -4,6 +4,7 @@ import { use, useEffect, useMemo, useState, useCallback, type MouseEvent } from 
 import Link from 'next/link';
 import CalendarButtons from '@/components/CalendarButtons';
 import { formatPartesDisplay } from '@/lib/format-partes-judicial';
+import JudicialRedaccion from '@/components/JudicialRedaccion';
 
 type Tab = 'resumen' | 'movimientos' | 'documentos' | 'agenda' | 'arthur';
 
@@ -102,6 +103,8 @@ export default function JudicialCaseDetail({ params }: { params: Promise<{ id: s
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>('resumen');
   const [demoStep, setDemoStep] = useState<string | null>(null);
+  const [showRedaccion, setShowRedaccion] = useState(false);
+  const [editingDocumentId, setEditingDocumentId] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -153,6 +156,20 @@ export default function JudicialCaseDetail({ params }: { params: Promise<{ id: s
 
   if (loading) return <div style={{ padding: '48px 64px', fontFamily: 'var(--font-mono)', fontSize: '11px', textTransform: 'uppercase', color: 'var(--muted)' }}>Cargando caso...</div>;
   if (!caso) return <div style={{ padding: '48px 64px', fontFamily: 'var(--font-display)', fontSize: '24px' }}>Caso no encontrado</div>;
+
+  if (showRedaccion) {
+    return (
+      <JudicialRedaccion
+        expedienteId={String(caso.id)}
+        documentId={editingDocumentId || undefined}
+        onBack={() => {
+          setShowRedaccion(false);
+          setEditingDocumentId(null);
+          void loadData();
+        }}
+      />
+    );
+  }
 
   return (
     <div style={{ padding: '48px 64px', background: 'var(--paper)', minHeight: '100vh' }}>
@@ -268,12 +285,27 @@ export default function JudicialCaseDetail({ params }: { params: Promise<{ id: s
           ) : caso.escritos.map(e => (
             <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', border: '1px solid var(--line)', background: 'var(--surface)', marginBottom: '8px' }}>
               <div style={{ fontFamily: 'var(--font-body)', fontSize: '14px' }}>{e.tipo} · {new Date(e.created_at).toLocaleString('es-PE')}</div>
-              <button onClick={() => window.alert(e.contenido)} style={{ border: '1px solid var(--line-strong)', background: 'transparent', padding: '6px 10px', fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', cursor: 'pointer' }}>Ver</button>
+              <button
+                onClick={() => {
+                  setEditingDocumentId(String(e.id));
+                  setShowRedaccion(true);
+                }}
+                style={{ border: '1px solid var(--line-strong)', background: 'transparent', padding: '6px 10px', fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', cursor: 'pointer' }}
+              >
+                Ver
+              </button>
             </div>
           ))}
-          <Link href={`/judicial/${caso.id}/redactar`} style={{ display: 'inline-block', marginTop: '10px', background: 'var(--ink)', color: 'white', padding: '10px 16px', fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase' }}>
+          <button
+            type="button"
+            onClick={() => {
+              setEditingDocumentId(null);
+              setShowRedaccion(true);
+            }}
+            style={{ display: 'inline-block', marginTop: '10px', background: 'var(--ink)', color: 'white', padding: '10px 16px', fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', border: 'none', cursor: 'pointer' }}
+          >
             + Redactar nuevo escrito
-          </Link>
+          </button>
         </div>
       )}
 
