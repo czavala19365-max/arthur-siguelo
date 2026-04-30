@@ -46,16 +46,55 @@ export default function JudicialRedaccion({ expedienteId, documentId, onBack }: 
       setLoading(true)
       try {
         if (documentId) {
-          const r = await fetch(`/api/documento/chat?documentId=${encodeURIComponent(documentId)}`)
-          const data = await r.json() as {
-            document?: { tipo: string; currentContent: string }
-            messages?: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>
+          // 1) Cargar SIEMPRE el documento (panel derecho) aunque no haya historial o falle document_messages
+          try {
+            const docRes = await fetch(`/api/documento?documentId=${encodeURIComponent(documentId)}`)
+            const docData = await docRes.json() as { document?: { tipo?: string; currentContent?: string } }
+            if (!cancelled) {
+              if (docData?.document?.tipo) setTipo(String(docData.document.tipo))
+              setDocumentContent(String(docData?.document?.currentContent || ''))
+              setCurrentDocumentId(documentId)
+            }
+          } catch {
+            // ignore: el panel derecho quedará vacío si no se puede cargar
           }
-          if (cancelled) return
-          if (data?.document?.tipo) setTipo(String(data.document.tipo))
-          setDocumentContent(String(data?.document?.currentContent || ''))
-          setMessages((data?.messages || []).map(m => ({ role: m.role, content: m.content })))
-          setCurrentDocumentId(documentId)
+
+          // 2) Luego cargar historial (panel izquierdo). Si no hay mensajes, mostrar fallback.
+          try {
+            const r = await fetch(`/api/documento/chat?documentId=${encodeURIComponent(documentId)}`)
+            const data = await r.json() as {
+              document?: { tipo?: string; currentContent?: string }
+              messages?: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>
+              error?: string
+            }
+            if (cancelled) return
+
+            if (data?.document?.tipo) setTipo(String(data.document.tipo))
+            if (data?.document?.currentContent != null && String(data.document.currentContent).trim() !== '') {
+              setDocumentContent(String(data.document.currentContent))
+            }
+
+            const loaded = (data?.messages || []).map(m => ({ role: m.role, content: m.content }))
+            if (loaded.length > 0) {
+              setMessages(loaded)
+            } else {
+              setMessages([
+                {
+                  role: 'assistant',
+                  content: 'Este documento fue creado anteriormente. Puedes seguir editándolo escribiendo instrucciones abajo.',
+                },
+              ])
+            }
+          } catch {
+            if (!cancelled) {
+              setMessages([
+                {
+                  role: 'assistant',
+                  content: 'Este documento fue creado anteriormente. Puedes seguir editándolo escribiendo instrucciones abajo.',
+                },
+              ])
+            }
+          }
         } else {
           // Modo nuevo: NO crear documento todavía. Se crea al primer envío.
           setMessages([])

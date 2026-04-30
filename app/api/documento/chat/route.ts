@@ -39,6 +39,10 @@ function parseClaudeResponse(text: string): { explanation: string; document: str
   return { explanation: 'Documento actualizado.', document: raw.trim() }
 }
 
+function pickContent(row: any): string {
+  return String(row?.current_content || row?.contenido || row?.content || '')
+}
+
 async function insertMessage(params: {
   documentId: number
   role: Role
@@ -65,7 +69,7 @@ export async function GET(req: NextRequest) {
   const supabase = getJudicialSupabase()
   const { data: doc, error: docErr } = await supabase
     .from('escritos_judiciales')
-    .select('id, caso_id, tipo, contenido, created_at')
+    .select('*')
     .eq('id', documentId)
     .maybeSingle()
   if (docErr) return NextResponse.json({ error: docErr.message }, { status: 500 })
@@ -113,11 +117,11 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     document: {
-      id: doc.id,
-      expedienteId: doc.caso_id,
-      tipo: doc.tipo,
-      currentContent: doc.contenido,
-      createdAt: doc.created_at,
+      id: (doc as any).id,
+      expedienteId: (doc as any).caso_id,
+      tipo: (doc as any).tipo,
+      currentContent: pickContent(doc),
+      createdAt: (doc as any).created_at,
     },
     messages: (msgs ?? []).map(m => ({
       id: (m as any).id,
@@ -190,7 +194,7 @@ export async function POST(req: NextRequest) {
   // Load doc + last 10 msgs
   const { data: doc, error: docErr } = await supabase
     .from('escritos_judiciales')
-    .select('id, caso_id, tipo, contenido')
+    .select('*')
     .eq('id', documentId)
     .maybeSingle()
   if (docErr) return NextResponse.json({ error: docErr.message }, { status: 500 })
@@ -210,7 +214,7 @@ export async function POST(req: NextRequest) {
 
   const userContent = `Documento actual:
 <<<
-${currentDocument || String((doc as any).contenido || '')}
+${currentDocument || pickContent(doc)}
 >>>
 
 Nueva instrucción:
