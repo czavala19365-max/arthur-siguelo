@@ -7,8 +7,13 @@ export function getJudicialSupabase(): SupabaseClient {
   if (_client) return _client
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL_JUDICIAL 
     || process.env.SUPABASE_URL
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY_JUDICIAL 
-    || process.env.SUPABASE_SERVICE_KEY
+  // En server routes debemos usar service role para evitar bloqueos por RLS.
+  // Fallback a anon solo para entornos donde aún no se configuró la service key.
+  const key = process.env.SUPABASE_SERVICE_KEY
+    || process.env.SUPABASE_SERVICE_ROLE_KEY
+    || process.env.SUPABASE_SERVICE_KEY_JUDICIAL
+    || process.env.SUPABASE_SERVICE_ROLE_KEY_JUDICIAL
+    || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY_JUDICIAL
   if (!url?.trim() || !key?.trim()) {
     throw new Error(
       'Judicial module requires SUPABASE_URL and SUPABASE_SERVICE_KEY (service role) in the environment.',
