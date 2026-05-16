@@ -33,16 +33,7 @@ export default function JudicialRedaccion({ expedienteId, documentId, onBack }: 
   const [documentContent, setDocumentContent] = useState('')
   const [currentDocumentId, setCurrentDocumentId] = useState<string | null>(documentId ?? null)
   const [loading, setLoading] = useState(true)
-  const [volverPadLeft, setVolverPadLeft] = useState(VOLVER_OFFSET_PX)
   const endRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const mq = window.matchMedia('(min-width: 768px)')
-    const sync = () => setVolverPadLeft(mq.matches ? 28 : VOLVER_OFFSET_PX)
-    sync()
-    mq.addEventListener('change', sync)
-    return () => mq.removeEventListener('change', sync)
-  }, [])
 
   const isEditMode = useMemo(() => !!documentId, [documentId])
   // En modo edición nunca se puede cambiar tipo. En modo nuevo, se bloquea una vez creado el documento.
@@ -248,7 +239,7 @@ export default function JudicialRedaccion({ expedienteId, documentId, onBack }: 
     paddingTop: 12,
     paddingBottom: 12,
     paddingRight: 28,
-    paddingLeft: volverPadLeft,
+    paddingLeft: VOLVER_OFFSET_PX,
     borderBottom: '1px solid var(--line)',
     background: 'var(--surface)',
     position: 'relative',

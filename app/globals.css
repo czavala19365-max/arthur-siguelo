@@ -309,34 +309,6 @@ button {
   padding-left: 64px;
 }
 
-@media (min-width: 768px) {
-  .judicial-layout .arthur-sidebar {
-    transform: translateX(0) !important;
-    box-shadow: var(--sidebar-shadow) !important;
-  }
-
-  .judicial-layout .arthur-hamburger {
-    display: none !important;
-  }
-
-  .judicial-layout .arthur-overlay {
-    display: none !important;
-  }
-
-  .judicial-layout .arthur-sidebar-close-mobile {
-    display: none !important;
-  }
-
-  .judicial-layout .arthur-main {
-    margin-left: 260px !important;
-  }
-
-  .judicial-layout .judicial-redaccion-toolbar,
-  .judicial-layout .judicial-page-top {
-    padding-left: 0;
-  }
-}
-
 .campo-placeholder {
   background: rgba(194, 164, 109, 0.15);
   color: var(--accent);

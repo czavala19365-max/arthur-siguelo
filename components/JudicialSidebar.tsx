@@ -52,7 +52,6 @@ export default function JudicialSidebar() {
   const router = useRouter();
   const [userEmail, setUserEmail] = useState('');
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [showHamburger, setShowHamburger] = useState(false);
 
   useEffect(() => {
     try {
@@ -61,14 +60,6 @@ export default function JudicialSidebar() {
     } catch {
       // ignore
     }
-  }, []);
-
-  useEffect(() => {
-    const mq = window.matchMedia('(max-width: 767px)');
-    const sync = () => setShowHamburger(mq.matches);
-    sync();
-    mq.addEventListener('change', sync);
-    return () => mq.removeEventListener('change', sync);
   }, []);
 
   useEffect(() => {
@@ -91,34 +82,33 @@ export default function JudicialSidebar() {
 
   return (
     <>
-      {showHamburger ? (
-        <button
-          type="button"
-          className="arthur-hamburger"
-          onClick={() => setMobileOpen(v => !v)}
-          aria-label="Abrir menú"
-          style={{
-            position: 'fixed',
-            top: 10,
-            left: 10,
-            zIndex: 400,
-            width: '44px',
-            height: '44px',
-            backgroundColor: 'var(--paper)',
-            border: '1px solid var(--line-mid)',
-            borderRadius: 0,
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'var(--ink)',
-            flexShrink: 0,
-            padding: 0,
-          }}
-        >
-          <span style={{ fontSize: '20px', lineHeight: 1 }} aria-hidden>☰</span>
-        </button>
-      ) : null}
+      <button
+        type="button"
+        className="arthur-hamburger"
+        onClick={() => setMobileOpen(v => !v)}
+        aria-label={mobileOpen ? 'Cerrar menú' : 'Abrir menú'}
+        aria-expanded={mobileOpen}
+        style={{
+          position: 'fixed',
+          top: 12,
+          left: 12,
+          zIndex: 400,
+          width: '44px',
+          height: '44px',
+          backgroundColor: 'var(--paper)',
+          border: '1px solid var(--line-mid)',
+          borderRadius: 0,
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: 'var(--ink)',
+          flexShrink: 0,
+          padding: 0,
+        }}
+      >
+        <span style={{ fontSize: '20px', lineHeight: 1 }} aria-hidden>{mobileOpen ? '×' : '☰'}</span>
+      </button>
 
       <div
         className={`arthur-overlay${mobileOpen ? ' is-open' : ''}`}
