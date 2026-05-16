@@ -33,19 +33,26 @@ export interface AlertaConfig {
 
 const CANALES_DEFAULT: Record<NivelUrgencia, ('email' | 'whatsapp' | 'telegram')[]> = {
   alta: ['email', 'whatsapp', 'telegram'],
-  media: ['email', 'telegram'],
-  baja: ['email'],
+  media: ['email', 'whatsapp', 'telegram'],
+  baja: ['email', 'whatsapp'],
+}
+
+type CanalKey = 'email' | 'whatsapp' | 'telegram'
+
+/** Incluye siempre los canales que el caso tiene configurados (email/teléfono/telegram). */
+function resolveCanales(config: AlertaConfig, nivel: NivelUrgencia): CanalKey[] {
+  const set = new Set<CanalKey>(config.canalPorNivel?.[nivel] ?? CANALES_DEFAULT[nivel])
+  if (config.canalesActivos.email && config.email) set.add('email')
+  if (config.canalesActivos.whatsapp && config.telefonoCelular) set.add('whatsapp')
+  if (config.canalesActivos.telegram && config.telegramChatId) set.add('telegram')
+  return [...set]
 }
 
 export async function enviarAlertaMovimiento(
   movimiento: MovimientoJudicialAlerta,
   config: AlertaConfig
 ): Promise<{ enviado: boolean; canalesExitosos: string[] }> {
-  const canales =
-    config.canalPorNivel?.[movimiento.nivelUrgencia] ??
-    CANALES_DEFAULT[movimiento.nivelUrgencia]
-
-  type CanalKey = 'email' | 'whatsapp' | 'telegram'
+  const canales = resolveCanales(config, movimiento.nivelUrgencia)
   const tareas: { canal: CanalKey; promise: Promise<boolean> }[] = []
 
   for (const canal of canales) {

@@ -1,6 +1,19 @@
 import twilio from 'twilio'
 import type { MovimientoJudicialAlerta } from '../alert-service'
 
+/** Formato E.164 para Twilio (Perú: +51 + 9 dígitos). */
+export function normalizeWhatsAppE164(raw: string): string {
+  const t = String(raw || '').trim()
+  if (!t) return ''
+  if (t.startsWith('whatsapp:')) return normalizeWhatsAppE164(t.slice(9))
+  const digits = t.replace(/\D/g, '')
+  if (!digits) return ''
+  if (t.startsWith('+')) return `+${digits}`
+  if (digits.startsWith('51') && digits.length >= 11) return `+${digits}`
+  if (digits.length === 9) return `+51${digits}`
+  return `+${digits}`
+}
+
 function formatWhatsAppMessage(m: MovimientoJudicialAlerta): string {
   const lines: string[] = []
 
@@ -50,10 +63,15 @@ export async function enviarWhatsApp(
   try {
     const client = twilio(accountSid, authToken)
     const body = formatWhatsAppMessage(movimiento)
-    const toNumber = telefono.startsWith('whatsapp:') ? telefono : `whatsapp:${telefono}`
+    const e164 = normalizeWhatsAppE164(telefono)
+    if (!e164) {
+      console.warn('[WhatsApp] Número inválido:', telefono)
+      return false
+    }
+    const toNumber = `whatsapp:${e164}`
 
     await client.messages.create({ from, to: toNumber, body })
-    console.log(`[WhatsApp] Mensaje enviado a ${telefono}`)
+    console.log(`[WhatsApp] Mensaje enviado a ${e164}`)
     return true
   } catch (err) {
     console.error('[WhatsApp] Error:', err instanceof Error ? err.message : String(err))

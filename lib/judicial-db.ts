@@ -1,5 +1,6 @@
 import { getJudicialSupabase } from './supabase-judicial'
 import type { AlertaConfig } from './alert-service'
+import { normalizeWhatsAppE164 } from './channels/whatsapp-channel'
 
 export interface Caso {
   id: number
@@ -638,15 +639,16 @@ export async function getAlertaConfigParaCaso(casoId: number): Promise<AlertaCon
   const cfg = cfgRaw as { telegram_chat_id?: string | null; canal_por_nivel?: unknown } | null
   const telegramChatId = cfg?.telegram_chat_id != null ? String(cfg.telegram_chat_id) : undefined
   const canalPorNivel = cfg?.canal_por_nivel as AlertaConfig['canalPorNivel'] | undefined
+  const whatsappNorm = row.whatsapp_number ? normalizeWhatsAppE164(row.whatsapp_number) : ''
 
   return {
     usuarioId: String(row.id),
-    email: row.email || undefined,
-    telefonoCelular: row.whatsapp_number || undefined,
+    email: row.email?.trim() || undefined,
+    telefonoCelular: whatsappNorm || undefined,
     telegramChatId,
     canalesActivos: {
-      email: !!row.email,
-      whatsapp: !!row.whatsapp_number,
+      email: !!row.email?.trim(),
+      whatsapp: !!whatsappNorm,
       telegram: !!telegramChatId,
     },
     canalPorNivel,
