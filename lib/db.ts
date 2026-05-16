@@ -166,6 +166,17 @@ function initSchema(db: SqliteDatabase) {
       contenido TEXT,
       created_at TEXT DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS panel_access_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT NOT NULL,
+      ip TEXT,
+      user_agent TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_panel_access_logs_created
+      ON panel_access_logs (created_at DESC);
   `);
 
   // Migrate: add archived_at/deleted_at columns if missing

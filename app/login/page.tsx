@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -165,11 +165,40 @@ export default function LoginPage() {
                 textTransform: 'uppercase',
                 letterSpacing: '0.15em',
                 color: accent,
-                marginBottom: '28px',
+                marginBottom: '16px',
                 fontWeight: 600,
               }}
             >
-              Acceso al panel
+              Acceso al panel — Concurso (primer paso)
+            </div>
+
+            <div
+              style={{
+                background: 'rgba(194, 164, 109, 0.1)',
+                border: '1px solid rgba(194, 164, 109, 0.35)',
+                padding: '16px 18px',
+                marginBottom: '24px',
+                fontFamily: 'var(--font-body)',
+                fontSize: '13px',
+                lineHeight: 1.65,
+                color: ink,
+              }}
+            >
+              <strong style={{ display: 'block', marginBottom: 8, fontFamily: 'var(--font-mono)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                Instrucciones para jurados
+              </strong>
+              <ol style={{ margin: 0, paddingLeft: 20 }}>
+                <li style={{ marginBottom: 6 }}>
+                  Escribe tu <strong>correo electrónico</strong> (el que uses habitualmente).
+                </li>
+                <li>
+                  En <strong>Código de acceso</strong>, escribe exactamente:{' '}
+                  <code style={{ background: '#fff', padding: '2px 8px', border: `1px solid ${accent}`, fontFamily: 'var(--font-mono)', fontSize: 12 }}>arthur2026</code>
+                </li>
+              </ol>
+              <p style={{ margin: '12px 0 0', fontSize: 12, color: muted }}>
+                Luego pulsa <strong>Entrar</strong> y elige el módulo que debas evaluar.
+              </p>
             </div>
 
             <form onSubmit={handleSubmit}>
