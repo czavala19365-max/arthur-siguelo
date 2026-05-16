@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
 import { getJudicialSupabase } from '@/lib/supabase-judicial'
+import { parseJudicialDocumentId } from '@/lib/judicial-document-messages'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -10,9 +11,8 @@ function pickContent(row: any): string {
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url)
-  const documentIdRaw = url.searchParams.get('documentId') || ''
-  const documentId = Number.parseInt(documentIdRaw, 10)
-  if (!Number.isFinite(documentId) || documentId <= 0) {
+  const documentId = parseJudicialDocumentId(url.searchParams.get('documentId'))
+  if (documentId == null) {
     return Response.json({ error: 'documentId inválido' }, { status: 400 })
   }
 

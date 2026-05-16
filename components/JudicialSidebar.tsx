@@ -52,6 +52,7 @@ export default function JudicialSidebar() {
   const router = useRouter();
   const [userEmail, setUserEmail] = useState('');
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [showHamburger, setShowHamburger] = useState(false);
 
   useEffect(() => {
     try {
@@ -60,6 +61,14 @@ export default function JudicialSidebar() {
     } catch {
       // ignore
     }
+  }, []);
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)');
+    const sync = () => setShowHamburger(mq.matches);
+    sync();
+    mq.addEventListener('change', sync);
+    return () => mq.removeEventListener('change', sync);
   }, []);
 
   useEffect(() => {
@@ -82,58 +91,34 @@ export default function JudicialSidebar() {
 
   return (
     <>
-      <style>{`
-        .arthur-sidebar {
-          transform: translateX(-260px);
-          transition: transform 200ms ease;
-          box-shadow: none !important;
-        }
-        .arthur-hamburger {
-          display: flex;
-        }
-        .arthur-overlay {
-          display: none;
-        }
-        .arthur-main {
-          margin-left: 0 !important;
-        }
-        .arthur-sidebar-close-mobile {
-          display: flex;
-        }
-        .arthur-sidebar.is-open {
-          transform: translateX(0);
-          box-shadow: 8px 0 32px rgba(0,0,0,0.35) !important;
-        }
-        .arthur-overlay.is-open {
-          display: block;
-        }
-      `}</style>
-
-      <button
-        type="button"
-        className="arthur-hamburger"
-        onClick={() => setMobileOpen(v => !v)}
-        aria-label="Abrir menú"
-        style={{
-          position: 'fixed',
-          top: 10,
-          left: 10,
-          zIndex: 400,
-          width: '44px',
-          height: '44px',
-          backgroundColor: 'var(--paper)',
-          border: '1px solid var(--line-mid)',
-          borderRadius: 0,
-          cursor: 'pointer',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: 'var(--ink)',
-          flexShrink: 0,
-          padding: 0,
-        }}
-      >
-        <span style={{ fontSize: '20px', lineHeight: 1 }} aria-hidden>☰</span>
-      </button>
+      {showHamburger ? (
+        <button
+          type="button"
+          className="arthur-hamburger"
+          onClick={() => setMobileOpen(v => !v)}
+          aria-label="Abrir menú"
+          style={{
+            position: 'fixed',
+            top: 10,
+            left: 10,
+            zIndex: 400,
+            width: '44px',
+            height: '44px',
+            backgroundColor: 'var(--paper)',
+            border: '1px solid var(--line-mid)',
+            borderRadius: 0,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'var(--ink)',
+            flexShrink: 0,
+            padding: 0,
+          }}
+        >
+          <span style={{ fontSize: '20px', lineHeight: 1 }} aria-hidden>☰</span>
+        </button>
+      ) : null}
 
       <div
         className={`arthur-overlay${mobileOpen ? ' is-open' : ''}`}

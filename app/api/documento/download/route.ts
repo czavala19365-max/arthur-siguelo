@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
 import { getJudicialSupabase } from '@/lib/supabase-judicial'
+import { parseJudicialDocumentId } from '@/lib/judicial-document-messages'
 import { Document, Packer, Paragraph, TextRun, PageBreak, AlignmentType } from 'docx'
 
 export const runtime = 'nodejs'
@@ -25,8 +26,8 @@ function todayYMD(): string {
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null) as null | { documentId?: string }
-  const documentId = Number.parseInt(String(body?.documentId || ''), 10)
-  if (!Number.isFinite(documentId) || documentId <= 0) {
+  const documentId = parseJudicialDocumentId(body?.documentId)
+  if (documentId == null) {
     return Response.json({ error: 'documentId inválido' }, { status: 400 })
   }
 

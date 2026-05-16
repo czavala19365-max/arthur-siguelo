@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { getJudicialSupabase } from '@/lib/supabase-judicial'
 import { getCasoById } from '@/lib/judicial-db'
+import {
+  insertDocumentMessage,
+  listDocumentMessages,
+  listRecentDocumentMessages,
+  parseJudicialDocumentId,
+} from '@/lib/judicial-document-messages'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -35,37 +41,17 @@ function parseClaudeResponse(text: string): { explanation: string; document: str
   const explanation = (expMatch?.[1] ?? '').trim()
   const document = (docMatch?.[1] ?? '').trim()
   if (document) return { explanation: explanation || 'Documento actualizado.', document }
-  // Fallback: treat all as document
   return { explanation: 'Documento actualizado.', document: raw.trim() }
 }
 
-function pickContent(row: any): string {
+function pickContent(row: Record<string, unknown>): string {
   return String(row?.current_content || row?.contenido || row?.content || '')
-}
-
-async function insertMessage(params: {
-  documentId: number
-  role: Role
-  content: string
-  documentSnapshot?: string | null
-}) {
-  const supabase = getJudicialSupabase()
-  const { error } = await supabase.from('document_messages').insert({
-    document_id: params.documentId,
-    role: params.role,
-    content: params.content,
-    document_snapshot: params.documentSnapshot ?? null,
-  })
-  if (error) {
-    throw new Error(`document_messages insert failed: ${error.message}`)
-  }
 }
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url)
-  const documentIdRaw = url.searchParams.get('documentId') || ''
-  const documentId = Number.parseInt(documentIdRaw, 10)
-  if (!Number.isFinite(documentId) || documentId <= 0) {
+  const documentId = parseJudicialDocumentId(url.searchParams.get('documentId'))
+  if (documentId == null) {
     return NextResponse.json({ error: 'documentId inválido' }, { status: 400 })
   }
 
@@ -78,59 +64,44 @@ export async function GET(req: NextRequest) {
   if (docErr) return NextResponse.json({ error: docErr.message }, { status: 500 })
   if (!doc) return NextResponse.json({ error: 'Documento no encontrado' }, { status: 404 })
 
-  const { data: msgs, error: msgErr } = await supabase
-    .from('document_messages')
-    .select('id, role, content, created_at')
-    .eq('document_id', documentId)
-    .order('created_at', { ascending: true })
-  if (msgErr) return NextResponse.json({ error: msgErr.message }, { status: 500 })
+  let msgs
+  try {
+    msgs = await listDocumentMessages(documentId)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return NextResponse.json({ error: msg }, { status: 500 })
+  }
 
-  // Si el documento fue creado antes de esta feature, puede no tener historial.
-  // Inicializamos una vez con un system prompt + mensaje "Documento cargado..." (con snapshot) para habilitar modo edición.
-  if (!msgs || msgs.length === 0) {
-    const snap = pickContent(doc)
-    await insertMessage({ documentId, role: 'system', content: systemPrompt(), documentSnapshot: null })
-    await insertMessage({
-      documentId,
-      role: 'assistant',
-      content: 'Documento cargado. Indícame qué cambios necesitas y lo iré actualizando en tiempo real.',
-      documentSnapshot: snap || null,
-    })
-    const { data: seeded } = await supabase
-      .from('document_messages')
-      .select('id, role, content, created_at')
-      .eq('document_id', documentId)
-      .order('created_at', { ascending: true })
-    return NextResponse.json({
-      document: {
-        id: doc.id,
-        expedienteId: doc.caso_id,
-        tipo: doc.tipo,
-        currentContent: doc.contenido,
-        createdAt: doc.created_at,
-      },
-      messages: (seeded ?? []).map(m => ({
-        id: (m as any).id,
-        role: (m as any).role as Role,
-        content: (m as any).content as string,
-        createdAt: (m as any).created_at as string,
-      })),
-    })
+  if (msgs.length === 0) {
+    const snap = pickContent(doc as Record<string, unknown>)
+    try {
+      await insertDocumentMessage({ documentId, role: 'system', content: systemPrompt(), documentSnapshot: null })
+      await insertDocumentMessage({
+        documentId,
+        role: 'assistant',
+        content: 'Documento cargado. Indícame qué cambios necesitas y lo iré actualizando en tiempo real.',
+        documentSnapshot: snap || null,
+      })
+      msgs = await listDocumentMessages(documentId)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      return NextResponse.json({ error: msg }, { status: 500 })
+    }
   }
 
   return NextResponse.json({
     document: {
-      id: (doc as any).id,
-      expedienteId: (doc as any).caso_id,
-      tipo: (doc as any).tipo,
-      currentContent: pickContent(doc),
-      createdAt: (doc as any).created_at,
+      id: (doc as { id: number }).id,
+      expedienteId: (doc as { caso_id: number }).caso_id,
+      tipo: (doc as { tipo: string }).tipo,
+      currentContent: pickContent(doc as Record<string, unknown>),
+      createdAt: (doc as { created_at: string }).created_at,
     },
-    messages: (msgs ?? []).map(m => ({
-      id: (m as any).id,
-      role: (m as any).role as Role,
-      content: (m as any).content as string,
-      createdAt: (m as any).created_at as string,
+    messages: msgs.map(m => ({
+      id: m.id,
+      role: m.role as Role,
+      content: m.content,
+      createdAt: m.created_at,
     })),
   })
 }
@@ -153,10 +124,9 @@ export async function POST(req: NextRequest) {
 
     const supabase = getJudicialSupabase()
 
-    // ── Init: create document record and seed assistant intro message ──────────
     if (body.init) {
-      const expedienteId = Number.parseInt(String(body.expedienteId || ''), 10)
-      if (!Number.isFinite(expedienteId) || expedienteId <= 0) {
+      const expedienteId = parseJudicialDocumentId(body.expedienteId)
+      if (expedienteId == null) {
         return NextResponse.json({ error: 'expedienteId inválido' }, { status: 400 })
       }
       const tipo = String(body.tipo || 'contestacion')
@@ -171,22 +141,26 @@ export async function POST(req: NextRequest) {
         .single()
       if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-      const last = (caso as any).movimientos?.[0] as { acto?: string | null; fecha?: string | null } | undefined
+      const insertedId = parseJudicialDocumentId((inserted as { id: number }).id)
+      if (insertedId == null) {
+        return NextResponse.json({ error: 'ID de documento inválido al crear escrito' }, { status: 500 })
+      }
+
+      const last = (caso as { movimientos?: Array<{ acto?: string | null; fecha?: string | null }> }).movimientos?.[0]
       const intro = `Revisé el expediente ${caso.numero_expediente}. El último movimiento fue ${last?.acto || 'sin dato'} del ${last?.fecha || 'sin fecha'}. Para redactar tu escrito, necesito algunos datos.`
 
-      await insertMessage({ documentId: Number(inserted.id), role: 'system', content: systemPrompt(), documentSnapshot: null })
-      await insertMessage({ documentId: Number(inserted.id), role: 'assistant', content: intro, documentSnapshot: null })
+      await insertDocumentMessage({ documentId: insertedId, role: 'system', content: systemPrompt(), documentSnapshot: null })
+      await insertDocumentMessage({ documentId: insertedId, role: 'assistant', content: intro, documentSnapshot: null })
 
       return NextResponse.json({
-        documentId: String(inserted.id),
-        tipo: inserted.tipo,
+        documentId: String(insertedId),
+        tipo: (inserted as { tipo: string }).tipo,
         initialMessage: intro,
       })
     }
 
-    // ── Chat: update an existing document ────────────────────────────────────
-    const documentId = Number.parseInt(String(body.documentId || ''), 10)
-    if (!Number.isFinite(documentId) || documentId <= 0) {
+    const documentId = parseJudicialDocumentId(body.documentId)
+    if (documentId == null) {
       return NextResponse.json({ error: 'documentId requerido' }, { status: 400 })
     }
 
@@ -195,7 +169,6 @@ export async function POST(req: NextRequest) {
 
     const currentDocument = String(body.currentDocument || '').trim()
 
-    // Load doc + last 10 msgs
     const { data: doc, error: docErr } = await supabase
       .from('escritos_judiciales')
       .select('*')
@@ -204,29 +177,17 @@ export async function POST(req: NextRequest) {
     if (docErr) return NextResponse.json({ error: docErr.message }, { status: 500 })
     if (!doc) return NextResponse.json({ error: 'Documento no encontrado' }, { status: 404 })
 
-    const { data: lastMsgs, error: histErr } = await supabase
-      .from('document_messages')
-      .select('role, content')
-      .eq('document_id', documentId)
-      .order('created_at', { ascending: false })
-      .limit(10)
-    if (histErr) return NextResponse.json({ error: histErr.message }, { status: 500 })
-
-    const history = [...(lastMsgs ?? [])].reverse().map(m => ({
-      role: (m as any).role === 'assistant' ? 'assistant' : 'user',
-      content: String((m as any).content || ''),
-    })) as Array<{ role: 'user' | 'assistant'; content: string }>
+    const history = await listRecentDocumentMessages(documentId, 10)
 
     const userContent = `Documento actual:
 <<<
-${currentDocument || pickContent(doc)}
+${currentDocument || pickContent(doc as Record<string, unknown>)}
 >>>
 
 Nueva instrucción:
 ${message}`
 
-    // Save user message first
-    await insertMessage({ documentId, role: 'user', content: message, documentSnapshot: null })
+    await insertDocumentMessage({ documentId, role: 'user', content: message, documentSnapshot: null })
 
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
     const response = await anthropic.messages.create({
@@ -243,8 +204,7 @@ ${message}`
     const text = block.type === 'text' ? block.text : ''
     const parsed = parseClaudeResponse(text)
 
-    // Save assistant message + snapshot, then update doc content
-    await insertMessage({
+    await insertDocumentMessage({
       documentId,
       role: 'assistant',
       content: parsed.explanation,
@@ -266,4 +226,3 @@ ${message}`
     return NextResponse.json({ error: msg }, { status: 500 })
   }
 }
-

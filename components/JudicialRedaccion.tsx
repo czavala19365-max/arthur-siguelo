@@ -1,7 +1,10 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import Link from 'next/link'
+
+/** Espacio a la izquierda del botón Volver para no quedar bajo el menú ☰ fijo. */
+const VOLVER_OFFSET_PX = 72
 
 interface Message {
   role: 'user' | 'assistant' | 'system'
@@ -30,7 +33,16 @@ export default function JudicialRedaccion({ expedienteId, documentId, onBack }: 
   const [documentContent, setDocumentContent] = useState('')
   const [currentDocumentId, setCurrentDocumentId] = useState<string | null>(documentId ?? null)
   const [loading, setLoading] = useState(true)
+  const [volverPadLeft, setVolverPadLeft] = useState(VOLVER_OFFSET_PX)
   const endRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 768px)')
+    const sync = () => setVolverPadLeft(mq.matches ? 28 : VOLVER_OFFSET_PX)
+    sync()
+    mq.addEventListener('change', sync)
+    return () => mq.removeEventListener('change', sync)
+  }, [])
 
   const isEditMode = useMemo(() => !!documentId, [documentId])
   // En modo edición nunca se puede cambiar tipo. En modo nuevo, se bloquea una vez creado el documento.
@@ -197,26 +209,59 @@ export default function JudicialRedaccion({ expedienteId, documentId, onBack }: 
     }
   }
 
+  const backStyle = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
+    fontFamily: 'var(--font-mono)',
+    fontSize: '11px',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.05em',
+    color: 'var(--muted)',
+    textDecoration: 'none',
+    padding: '6px 0',
+    lineHeight: 1.2,
+    whiteSpace: 'nowrap' as const,
+  }
+
   const backEl = onBack ? (
     <button
       type="button"
       onClick={onBack}
-      style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', color: 'var(--muted)', background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}
+      style={{ ...backStyle, background: 'transparent', border: 'none', cursor: 'pointer' }}
     >
-      ← Volver
+      <span aria-hidden>←</span>
+      <span>Volver</span>
     </button>
   ) : (
-    <Link href={`/judicial/${expedienteId}`} style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', color: 'var(--muted)' }}>
-      ← Volver
+    <Link href={`/judicial/${expedienteId}`} style={backStyle}>
+      <span aria-hidden>←</span>
+      <span>Volver</span>
     </Link>
   )
 
+  const volverBarStyle: CSSProperties = {
+    flexShrink: 0,
+    display: 'flex',
+    alignItems: 'center',
+    minHeight: 52,
+    paddingTop: 12,
+    paddingBottom: 12,
+    paddingRight: 28,
+    paddingLeft: volverPadLeft,
+    borderBottom: '1px solid var(--line)',
+    background: 'var(--surface)',
+    position: 'relative',
+    zIndex: 1,
+  }
+
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', height: '100vh' }}>
-      <div style={{ display: 'flex', flexDirection: 'column', borderRight: '1px solid var(--line)' }}>
-        <div style={{ background: 'var(--surface)', borderBottom: '1px solid var(--line)', padding: '20px 28px' }}>
-          {backEl}
-          <div style={{ fontFamily: 'var(--font-display)', fontSize: '20px', marginTop: '6px' }}>Arthur IA Judicial</div>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', minHeight: 0 }}>
+      <div style={volverBarStyle}>{backEl}</div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', flex: 1, minHeight: 0 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', borderRight: '1px solid var(--line)', minHeight: 0 }}>
+        <div style={{ background: 'var(--surface)', borderBottom: '1px solid var(--line)', padding: '16px 28px 20px' }}>
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: '20px' }}>Arthur IA Judicial</div>
           <div style={{ marginTop: '10px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             {DOC_TYPES.map(t => (
               <button
@@ -301,6 +346,7 @@ export default function JudicialRedaccion({ expedienteId, documentId, onBack }: 
             </div>
           )}
         </div>
+      </div>
       </div>
     </div>
   )

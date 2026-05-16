@@ -8,7 +8,8 @@
     "start": "next start",
     "test:sunarp": "npx tsx lib/scraper.ts",
     "test:cej": "npx tsx scripts/test-cej.ts",
-    "test:alertas": "npx tsx scripts/test-alertas.ts"
+    "test:alertas": "npx tsx scripts/test-alertas.ts",
+    "db:fix-judicial-chat": "npx tsx scripts/fix-document-messages-schema.ts"
   },
   "dependencies": {
     "@2captcha/captcha-solver": "^1.3.4",
