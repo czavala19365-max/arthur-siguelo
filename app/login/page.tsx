@@ -169,7 +169,7 @@ export default function LoginPage() {
                 fontWeight: 600,
               }}
             >
-              Acceso al panel — Concurso (primer paso)
+              Acceso al panel
             </div>
 
             <div
@@ -185,7 +185,7 @@ export default function LoginPage() {
               }}
             >
               <strong style={{ display: 'block', marginBottom: 8, fontFamily: 'var(--font-mono)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                Instrucciones para jurados
+                Instrucciones de ingreso versión de prueba
               </strong>
               <ol style={{ margin: 0, paddingLeft: 20 }}>
                 <li style={{ marginBottom: 6 }}>
