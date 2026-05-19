@@ -9,6 +9,7 @@
     "test:sunarp": "npx tsx lib/scraper.ts",
     "test:cej": "npx tsx scripts/test-cej.ts",
     "test:alertas": "npx tsx scripts/test-alertas.ts",
+    "test:whatsapp": "npx tsx scripts/test-whatsapp.ts",
     "db:fix-judicial-chat": "npx tsx scripts/fix-document-messages-schema.ts"
   },
   "dependencies": {
@@ -33,6 +34,7 @@
     "crypto-js": "^4.2.0",
     "docx": "^9.6.1",
     "grammy": "^1.42.0",
+    "mammoth": "^1.12.0",
     "next": "16.2.2",
     "node-cron": "^4.2.1",
     "nodemailer": "^8.0.4",

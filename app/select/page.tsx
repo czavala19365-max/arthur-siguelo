@@ -214,6 +214,70 @@ export default function SelectModulePage() {
               Ingresar →
             </div>
           </div>
+
+          <div
+            style={cardBase}
+            onClick={() => router.push('/legal')}
+            onMouseOver={e => {
+              e.currentTarget.style.background = 'rgba(194, 164, 109, 0.1)';
+              e.currentTarget.style.borderColor = `rgba(${gold}, 0.55)`;
+              e.currentTarget.style.transform = 'translateY(-2px)';
+              e.currentTarget.style.boxShadow = `0 12px 40px rgba(0,0,0,0.35), 0 0 0 1px rgba(${gold}, 0.2) inset`;
+            }}
+            onMouseOut={e => {
+              e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
+              e.currentTarget.style.borderColor = `rgba(${gold}, 0.28)`;
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = '0 0 0 1px rgba(0,0,0,0.2) inset';
+            }}
+          >
+            <div
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: '10px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.15em',
+                color: `rgba(${gold}, 0.75)`,
+                marginBottom: '20px',
+              }}
+            >
+              Redacción documental
+            </div>
+            <div
+              style={{
+                fontFamily: 'var(--font-body)',
+                fontSize: '42px',
+                fontWeight: 600,
+                letterSpacing: '-0.02em',
+                color: '#ffffff',
+                lineHeight: 1.3,
+              }}
+            >
+              legal
+            </div>
+            <p
+              style={{
+                fontFamily: 'var(--font-body)',
+                fontSize: '14px',
+                color: 'rgba(248,248,248,0.62)',
+                lineHeight: 1.6,
+                marginTop: '16px',
+              }}
+            >
+              Contratos internacionales, actas JGA, redline y checklists de cierre con IA.
+            </p>
+            <div
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: '11px',
+                textTransform: 'uppercase',
+                color: `rgba(${gold}, 0.65)`,
+                marginTop: '32px',
+              }}
+            >
+              Ingresar →
+            </div>
+          </div>
         </div>
 
         <button
