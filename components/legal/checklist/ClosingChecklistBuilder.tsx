@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import {
   TRANSACTION_TYPES,
   CHECKLIST_STATUSES,
+  getPartyFieldLabels,
   type ChecklistData,
   type ChecklistSection,
   type ChecklistItem,
@@ -30,6 +31,8 @@ export default function ClosingChecklistBuilder() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
+  const partyLabels = useMemo(() => getPartyFieldLabels(transactionType), [transactionType])
+
   const progress = useMemo(() => {
     if (!checklist) return 0
     const items = checklist.sections.flatMap(s => s.items)
@@ -53,7 +56,8 @@ export default function ClosingChecklistBuilder() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           dealName,
-          transactionType: TRANSACTION_TYPES.find(t => t.value === transactionType)?.label || transactionType,
+          transactionType,
+          transactionTypeValue: transactionType,
           buyer,
           seller,
           leadCounsel,
@@ -142,8 +146,24 @@ export default function ClosingChecklistBuilder() {
                 ))}
               </select>
             </div>
-            <input placeholder="Comprador / Adquirente" style={legalStyles.input} value={buyer} onChange={e => setBuyer(e.target.value)} />
-            <input placeholder="Vendedor / Objetivo" style={legalStyles.input} value={seller} onChange={e => setSeller(e.target.value)} />
+            <div>
+              <label style={legalStyles.label}>{partyLabels.party1Label}</label>
+              <input
+                placeholder={partyLabels.party1Placeholder}
+                style={legalStyles.input}
+                value={buyer}
+                onChange={e => setBuyer(e.target.value)}
+              />
+            </div>
+            <div>
+              <label style={legalStyles.label}>{partyLabels.party2Label}</label>
+              <input
+                placeholder={partyLabels.party2Placeholder}
+                style={legalStyles.input}
+                value={seller}
+                onChange={e => setSeller(e.target.value)}
+              />
+            </div>
             <input placeholder="Abogado líder" style={legalStyles.input} value={leadCounsel} onChange={e => setLeadCounsel(e.target.value)} />
             <div>
               <label style={legalStyles.label}>Fecha objetivo de cierre</label>

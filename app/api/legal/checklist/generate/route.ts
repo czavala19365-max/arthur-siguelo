@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createLegalMessage } from '@/lib/legal/anthropic'
-import { CHECKLIST_SYSTEM, buildChecklistUserPrompt } from '@/lib/legal/checklist/prompts'
+import { CHECKLIST_SYSTEM, TRANSACTION_TYPES, buildChecklistUserPrompt } from '@/lib/legal/checklist/prompts'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -14,16 +14,29 @@ export async function POST(req: NextRequest) {
     const body = (await req.json()) as {
       dealName: string
       transactionType: string
+      transactionTypeValue?: string
       buyer: string
       seller: string
       leadCounsel: string
       targetClosingDate: string
     }
 
+    const typeValue = body.transactionTypeValue || body.transactionType
+    const typeLabel =
+      TRANSACTION_TYPES.find(t => t.value === typeValue)?.label || body.transactionType
+
     const raw = await createLegalMessage({
       system: CHECKLIST_SYSTEM,
-      userContent: buildChecklistUserPrompt(body),
-      maxTokens: 1000,
+      userContent: buildChecklistUserPrompt({
+        dealName: body.dealName,
+        transactionType: typeLabel,
+        transactionTypeValue: typeValue,
+        buyer: body.buyer,
+        seller: body.seller,
+        leadCounsel: body.leadCounsel,
+        targetClosingDate: body.targetClosingDate,
+      }),
+      maxTokens: 2000,
     })
 
     const jsonMatch = raw.match(/\{[\s\S]*\}/)

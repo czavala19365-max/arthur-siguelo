@@ -20,20 +20,91 @@ Each section should have 5-10 items. Include 6-8 sections covering: corporate ap
 Use Spanish for descriptions and responsible party suggestions when the deal context is in Spanish.
 Status must always be "Pending" for new items.`
 
+export type PartyFieldLabels = {
+  party1Label: string
+  party2Label: string
+  party1Placeholder: string
+  party2Placeholder: string
+  party1PromptKey: string
+  party2PromptKey: string
+}
+
+/** Etiquetas de las dos partes según el tipo de operación. */
+export function getPartyFieldLabels(transactionType: string): PartyFieldLabels {
+  switch (transactionType) {
+    case 'syndicated_loan':
+      return {
+        party1Label: 'Prestamista',
+        party2Label: 'Prestatario',
+        party1Placeholder: 'Ej. banco agente o sindicato de bancos',
+        party2Placeholder: 'Ej. sociedad deudora',
+        party1PromptKey: 'Lender (Prestamista)',
+        party2PromptKey: 'Borrower (Prestatario)',
+      }
+    case 'project_finance':
+      return {
+        party1Label: 'Financiador / Prestamista',
+        party2Label: 'Prestatario / Sponsor',
+        party1Placeholder: 'Ej. banco o club de bancos',
+        party2Placeholder: 'Ej. proyecto o SPV',
+        party1PromptKey: 'Lender',
+        party2PromptKey: 'Borrower / Sponsor',
+      }
+    case 'bond':
+      return {
+        party1Label: 'Emisor',
+        party2Label: 'Banco colocador / Agente',
+        party1Placeholder: 'Ej. sociedad emisora',
+        party2Placeholder: 'Ej. banco de colocación',
+        party1PromptKey: 'Issuer',
+        party2PromptKey: 'Placement agent',
+      }
+    case 'jv':
+      return {
+        party1Label: 'Socio 1',
+        party2Label: 'Socio 2',
+        party1Placeholder: 'Nombre del socio',
+        party2Placeholder: 'Nombre del socio',
+        party1PromptKey: 'Party 1',
+        party2PromptKey: 'Party 2',
+      }
+    case 'ipo':
+      return {
+        party1Label: 'Emisor',
+        party2Label: 'Intermediario / Colocador',
+        party1Placeholder: 'Ej. sociedad emisora',
+        party2Placeholder: 'Ej. banco de inversión',
+        party1PromptKey: 'Issuer',
+        party2PromptKey: 'Underwriter',
+      }
+    default:
+      return {
+        party1Label: 'Comprador / Adquirente',
+        party2Label: 'Vendedor / Objetivo',
+        party1Placeholder: 'Comprador o adquirente',
+        party2Placeholder: 'Vendedor o sociedad objetivo',
+        party1PromptKey: 'Buyer/Acquirer',
+        party2PromptKey: 'Seller/Target',
+      }
+  }
+}
+
 export function buildChecklistUserPrompt(opts: {
   dealName: string
   transactionType: string
+  transactionTypeValue: string
   buyer: string
   seller: string
   leadCounsel: string
   targetClosingDate: string
 }): string {
+  const parties = getPartyFieldLabels(opts.transactionTypeValue)
   return `Generate a closing checklist for the following transaction:
 
 Deal name: ${opts.dealName}
 Transaction type: ${opts.transactionType}
-Buyer/Acquirer: ${opts.buyer || 'Not specified'}
-Seller/Target: ${opts.seller || 'Not specified'}
+${parties.party1PromptKey}: ${opts.buyer || 'Not specified'}
+${parties.party2PromptKey}: ${opts.seller || 'Not specified'}
 Lead legal counsel: ${opts.leadCounsel || 'Not specified'}
 Target closing date: ${opts.targetClosingDate || 'Not specified'}
 
