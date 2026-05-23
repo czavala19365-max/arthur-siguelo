@@ -31,6 +31,7 @@ export interface Caso {
   archived_at: string | null
   deleted_at: string | null
   parte_procesal?: string | null
+  user_id?: string | null
 }
 
 export interface MovimientoJudicial {
@@ -222,6 +223,7 @@ function casoToInsertPayload(data: Partial<Caso>): Record<string, unknown> {
     activo,
     last_checked: data.last_checked ?? null,
     parte_procesal: data.parte_procesal ?? null,
+    ...(data.user_id != null ? { user_id: data.user_id } : {}),
   }
 }
 

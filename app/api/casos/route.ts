@@ -1,5 +1,6 @@
 import { after, NextResponse } from 'next/server'
 import { addMovimientoJudicial, createCaso, getAllCasosActivos, updateCaso, updateMovimientoJudicial, type Caso } from '@/lib/judicial-db'
+import { getAuthServerClient } from '@/lib/supabase-auth-server'
 import { clasificarMovimientoCEJ } from '@/lib/ai-service'
 import { enviarAlertaMovimiento } from '@/lib/alert-service'
 import { getAlertaConfigParaCaso, logNotificacionJudicial } from '@/lib/judicial-db'
@@ -205,10 +206,19 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const supabase = await getAuthServerClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) {
+      return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+    }
+
     const body = await request.json() as Record<string, unknown>
 
     const pollHours = Number(body.polling_frequency_hours ?? 4)
     const caso = await createCaso({
+      user_id: user.id,
       numero_expediente: String(body.numero_expediente ?? ''),
       distrito_judicial: String(body.distrito_judicial ?? 'Lima'),
       organo_jurisdiccional: body.organo_jurisdiccional ? String(body.organo_jurisdiccional) : null,
