@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { getAuthClient } from '@/lib/supabase-auth-client';
 
 interface SidebarProps {
   observadosCount?: number;
@@ -106,10 +107,12 @@ export default function Sidebar({ observadosCount = 0 }: SidebarProps) {
       .then(r => r.json())
       .then(data => setCount(data.observados || 0))
       .catch(() => {});
-    try {
-      const auth = JSON.parse(localStorage.getItem('arthur_auth') || '{}');
-      if (auth.email) queueMicrotask(() => setUserEmail(auth.email));
-    } catch { /* ignore */ }
+    getAuthClient()
+      .auth.getUser()
+      .then(({ data }) => {
+        setUserEmail(data.user?.email ?? '');
+      })
+      .catch(() => {});
   }, []);
 
   const links = [
@@ -446,9 +449,10 @@ export default function Sidebar({ observadosCount = 0 }: SidebarProps) {
             </div>
           </div>
           <button
-            onClick={() => {
-              localStorage.removeItem('arthur_auth');
-              router.push('/');
+            type="button"
+            onClick={async () => {
+              await getAuthClient().auth.signOut();
+              router.push('/login');
             }}
             style={{
               width: '100%',

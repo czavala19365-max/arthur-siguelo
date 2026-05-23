@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { getAuthClient } from '@/lib/supabase-auth-client';
 
 const IconGrid = () => (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -54,12 +55,12 @@ export default function JudicialSidebar() {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
-    try {
-      const auth = JSON.parse(localStorage.getItem('arthur_auth') || '{}');
-      if (auth.email) queueMicrotask(() => setUserEmail(auth.email));
-    } catch {
-      // ignore
-    }
+    getAuthClient()
+      .auth.getUser()
+      .then(({ data }) => {
+        setUserEmail(data.user?.email ?? '');
+      })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -249,8 +250,8 @@ export default function JudicialSidebar() {
           </div>
           <button
             type="button"
-            onClick={() => {
-              localStorage.removeItem('arthur_auth');
+            onClick={async () => {
+              await getAuthClient().auth.signOut();
               router.push('/login');
             }}
             style={{

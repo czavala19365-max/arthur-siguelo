@@ -1,19 +1,13 @@
 'use client';
 
-import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import AnimatedBackground from '@/components/AnimatedBackground';
+import { getAuthClient } from '@/lib/supabase-auth-client';
 
 const gold = '194, 164, 109';
 
 export default function SelectModulePage() {
   const router = useRouter();
-
-  useEffect(() => {
-    if (!localStorage.getItem('arthur_auth')) {
-      router.replace('/login');
-    }
-  }, [router]);
 
   const cardBase: React.CSSProperties = {
     width: '320px',
@@ -281,8 +275,9 @@ export default function SelectModulePage() {
         </div>
 
         <button
-          onClick={() => {
-            localStorage.removeItem('arthur_auth');
+          type="button"
+          onClick={async () => {
+            await getAuthClient().auth.signOut();
             router.push('/login');
           }}
           style={{
