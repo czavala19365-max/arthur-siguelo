@@ -1,7 +1,8 @@
 ﻿'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { getAuthClient } from '@/lib/supabase-auth-client';
 
 const accent = '#c2a46d';
 const ink = '#141414';
@@ -10,15 +11,9 @@ const muted = '#525252';
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
-  const [code, setCode] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (localStorage.getItem('arthur_auth')) {
-      router.replace('/select');
-    }
-  }, [router]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -26,18 +21,23 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const res = await fetch('/api/auth', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, code }),
+      const { error: signInError } = await getAuthClient().auth.signInWithPassword({
+        email,
+        password,
       });
-      const data = (await res.json()) as { success?: boolean; error?: string };
-      if (data.success) {
-        localStorage.setItem('arthur_auth', JSON.stringify({ email, ts: Date.now() }));
-        router.push('/select');
-      } else {
-        setError(data.error || 'Credenciales incorrectas');
+
+      if (signInError) {
+        if (signInError.message.includes('Invalid login credentials')) {
+          setError('Correo o contraseña incorrectos');
+        } else if (signInError.message.includes('Email not confirmed')) {
+          setError('Confirma tu correo antes de ingresar. Revisa tu bandeja de entrada.');
+        } else {
+          setError(signInError.message);
+        }
+        return;
       }
+
+      router.push('/select');
     } catch {
       setError('Error de conexión');
     } finally {
@@ -96,7 +96,7 @@ export default function LoginPage() {
             width: '440px',
             maxWidth: '100%',
             background: '#ffffff',
-            border: `1px solid rgba(194, 164, 109, 0.35)`,
+            border: '1px solid rgba(194, 164, 109, 0.35)',
             padding: 0,
             borderRadius: 0,
             animation: 'fadeUp 0.6s ease forwards',
@@ -111,6 +111,7 @@ export default function LoginPage() {
             }}
           >
             <button
+              type="button"
               onClick={() => router.push('/')}
               style={{
                 fontFamily: 'var(--font-mono)',
@@ -165,40 +166,11 @@ export default function LoginPage() {
                 textTransform: 'uppercase',
                 letterSpacing: '0.15em',
                 color: accent,
-                marginBottom: '16px',
+                marginBottom: '24px',
                 fontWeight: 600,
               }}
             >
               Acceso al panel
-            </div>
-
-            <div
-              style={{
-                background: 'rgba(194, 164, 109, 0.1)',
-                border: '1px solid rgba(194, 164, 109, 0.35)',
-                padding: '16px 18px',
-                marginBottom: '24px',
-                fontFamily: 'var(--font-body)',
-                fontSize: '13px',
-                lineHeight: 1.65,
-                color: ink,
-              }}
-            >
-              <strong style={{ display: 'block', marginBottom: 8, fontFamily: 'var(--font-mono)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                Instrucciones de ingreso versión de prueba
-              </strong>
-              <ol style={{ margin: 0, paddingLeft: 20 }}>
-                <li style={{ marginBottom: 6 }}>
-                  Escribe tu <strong>correo electrónico</strong> (el que uses habitualmente).
-                </li>
-                <li>
-                  En <strong>Código de acceso</strong>, escribe exactamente:{' '}
-                  <code style={{ background: '#fff', padding: '2px 8px', border: `1px solid ${accent}`, fontFamily: 'var(--font-mono)', fontSize: 12 }}>arthur2026</code>
-                </li>
-              </ol>
-              <p style={{ margin: '12px 0 0', fontSize: 12, color: muted }}>
-                Luego pulsa <strong>Entrar</strong> y elige el módulo que debas evaluar.
-              </p>
             </div>
 
             <form onSubmit={handleSubmit}>
@@ -222,12 +194,12 @@ export default function LoginPage() {
                 }}
               />
 
-              <label style={labelStyle}>C&oacute;digo de acceso</label>
+              <label style={labelStyle}>Contrase&ntilde;a</label>
               <input
                 type="password"
                 placeholder="••••••••"
-                value={code}
-                onChange={e => setCode(e.target.value)}
+                value={password}
+                onChange={e => setPassword(e.target.value)}
                 required
                 style={inputStyle}
                 onFocus={e => {
@@ -290,6 +262,21 @@ export default function LoginPage() {
               >
                 {loading ? 'Verificando...' : 'Entrar'}
               </button>
+
+              <p
+                style={{
+                  textAlign: 'center',
+                  marginTop: '16px',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '11px',
+                  color: '#525252',
+                }}
+              >
+                ¿No tienes cuenta?{' '}
+                <a href="/register" style={{ color: '#c2a46d', textDecoration: 'none' }}>
+                  Regístrate
+                </a>
+              </p>
             </form>
           </div>
         </div>

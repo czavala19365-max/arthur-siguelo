@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import AnimatedBackground from '@/components/AnimatedBackground';
+import { getAuthClient } from '@/lib/supabase-auth-client';
 
 /** Misma caja para «arthur» y «Empieza Ahora»: ceñida al tamaño del logo. */
 const LOGO_BOX = {
@@ -16,9 +17,12 @@ export default function LandingPage() {
   const [hoverLogo, setHoverLogo] = useState(false);
 
   useEffect(() => {
-    if (localStorage.getItem('arthur_auth')) {
-      router.replace('/select');
-    }
+    getAuthClient()
+      .auth.getUser()
+      .then(({ data }) => {
+        if (data.user) router.replace('/select');
+      })
+      .catch(() => {});
   }, [router]);
 
   return (
