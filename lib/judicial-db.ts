@@ -265,6 +265,21 @@ export async function getAllCasosActivos(): Promise<Caso[]> {
   return (data ?? []).map(r => mapCaso(r as CasoRow))
 }
 
+export async function getAllCasosActivosForUser(userId: string): Promise<Caso[]> {
+  await purgeJudicialCasosPapelera()
+  const supabase = getJudicialSupabase()
+  const { data, error } = await supabase
+    .from('casos')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('activo', true)
+    .is('archived_at', null)
+    .is('deleted_at', null)
+    .order('created_at', { ascending: false })
+  if (error) throw new Error(`getAllCasosActivosForUser: ${error.message}`)
+  return (data ?? []).map(r => mapCaso(r as CasoRow))
+}
+
 export async function getCasosArchivados(): Promise<Caso[]> {
   await purgeJudicialCasosPapelera()
   const supabase = getJudicialSupabase()
@@ -547,7 +562,7 @@ export async function logNotificacionJudicial(
   if (error) throw new Error(`logNotificacionJudicial: ${error.message}`)
 }
 
-export async function getCasosStats(): Promise<{
+export async function getCasosStats(userId?: string): Promise<{
   total: number
   activos: number
   conAlerta: number
@@ -555,12 +570,14 @@ export async function getCasosStats(): Promise<{
 }> {
   const supabase = getJudicialSupabase()
   const activeFilter = async () => {
-    const { count, error } = await supabase
+    let q = supabase
       .from('casos')
       .select('*', { count: 'exact', head: true })
       .eq('activo', true)
       .is('archived_at', null)
       .is('deleted_at', null)
+    if (userId) q = q.eq('user_id', userId)
+    const { count, error } = await q
     if (error) throw new Error(`getCasosStats total: ${error.message}`)
     return count ?? 0
   }
@@ -576,13 +593,15 @@ export async function getCasosStats(): Promise<{
   const distinctIds = [...new Set((movs ?? []).map(m => Number((m as { caso_id: number }).caso_id)))]
   let conAlerta = 0
   if (distinctIds.length > 0) {
-    const { count, error } = await supabase
+    let q = supabase
       .from('casos')
       .select('*', { count: 'exact', head: true })
       .in('id', distinctIds)
       .eq('activo', true)
       .is('archived_at', null)
       .is('deleted_at', null)
+    if (userId) q = q.eq('user_id', userId)
+    const { count, error } = await q
     if (error) throw new Error(`getCasosStats conAlerta: ${error.message}`)
     conAlerta = count ?? 0
   }
@@ -601,13 +620,15 @@ export async function getCasosStats(): Promise<{
   const audCasoIds = [...new Set((audSimple ?? []).map(a => Number((a as { caso_id: number }).caso_id)))]
   let activeSet = new Set<number>()
   if (audCasoIds.length > 0) {
-    const { data: activeCasos, error: acErr } = await supabase
+    let q = supabase
       .from('casos')
       .select('id')
       .in('id', audCasoIds)
       .eq('activo', true)
       .is('archived_at', null)
       .is('deleted_at', null)
+    if (userId) q = q.eq('user_id', userId)
+    const { data: activeCasos, error: acErr } = await q
     if (acErr) throw new Error(`getCasosStats audiencias casos: ${acErr.message}`)
     activeSet = new Set((activeCasos ?? []).map(c => Number((c as { id: number }).id)))
   }

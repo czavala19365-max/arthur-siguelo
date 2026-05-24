@@ -1,5 +1,6 @@
 import { after, NextResponse } from 'next/server'
-import { addMovimientoJudicial, createCaso, getAllCasosActivos, updateCaso, updateMovimientoJudicial, type Caso } from '@/lib/judicial-db'
+import { addMovimientoJudicial, createCaso, getAllCasosActivosForUser, updateCaso, updateMovimientoJudicial, type Caso } from '@/lib/judicial-db'
+import { isUserAdmin, requireAuthUser } from '@/lib/judicial-caso-access'
 import { getAuthServerClient } from '@/lib/supabase-auth-server'
 import { clasificarMovimientoCEJ } from '@/lib/ai-service'
 import { enviarAlertaMovimiento } from '@/lib/alert-service'
@@ -188,9 +189,23 @@ async function runInitialCejSync(caso: Caso, scrapeCEJ: ScrapeFn) {
   console.log(`[API] CEJ sync finished for caso ${caso.id}: ${movimientos.length} movimientos persistidos`)
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const casos = await getAllCasosActivos()
+    const auth = await requireAuthUser()
+    if ('response' in auth) return auth.response
+
+    const url = new URL(request.url)
+    const asUserId = url.searchParams.get('as_user_id')
+    let targetUserId = auth.user.id
+
+    if (asUserId) {
+      if (!(await isUserAdmin(auth.user.id))) {
+        return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
+      }
+      targetUserId = asUserId
+    }
+
+    const casos = await getAllCasosActivosForUser(targetUserId)
     return Response.json(casos)
   } catch (error) {
     console.error('[API] GET /casos error:', error)

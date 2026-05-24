@@ -2,7 +2,15 @@
 
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { formatPartesDisplay } from '@/lib/format-partes-judicial';
+import { getAuthClient } from '@/lib/supabase-auth-client';
+
+type AdminViewingUser = {
+  id: string;
+  email: string;
+  full_name: string | null;
+};
 
 interface Caso {
   id: number;
@@ -108,6 +116,8 @@ function asCasoList(raw: unknown): Caso[] {
 }
 
 export default function JudicialDashboardPage() {
+  const router = useRouter();
+  const [viewingUser, setViewingUser] = useState<AdminViewingUser | null>(null);
   const [casos, setCasos] = useState<Caso[]>([]);
   const [stats, setStats] = useState({ total: 0, activos: 0, conAlerta: 0, proximasAudiencias: 0 });
   const [details, setDetails] = useState<Record<number, { movimientos: Movimiento[]; audiencias: Audiencia[] }>>({});
@@ -142,12 +152,36 @@ export default function JudicialDashboardPage() {
   const cejSyncPollRef = useRef<number | null>(null);
   const cejSyncTimeoutRef = useRef<number | null>(null);
 
+  useEffect(() => {
+    void (async () => {
+      try {
+        const raw = localStorage.getItem('admin_viewing_user');
+        if (!raw) return;
+        const parsed = JSON.parse(raw) as AdminViewingUser;
+        const db = getAuthClient();
+        const {
+          data: { user },
+        } = await db.auth.getUser();
+        if (!user?.id) return;
+        const { data: profile } = await db.from('profiles').select('role').eq('id', user.id).single();
+        if (profile?.role === 'admin') {
+          setViewingUser(parsed);
+        } else {
+          localStorage.removeItem('admin_viewing_user');
+        }
+      } catch {
+        localStorage.removeItem('admin_viewing_user');
+      }
+    })();
+  }, []);
+
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
+      const query = viewingUser ? `?as_user_id=${encodeURIComponent(viewingUser.id)}` : '';
       const [casosRes, statsRes] = await Promise.all([
-        fetch('/api/casos'),
-        fetch('/api/casos/stats'),
+        fetch(`/api/casos${query}`),
+        fetch(`/api/casos/stats${query}`),
       ]);
 
       let casosRaw: unknown;
@@ -194,7 +228,7 @@ export default function JudicialDashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [viewingUser]);
 
   useEffect(() => { void loadData(); }, [loadData]);
 
@@ -413,7 +447,49 @@ export default function JudicialDashboardPage() {
   const inputStyle: React.CSSProperties = { width: '100%', border: '1px solid var(--line-strong)', padding: '12px 14px', marginTop: 6, marginBottom: 16, fontFamily: 'var(--font-body)', fontSize: '13px', background: 'var(--paper)', color: 'var(--ink)', boxSizing: 'border-box' };
 
   return (
-    <div style={{ padding: '48px 64px', background: 'var(--paper)', minHeight: '100%' }}>
+    <div style={{ background: 'var(--paper)', minHeight: '100%' }}>
+      {viewingUser && (
+        <div
+          style={{
+            background: 'rgba(201,168,76,0.15)',
+            borderBottom: '1px solid rgba(201,168,76,0.3)',
+            padding: '10px 40px',
+            fontFamily: 'var(--font-mono)',
+            fontSize: '12px',
+            color: '#c9a84c',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '8px',
+          }}
+        >
+          <span>
+            Estás viendo como: {viewingUser.full_name || viewingUser.email} ({viewingUser.email})
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              localStorage.removeItem('admin_viewing_user');
+              setViewingUser(null);
+              router.push('/admin');
+            }}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              fontFamily: 'var(--font-mono)',
+              fontSize: '12px',
+              color: '#c9a84c',
+              cursor: 'pointer',
+              textDecoration: 'underline',
+              padding: 0,
+            }}
+          >
+            Volver a mi cuenta →
+          </button>
+        </div>
+      )}
+      <div style={{ padding: '48px 64px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderLeft: '4px solid #c2a46d', paddingLeft: '24px' }}>
         <div>
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.15em', color: '#c2a46d', marginBottom: '8px' }}>
@@ -794,6 +870,7 @@ export default function JudicialDashboardPage() {
           </div>
         </>
       )}
+      </div>
     </div>
   );
 }

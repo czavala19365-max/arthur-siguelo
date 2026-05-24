@@ -17,6 +17,16 @@ export async function requireAuthUser(): Promise<
   return { user }
 }
 
+export async function isUserAdmin(userId: string): Promise<boolean> {
+  const judicialDb = getJudicialSupabase()
+  const { data: profile } = await judicialDb
+    .from('profiles')
+    .select('role')
+    .eq('id', userId)
+    .single()
+  return profile?.role === 'admin'
+}
+
 export async function denyUnlessCasoOwnerOrAdmin(
   caso: Caso,
   user: User,
