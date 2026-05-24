@@ -1,3 +1,4 @@
+import { denyUnlessCasoOwnerOrAdmin, requireAuthUser } from '@/lib/judicial-caso-access'
 import {
   addMovimientoJudicial,
   getCasoById,
@@ -72,6 +73,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await requireAuthUser()
+    if ('response' in auth) return auth.response
+
     const { id } = await params
     const casoId = Number.parseInt(id, 10)
     const caso = await getCasoById(casoId)
@@ -79,6 +83,9 @@ export async function POST(
     if (!caso) {
       return Response.json({ error: 'Caso no encontrado' }, { status: 404 })
     }
+
+    const denied = await denyUnlessCasoOwnerOrAdmin(caso, auth.user)
+    if (denied) return denied
 
     const parte = caso.parte_procesal?.trim() || caso.partes || ''
     const result = await fetchCejFromScraperService(caso.numero_expediente, parte)
