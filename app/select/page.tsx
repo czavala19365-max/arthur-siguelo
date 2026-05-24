@@ -184,6 +184,15 @@ export default function SelectModulePage() {
           ¿Qué deseas gestionar hoy?
         </div>
 
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            flexWrap: 'wrap',
+            justifyContent: 'center',
+          }}
+        >
         <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap', justifyContent: 'center' }}>
           <div
             style={cardBase}
@@ -347,60 +356,49 @@ export default function SelectModulePage() {
             </div>
           </div>
 
+        </div>
+
           {isAdmin && (
-            <div
-              style={cardBase}
+            <button
+              type="button"
               onClick={() => router.push('/admin')}
-              onMouseOver={cardHoverIn}
-              onMouseOut={cardHoverOut}
+              style={{
+                flexShrink: 0,
+                width: '108px',
+                minHeight: '168px',
+                padding: '18px 12px',
+                cursor: 'pointer',
+                background: 'rgba(72, 92, 128, 0.22)',
+                border: '1px solid rgba(130, 160, 200, 0.45)',
+                borderLeft: '3px solid rgba(130, 160, 200, 0.7)',
+                borderRadius: 0,
+                fontFamily: 'var(--font-mono)',
+                fontSize: '9px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.14em',
+                lineHeight: 1.5,
+                color: 'rgba(190, 210, 235, 0.92)',
+                textAlign: 'center',
+                transition: 'all 0.2s ease',
+                boxShadow: '0 0 0 1px rgba(0,0,0,0.15) inset',
+              }}
+              onMouseOver={e => {
+                e.currentTarget.style.background = 'rgba(90, 115, 155, 0.35)';
+                e.currentTarget.style.borderColor = 'rgba(150, 180, 220, 0.65)';
+                e.currentTarget.style.color = '#e8f0fa';
+                e.currentTarget.style.transform = 'translateX(2px)';
+              }}
+              onMouseOut={e => {
+                e.currentTarget.style.background = 'rgba(72, 92, 128, 0.22)';
+                e.currentTarget.style.borderColor = 'rgba(130, 160, 200, 0.45)';
+                e.currentTarget.style.color = 'rgba(190, 210, 235, 0.92)';
+                e.currentTarget.style.transform = 'translateX(0)';
+              }}
             >
-              <div
-                style={{
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: '10px',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.15em',
-                  color: 'rgba(201,168,76,0.75)',
-                  marginBottom: '20px',
-                }}
-              >
-                ADMINISTRACIÓN
-              </div>
-              <div
-                style={{
-                  fontFamily: 'var(--font-body)',
-                  fontSize: '42px',
-                  fontWeight: 600,
-                  letterSpacing: '-0.02em',
-                  color: '#ffffff',
-                  lineHeight: 1.3,
-                }}
-              >
-                admin
-              </div>
-              <p
-                style={{
-                  fontFamily: 'var(--font-body)',
-                  fontSize: '14px',
-                  color: 'rgba(248,248,248,0.62)',
-                  lineHeight: 1.6,
-                  marginTop: '16px',
-                }}
-              >
-                Gestión de usuarios, roles y acceso a datos de la plataforma.
-              </p>
-              <div
-                style={{
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: '11px',
-                  textTransform: 'uppercase',
-                  color: `rgba(${gold}, 0.65)`,
-                  marginTop: '32px',
-                }}
-              >
-                Ingresar →
-              </div>
-            </div>
+              versión
+              <br />
+              administrador
+            </button>
           )}
         </div>
 
