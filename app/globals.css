@@ -263,9 +263,11 @@ button {
 
 /* ── Módulo judicial: sidebar + menú ☰ ───────────────────────────── */
 .judicial-layout .arthur-sidebar {
-  transform: translateX(-260px);
+  transform: translateX(-240px);
   transition: transform 200ms ease;
   box-shadow: none !important;
+  width: 240px;
+  min-width: 240px;
 }
 
 .judicial-layout .arthur-hamburger {
@@ -294,6 +296,33 @@ button {
 
 .judicial-layout .arthur-overlay.is-open {
   display: block;
+}
+
+@media (min-width: 768px) {
+  .judicial-layout .arthur-sidebar {
+    transform: translateX(0);
+    width: 240px;
+    min-width: 240px;
+  }
+
+  .judicial-layout .arthur-hamburger {
+    display: none !important;
+  }
+
+  .judicial-layout .arthur-overlay,
+  .judicial-layout .arthur-overlay.is-open {
+    display: none !important;
+    pointer-events: none;
+  }
+
+  .judicial-layout .arthur-sidebar-close-mobile {
+    display: none !important;
+  }
+
+  .judicial-layout .arthur-main {
+    margin-left: 240px !important;
+    width: calc(100% - 240px);
+  }
 }
 
 /* Cabecera redacción: deja hueco para el ☰ (10px + 44px + margen) */

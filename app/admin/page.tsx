@@ -3,17 +3,21 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import JudicialSidebar from '@/components/JudicialSidebar';
-import { getAuthClient } from '@/lib/supabase-auth-client';
 
-type ProfileRow = {
+type UserRow = {
   id: string;
   email: string;
   full_name: string | null;
   role: string;
   created_at: string;
+  caso_count: number;
 };
 
-type UserRow = ProfileRow & { casoCount: number };
+type AdminStats = {
+  total_users: number;
+  active_users: number;
+  total_casos: number;
+};
 
 function formatRelativeDate(isoDate: string): string {
   const diff = Date.now() - new Date(isoDate).getTime();
@@ -26,59 +30,53 @@ function formatRelativeDate(isoDate: string): string {
 export default function AdminPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [users, setUsers] = useState<UserRow[]>([]);
+  const [stats, setStats] = useState<AdminStats>({
+    total_users: 0,
+    active_users: 0,
+    total_casos: 0,
+  });
 
   const loadUsers = useCallback(async () => {
-    const db = getAuthClient();
-    const {
-      data: { user },
-    } = await db.auth.getUser();
-    if (!user?.id) {
-      router.replace('/login');
-      return;
-    }
-
-    const { data: profile } = await db.from('profiles').select('role').eq('id', user.id).single();
-    if (profile?.role !== 'admin') {
-      router.replace('/select');
-      return;
-    }
-
-    const { data: profiles, error } = await db
-      .from('profiles')
-      .select('id, email, full_name, role, created_at')
-      .order('created_at', { ascending: false });
-
-    if (error || !profiles) {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await fetch('/api/admin/users');
+      if (res.status === 401) {
+        router.replace('/login');
+        return;
+      }
+      if (res.status === 403) {
+        router.replace('/select');
+        return;
+      }
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        setError(body.error || 'Error al cargar usuarios');
+        setUsers([]);
+        return;
+      }
+      const data = (await res.json()) as { users: UserRow[]; stats: AdminStats };
+      setUsers(data.users ?? []);
+      setStats(
+        data.stats ?? {
+          total_users: 0,
+          active_users: 0,
+          total_casos: 0,
+        },
+      );
+    } catch {
+      setError('Error de conexión al cargar usuarios');
       setUsers([]);
+    } finally {
       setLoading(false);
-      return;
     }
-
-    const withCounts: UserRow[] = await Promise.all(
-      (profiles as ProfileRow[]).map(async p => {
-        const { count } = await db
-          .from('casos')
-          .select('*', { count: 'exact', head: true })
-          .eq('user_id', p.id)
-          .eq('activo', true)
-          .is('archived_at', null)
-          .is('deleted_at', null);
-        return { ...p, casoCount: count ?? 0 };
-      }),
-    );
-
-    setUsers(withCounts);
-    setLoading(false);
   }, [router]);
 
   useEffect(() => {
     void loadUsers();
   }, [loadUsers]);
-
-  const totalUsuarios = users.length;
-  const usuariosActivos = users.filter(u => u.casoCount > 0).length;
-  const totalCasos = users.reduce((sum, u) => sum + u.casoCount, 0);
 
   const handleViewAs = (target: UserRow) => {
     localStorage.setItem(
@@ -93,7 +91,10 @@ export default function AdminPage() {
   };
 
   return (
-    <div style={{ display: 'flex', height: '100vh', background: '#0a0a0a', color: '#fff', overflow: 'hidden' }}>
+    <div
+      className="judicial-layout workspace-light"
+      style={{ display: 'flex', height: '100vh', background: '#0a0a0a', color: '#fff', overflow: 'hidden' }}
+    >
       <JudicialSidebar />
       <main
         className="arthur-main"
@@ -140,6 +141,67 @@ export default function AdminPage() {
             Gestión de cuentas y acceso a datos
           </p>
 
+          {error && (
+            <div
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: '11px',
+                color: '#f87171',
+                marginBottom: '24px',
+              }}
+            >
+              {error}
+            </div>
+          )}
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(3, 1fr)',
+              gap: '20px',
+              marginBottom: '32px',
+            }}
+          >
+            {[
+              { label: 'Total usuarios registrados', value: stats.total_users },
+              { label: 'Usuarios activos (con al menos 1 caso)', value: stats.active_users },
+              { label: 'Total casos en plataforma', value: stats.total_casos },
+            ].map(card => (
+              <div
+                key={card.label}
+                style={{
+                  background: 'rgba(255,255,255,0.03)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  borderTop: '3px solid #c9a84c',
+                  padding: '24px 28px',
+                }}
+              >
+                <div
+                  style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: '10px',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.12em',
+                    color: 'rgba(255,255,255,0.45)',
+                    marginBottom: '8px',
+                  }}
+                >
+                  {card.label}
+                </div>
+                <div
+                  style={{
+                    fontFamily: 'var(--font-display)',
+                    fontSize: '48px',
+                    lineHeight: 1,
+                    color: '#c9a84c',
+                  }}
+                >
+                  {loading ? '—' : card.value}
+                </div>
+              </div>
+            ))}
+          </div>
+
           {loading ? (
             <div
               style={{
@@ -152,82 +214,45 @@ export default function AdminPage() {
               Cargando usuarios...
             </div>
           ) : (
-            <>
+            <div
+              style={{
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid rgba(255,255,255,0.08)',
+              }}
+            >
               <div
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: 'repeat(3, 1fr)',
-                  gap: '20px',
-                  marginBottom: '32px',
+                  gridTemplateColumns: '2fr 100px 80px 120px 160px',
+                  padding: '14px 20px',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '10px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.1em',
+                  color: 'rgba(255,255,255,0.35)',
+                  borderBottom: '1px solid rgba(255,255,255,0.08)',
                 }}
               >
-                {[
-                  { label: 'Total usuarios registrados', value: totalUsuarios },
-                  { label: 'Usuarios activos (con al menos 1 caso)', value: usuariosActivos },
-                  { label: 'Total casos en plataforma', value: totalCasos },
-                ].map(card => (
-                  <div
-                    key={card.label}
-                    style={{
-                      background: 'rgba(255,255,255,0.03)',
-                      border: '1px solid rgba(255,255,255,0.08)',
-                      borderTop: '3px solid #c9a84c',
-                      padding: '24px 28px',
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontFamily: 'var(--font-mono)',
-                        fontSize: '10px',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.12em',
-                        color: 'rgba(255,255,255,0.45)',
-                        marginBottom: '8px',
-                      }}
-                    >
-                      {card.label}
-                    </div>
-                    <div
-                      style={{
-                        fontFamily: 'var(--font-display)',
-                        fontSize: '48px',
-                        lineHeight: 1,
-                        color: '#c9a84c',
-                      }}
-                    >
-                      {card.value}
-                    </div>
-                  </div>
-                ))}
+                <span>Usuario</span>
+                <span>Rol</span>
+                <span>Casos</span>
+                <span>Registrado</span>
+                <span>Acciones</span>
               </div>
 
-              <div
-                style={{
-                  background: 'rgba(255,255,255,0.03)',
-                  border: '1px solid rgba(255,255,255,0.08)',
-                }}
-              >
+              {users.length === 0 ? (
                 <div
                   style={{
-                    display: 'grid',
-                    gridTemplateColumns: '2fr 100px 80px 120px 160px',
-                    padding: '14px 20px',
+                    padding: '32px 20px',
                     fontFamily: 'var(--font-mono)',
-                    fontSize: '10px',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.1em',
-                    color: 'rgba(255,255,255,0.35)',
-                    borderBottom: '1px solid rgba(255,255,255,0.08)',
+                    fontSize: '11px',
+                    color: 'rgba(255,255,255,0.4)',
                   }}
                 >
-                  <span>Usuario</span>
-                  <span>Rol</span>
-                  <span>Casos</span>
-                  <span>Registrado</span>
-                  <span>Acciones</span>
+                  No hay usuarios registrados.
                 </div>
-
-                {users.map(u => (
+              ) : (
+                users.map(u => (
                   <div
                     key={u.id}
                     style={{
@@ -277,7 +302,7 @@ export default function AdminPage() {
                         {u.role}
                       </span>
                     </div>
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '13px' }}>{u.casoCount}</div>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '13px' }}>{u.caso_count}</div>
                     <div
                       style={{
                         fontFamily: 'var(--font-mono)',
@@ -313,9 +338,9 @@ export default function AdminPage() {
                       </button>
                     </div>
                   </div>
-                ))}
-              </div>
-            </>
+                ))
+              )}
+            </div>
           )}
         </div>
       </main>

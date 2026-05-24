@@ -61,16 +61,19 @@ export default function JudicialSidebar() {
         const { data } = await getAuthClient().auth.getUser();
         setUserEmail(data.user?.email ?? '');
         if (data?.user?.id) {
-          const { createClient } = await import('@supabase/supabase-js');
-          const db = createClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL_JUDICIAL!,
-            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY_JUDICIAL!,
-          );
-          const { data: profile } = await db
+          const db = getAuthClient();
+          const { data: profile, error: profileError } = await db
             .from('profiles')
             .select('role')
             .eq('id', data.user.id)
             .single();
+          console.log(
+            'Profile role:',
+            profile?.role,
+            'isAdmin:',
+            profile?.role === 'admin',
+            profileError?.message ?? '',
+          );
           if (profile?.role === 'admin') {
             setIsAdmin(true);
           }
@@ -129,22 +132,28 @@ export default function JudicialSidebar() {
         <span style={{ fontSize: '20px', lineHeight: 1 }} aria-hidden>{mobileOpen ? '×' : '☰'}</span>
       </button>
 
-      <div
-        className={`arthur-overlay${mobileOpen ? ' is-open' : ''}`}
-        onClick={() => setMobileOpen(false)}
-        style={{
-          position: 'fixed',
-          inset: 0,
-          zIndex: 250,
-          background: 'rgba(0,0,0,0.6)',
-        }}
-      />
+      {mobileOpen && (
+        <div
+          className="arthur-overlay is-open"
+          role="presentation"
+          onClick={() => setMobileOpen(false)}
+          onKeyDown={e => {
+            if (e.key === 'Escape') setMobileOpen(false);
+          }}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 250,
+            background: 'rgba(0,0,0,0.6)',
+          }}
+        />
+      )}
 
       <aside
         className={`arthur-sidebar${mobileOpen ? ' is-open' : ''}`}
         style={{
-          width: '260px',
-          minWidth: '260px',
+          width: '240px',
+          minWidth: '240px',
           height: '100vh',
           backgroundColor: 'var(--sidebar-bg)',
           borderRight: '1px solid var(--sidebar-edge)',
@@ -162,15 +171,19 @@ export default function JudicialSidebar() {
         <button
           type="button"
           className="arthur-sidebar-close-mobile"
-          onClick={() => setMobileOpen(false)}
+          onClick={e => {
+            e.stopPropagation();
+            setMobileOpen(false);
+          }}
           aria-label="Cerrar menú"
           style={{
             position: 'absolute',
             top: '20px',
             right: '12px',
-            zIndex: 2,
+            zIndex: 401,
             width: '36px',
             height: '36px',
+            display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             background: 'transparent',
