@@ -1,13 +1,64 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import AnimatedBackground from '@/components/AnimatedBackground';
 import { getAuthClient } from '@/lib/supabase-auth-client';
 
 const gold = '194, 164, 109';
 
+type AdminViewingUser = {
+  id: string;
+  email: string;
+  full_name: string | null;
+};
+
 export default function SelectModulePage() {
   const router = useRouter();
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [viewingUser, setViewingUser] = useState<AdminViewingUser | null>(null);
+
+  useEffect(() => {
+    void (async () => {
+      const {
+        data: { user },
+      } = await getAuthClient().auth.getUser();
+      if (!user) return;
+
+      const authClient = getAuthClient();
+      const { data: profile } = await authClient
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single();
+
+      if (profile?.role === 'admin') {
+        setIsAdmin(true);
+        return;
+      }
+
+      const res = await fetch('/api/admin/users');
+      if (res.ok) setIsAdmin(true);
+    })();
+  }, []);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const raw = localStorage.getItem('admin_viewing_user');
+        if (!raw) return;
+        const parsed = JSON.parse(raw) as AdminViewingUser;
+        const res = await fetch('/api/admin/users');
+        if (res.ok) {
+          setViewingUser(parsed);
+        } else {
+          localStorage.removeItem('admin_viewing_user');
+        }
+      } catch {
+        localStorage.removeItem('admin_viewing_user');
+      }
+    })();
+  }, []);
 
   const cardBase: React.CSSProperties = {
     width: '320px',
@@ -20,8 +71,61 @@ export default function SelectModulePage() {
     boxShadow: '0 0 0 1px rgba(0,0,0,0.2) inset',
   };
 
+  const cardHoverIn = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.currentTarget.style.background = 'rgba(194, 164, 109, 0.1)';
+    e.currentTarget.style.borderColor = `rgba(${gold}, 0.55)`;
+    e.currentTarget.style.transform = 'translateY(-2px)';
+    e.currentTarget.style.boxShadow = `0 12px 40px rgba(0,0,0,0.35), 0 0 0 1px rgba(${gold}, 0.2) inset`;
+  };
+
+  const cardHoverOut = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
+    e.currentTarget.style.borderColor = `rgba(${gold}, 0.28)`;
+    e.currentTarget.style.transform = 'translateY(0)';
+    e.currentTarget.style.boxShadow = '0 0 0 1px rgba(0,0,0,0.2) inset';
+  };
+
   return (
     <div style={{ position: 'relative', width: '100%', height: '100vh', overflowX: 'hidden', overflowY: 'auto', background: '#0b0b0b' }}>
+      {viewingUser && (
+        <div
+          style={{
+            position: 'relative',
+            zIndex: 3,
+            background: 'rgba(201,168,76,0.15)',
+            borderBottom: '1px solid rgba(201,168,76,0.3)',
+            padding: '12px 24px',
+            fontFamily: 'var(--font-mono)',
+            fontSize: '12px',
+            color: '#c9a84c',
+            textAlign: 'center',
+          }}
+        >
+          Estás viendo como: {viewingUser.full_name || viewingUser.email} ({viewingUser.email}){' '}
+          <button
+            type="button"
+            onClick={() => {
+              localStorage.removeItem('admin_viewing_user');
+              setViewingUser(null);
+              router.push('/admin');
+            }}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              fontFamily: 'var(--font-mono)',
+              fontSize: '12px',
+              color: '#c9a84c',
+              cursor: 'pointer',
+              textDecoration: 'underline',
+              padding: 0,
+              marginLeft: '8px',
+            }}
+          >
+            Volver a admin →
+          </button>
+        </div>
+      )}
+
       <AnimatedBackground />
       <div
         style={{
@@ -36,7 +140,7 @@ export default function SelectModulePage() {
         style={{
           position: 'relative',
           zIndex: 2,
-          minHeight: '100vh',
+          minHeight: viewingUser ? 'calc(100vh - 44px)' : '100vh',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
@@ -84,18 +188,8 @@ export default function SelectModulePage() {
           <div
             style={cardBase}
             onClick={() => router.push('/dashboard')}
-            onMouseOver={e => {
-              e.currentTarget.style.background = 'rgba(194, 164, 109, 0.1)';
-              e.currentTarget.style.borderColor = `rgba(${gold}, 0.55)`;
-              e.currentTarget.style.transform = 'translateY(-2px)';
-              e.currentTarget.style.boxShadow = `0 12px 40px rgba(0,0,0,0.35), 0 0 0 1px rgba(${gold}, 0.2) inset`;
-            }}
-            onMouseOut={e => {
-              e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
-              e.currentTarget.style.borderColor = `rgba(${gold}, 0.28)`;
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = '0 0 0 1px rgba(0,0,0,0.2) inset';
-            }}
+            onMouseOver={cardHoverIn}
+            onMouseOut={cardHoverOut}
           >
             <div
               style={{
@@ -148,18 +242,8 @@ export default function SelectModulePage() {
           <div
             style={cardBase}
             onClick={() => router.push('/judicial')}
-            onMouseOver={e => {
-              e.currentTarget.style.background = 'rgba(194, 164, 109, 0.1)';
-              e.currentTarget.style.borderColor = `rgba(${gold}, 0.55)`;
-              e.currentTarget.style.transform = 'translateY(-2px)';
-              e.currentTarget.style.boxShadow = `0 12px 40px rgba(0,0,0,0.35), 0 0 0 1px rgba(${gold}, 0.2) inset`;
-            }}
-            onMouseOut={e => {
-              e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
-              e.currentTarget.style.borderColor = `rgba(${gold}, 0.28)`;
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = '0 0 0 1px rgba(0,0,0,0.2) inset';
-            }}
+            onMouseOver={cardHoverIn}
+            onMouseOut={cardHoverOut}
           >
             <div
               style={{
@@ -212,18 +296,8 @@ export default function SelectModulePage() {
           <div
             style={cardBase}
             onClick={() => router.push('/legal')}
-            onMouseOver={e => {
-              e.currentTarget.style.background = 'rgba(194, 164, 109, 0.1)';
-              e.currentTarget.style.borderColor = `rgba(${gold}, 0.55)`;
-              e.currentTarget.style.transform = 'translateY(-2px)';
-              e.currentTarget.style.boxShadow = `0 12px 40px rgba(0,0,0,0.35), 0 0 0 1px rgba(${gold}, 0.2) inset`;
-            }}
-            onMouseOut={e => {
-              e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
-              e.currentTarget.style.borderColor = `rgba(${gold}, 0.28)`;
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = '0 0 0 1px rgba(0,0,0,0.2) inset';
-            }}
+            onMouseOver={cardHoverIn}
+            onMouseOut={cardHoverOut}
           >
             <div
               style={{
@@ -272,6 +346,62 @@ export default function SelectModulePage() {
               Ingresar →
             </div>
           </div>
+
+          {isAdmin && (
+            <div
+              style={cardBase}
+              onClick={() => router.push('/admin')}
+              onMouseOver={cardHoverIn}
+              onMouseOut={cardHoverOut}
+            >
+              <div
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '10px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.15em',
+                  color: 'rgba(201,168,76,0.75)',
+                  marginBottom: '20px',
+                }}
+              >
+                ADMINISTRACIÓN
+              </div>
+              <div
+                style={{
+                  fontFamily: 'var(--font-body)',
+                  fontSize: '42px',
+                  fontWeight: 600,
+                  letterSpacing: '-0.02em',
+                  color: '#ffffff',
+                  lineHeight: 1.3,
+                }}
+              >
+                admin
+              </div>
+              <p
+                style={{
+                  fontFamily: 'var(--font-body)',
+                  fontSize: '14px',
+                  color: 'rgba(248,248,248,0.62)',
+                  lineHeight: 1.6,
+                  marginTop: '16px',
+                }}
+              >
+                Gestión de usuarios, roles y acceso a datos de la plataforma.
+              </p>
+              <div
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '11px',
+                  textTransform: 'uppercase',
+                  color: `rgba(${gold}, 0.65)`,
+                  marginTop: '32px',
+                }}
+              >
+                Ingresar →
+              </div>
+            </div>
+          )}
         </div>
 
         <button

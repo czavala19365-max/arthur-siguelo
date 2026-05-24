@@ -52,36 +52,15 @@ export default function JudicialSidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const [userEmail, setUserEmail] = useState('');
-  const [isAdmin, setIsAdmin] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
-    void (async () => {
-      try {
-        const { data } = await getAuthClient().auth.getUser();
+    getAuthClient()
+      .auth.getUser()
+      .then(({ data }) => {
         setUserEmail(data.user?.email ?? '');
-        if (data?.user?.id) {
-          const db = getAuthClient();
-          const { data: profile, error: profileError } = await db
-            .from('profiles')
-            .select('role')
-            .eq('id', data.user.id)
-            .single();
-          console.log(
-            'Profile role:',
-            profile?.role,
-            'isAdmin:',
-            profile?.role === 'admin',
-            profileError?.message ?? '',
-          );
-          if (profile?.role === 'admin') {
-            setIsAdmin(true);
-          }
-        }
-      } catch {
-        /* ignore */
-      }
-    })();
+      })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -245,45 +224,6 @@ export default function JudicialSidebar() {
               </span>
             </Link>
           ))}
-          {isAdmin && (
-            <Link
-              href="/admin"
-              onClick={() => setMobileOpen(false)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-                padding: '10px 16px',
-                fontFamily: 'var(--font-mono)',
-                fontSize: '11px',
-                textTransform: 'uppercase' as const,
-                letterSpacing: '0.1em',
-                color: pathname === '/admin' ? '#c9a84c' : 'var(--sidebar-muted)',
-                background: pathname === '/admin' ? 'rgba(201, 168, 76, 0.1)' : 'transparent',
-                borderLeft: pathname === '/admin' ? '2px solid #c9a84c' : '2px solid transparent',
-                textDecoration: 'none',
-                transition: 'all 0.15s',
-                marginTop: '8px',
-              }}
-            >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 16 16"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <circle cx="8" cy="5" r="2.5" />
-                <path d="M2 13.5c0-3 2.5-5 6-5s6 2 6 5" />
-                <circle cx="13" cy="4" r="1.5" />
-                <path d="M13 7.5c1.5 0 2.5 1 2.5 2.5" />
-              </svg>
-              Admin
-            </Link>
-          )}
         </nav>
 
         <div style={{ padding: '0 28px 24px', position: 'absolute', bottom: 0, left: 0, right: 0 }}>

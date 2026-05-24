@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import JudicialSidebar from '@/components/JudicialSidebar';
+import Link from 'next/link';
+import { getAuthClient } from '@/lib/supabase-auth-client';
 
 type UserRow = {
   id: string;
@@ -29,6 +30,7 @@ function formatRelativeDate(isoDate: string): string {
 
 export default function AdminPage() {
   const router = useRouter();
+  const [userEmail, setUserEmail] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [users, setUsers] = useState<UserRow[]>([]);
@@ -37,6 +39,14 @@ export default function AdminPage() {
     active_users: 0,
     total_casos: 0,
   });
+
+  useEffect(() => {
+    void getAuthClient()
+      .auth.getUser()
+      .then(({ data }) => {
+        setUserEmail(data.user?.email ?? '');
+      });
+  }, []);
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
@@ -87,31 +97,71 @@ export default function AdminPage() {
         full_name: target.full_name,
       }),
     );
-    router.push('/judicial');
+    router.push('/select');
   };
 
   return (
-    <div
-      className="judicial-layout workspace-light"
-      style={{ display: 'flex', height: '100vh', background: '#0a0a0a', color: '#fff', overflow: 'hidden' }}
-    >
-      <JudicialSidebar />
-      <main
-        className="arthur-main"
+    <div style={{ minHeight: '100vh', background: '#0a0a0a', color: '#fff' }}>
+      <header
         style={{
-          flex: 1,
-          height: '100vh',
-          overflow: 'auto',
-          background: '#0a0a0a',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '16px 40px',
+          borderBottom: '1px solid rgba(255,255,255,0.06)',
+          background: 'rgba(255,255,255,0.02)',
         }}
       >
-        <div style={{ padding: '32px 40px' }}>
+        <Link
+          href="/select"
+          style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '10px',
+            textTransform: 'uppercase',
+            letterSpacing: '0.1em',
+            color: 'rgba(255,255,255,0.4)',
+            textDecoration: 'none',
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.color = '#c9a84c';
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.color = 'rgba(255,255,255,0.4)';
+          }}
+        >
+          ← Volver a módulos
+        </Link>
+        <div
+          style={{
+            fontFamily: 'var(--font-display)',
+            fontSize: '20px',
+            color: '#fff',
+            fontStyle: 'italic',
+          }}
+        >
+          arthur
+        </div>
+        <div
+          style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '10px',
+            color: 'rgba(255,255,255,0.35)',
+            minWidth: '140px',
+            textAlign: 'right',
+          }}
+        >
+          {userEmail || ''}
+        </div>
+      </header>
+
+      <main style={{ maxWidth: '1200px', margin: '0 auto', padding: '40px' }}>
+        <div style={{ marginBottom: '40px' }}>
           <div
             style={{
               fontFamily: 'var(--font-mono)',
               fontSize: '10px',
               textTransform: 'uppercase',
-              letterSpacing: '0.12em',
+              letterSpacing: '0.15em',
               color: '#c9a84c',
               marginBottom: '8px',
             }}
@@ -125,224 +175,217 @@ export default function AdminPage() {
               fontStyle: 'italic',
               fontWeight: 400,
               color: '#fff',
-              margin: '0 0 8px',
+              margin: 0,
             }}
           >
-            Usuarios
+            Usuarios registrados
           </h1>
-          <p
+        </div>
+
+        {error && (
+          <div
             style={{
               fontFamily: 'var(--font-mono)',
               fontSize: '11px',
-              color: 'rgba(255,255,255,0.4)',
-              margin: '0 0 32px',
+              color: '#f87171',
+              marginBottom: '24px',
             }}
           >
-            Gestión de cuentas y acceso a datos
-          </p>
-
-          {error && (
-            <div
-              style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: '11px',
-                color: '#f87171',
-                marginBottom: '24px',
-              }}
-            >
-              {error}
-            </div>
-          )}
-
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(3, 1fr)',
-              gap: '20px',
-              marginBottom: '32px',
-            }}
-          >
-            {[
-              { label: 'Total usuarios registrados', value: stats.total_users },
-              { label: 'Usuarios activos (con al menos 1 caso)', value: stats.active_users },
-              { label: 'Total casos en plataforma', value: stats.total_casos },
-            ].map(card => (
-              <div
-                key={card.label}
-                style={{
-                  background: 'rgba(255,255,255,0.03)',
-                  border: '1px solid rgba(255,255,255,0.08)',
-                  borderTop: '3px solid #c9a84c',
-                  padding: '24px 28px',
-                }}
-              >
-                <div
-                  style={{
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: '10px',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.12em',
-                    color: 'rgba(255,255,255,0.45)',
-                    marginBottom: '8px',
-                  }}
-                >
-                  {card.label}
-                </div>
-                <div
-                  style={{
-                    fontFamily: 'var(--font-display)',
-                    fontSize: '48px',
-                    lineHeight: 1,
-                    color: '#c9a84c',
-                  }}
-                >
-                  {loading ? '—' : card.value}
-                </div>
-              </div>
-            ))}
+            {error}
           </div>
+        )}
 
-          {loading ? (
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(3, 1fr)',
+            gap: '20px',
+            marginBottom: '32px',
+          }}
+        >
+          {[
+            { label: 'Total usuarios registrados', value: stats.total_users },
+            { label: 'Usuarios activos (con al menos 1 caso)', value: stats.active_users },
+            { label: 'Total casos en plataforma', value: stats.total_casos },
+          ].map(card => (
             <div
-              style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: '11px',
-                textTransform: 'uppercase',
-                color: 'rgba(255,255,255,0.4)',
-              }}
-            >
-              Cargando usuarios...
-            </div>
-          ) : (
-            <div
+              key={card.label}
               style={{
                 background: 'rgba(255,255,255,0.03)',
                 border: '1px solid rgba(255,255,255,0.08)',
+                borderTop: '2px solid #c9a84c',
+                padding: '24px',
+                borderRadius: 0,
               }}
             >
               <div
                 style={{
-                  display: 'grid',
-                  gridTemplateColumns: '2fr 100px 80px 120px 160px',
-                  padding: '14px 20px',
                   fontFamily: 'var(--font-mono)',
                   fontSize: '10px',
                   textTransform: 'uppercase',
-                  letterSpacing: '0.1em',
+                  letterSpacing: '0.12em',
                   color: 'rgba(255,255,255,0.35)',
-                  borderBottom: '1px solid rgba(255,255,255,0.08)',
+                  marginBottom: '8px',
                 }}
               >
-                <span>Usuario</span>
-                <span>Rol</span>
-                <span>Casos</span>
-                <span>Registrado</span>
-                <span>Acciones</span>
+                {card.label}
               </div>
+              <div
+                style={{
+                  fontFamily: 'var(--font-display)',
+                  fontSize: '48px',
+                  lineHeight: 1,
+                  color: '#fff',
+                }}
+              >
+                {loading ? '—' : card.value}
+              </div>
+            </div>
+          ))}
+        </div>
 
-              {users.length === 0 ? (
+        {loading ? (
+          <div
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: '11px',
+              textTransform: 'uppercase',
+              color: 'rgba(255,255,255,0.4)',
+            }}
+          >
+            Cargando usuarios...
+          </div>
+        ) : (
+          <div
+            style={{
+              background: 'rgba(255,255,255,0.03)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              borderRadius: 0,
+            }}
+          >
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '2fr 100px 80px 120px 160px',
+                padding: '14px 20px',
+                fontFamily: 'var(--font-mono)',
+                fontSize: '10px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.1em',
+                color: 'rgba(255,255,255,0.35)',
+                borderBottom: '1px solid rgba(255,255,255,0.08)',
+              }}
+            >
+              <span>Usuario</span>
+              <span>Rol</span>
+              <span>Casos</span>
+              <span>Registrado</span>
+              <span>Acciones</span>
+            </div>
+
+            {users.length === 0 ? (
+              <div
+                style={{
+                  padding: '32px 20px',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '11px',
+                  color: 'rgba(255,255,255,0.4)',
+                }}
+              >
+                No hay usuarios registrados.
+              </div>
+            ) : (
+              users.map(u => (
                 <div
+                  key={u.id}
                   style={{
-                    padding: '32px 20px',
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: '11px',
-                    color: 'rgba(255,255,255,0.4)',
+                    display: 'grid',
+                    gridTemplateColumns: '2fr 100px 80px 120px 160px',
+                    padding: '16px 20px',
+                    fontSize: '13px',
+                    color: 'rgba(255,255,255,0.8)',
+                    borderBottom: '1px solid rgba(255,255,255,0.05)',
+                    alignItems: 'center',
+                    transition: 'background 0.15s',
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.background = 'rgba(255,255,255,0.03)';
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = 'transparent';
                   }}
                 >
-                  No hay usuarios registrados.
-                </div>
-              ) : (
-                users.map(u => (
-                  <div
-                    key={u.id}
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: '2fr 100px 80px 120px 160px',
-                      padding: '16px 20px',
-                      fontSize: '13px',
-                      color: 'rgba(255,255,255,0.8)',
-                      borderBottom: '1px solid rgba(255,255,255,0.05)',
-                      alignItems: 'center',
-                      transition: 'background 0.15s',
-                    }}
-                    onMouseEnter={e => {
-                      e.currentTarget.style.background = 'rgba(255,255,255,0.03)';
-                    }}
-                    onMouseLeave={e => {
-                      e.currentTarget.style.background = 'transparent';
-                    }}
-                  >
-                    <div>
-                      <div style={{ fontFamily: 'var(--font-body)', fontWeight: 600 }}>
-                        {u.full_name || '—'}
-                      </div>
-                      <div
-                        style={{
-                          fontFamily: 'var(--font-mono)',
-                          fontSize: '11px',
-                          color: 'rgba(255,255,255,0.4)',
-                          marginTop: '4px',
-                        }}
-                      >
-                        {u.email}
-                      </div>
+                  <div>
+                    <div style={{ fontFamily: 'var(--font-body)', fontWeight: 600 }}>
+                      {u.full_name || '—'}
                     </div>
-                    <div>
-                      <span
-                        style={{
-                          fontFamily: 'var(--font-mono)',
-                          fontSize: '10px',
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.08em',
-                          color: u.role === 'admin' ? '#c9a84c' : 'rgba(255,255,255,0.35)',
-                          border: `1px solid ${u.role === 'admin' ? 'rgba(201,168,76,0.4)' : 'rgba(255,255,255,0.15)'}`,
-                          padding: '4px 8px',
-                        }}
-                      >
-                        {u.role}
-                      </span>
-                    </div>
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '13px' }}>{u.caso_count}</div>
                     <div
                       style={{
                         fontFamily: 'var(--font-mono)',
                         fontSize: '11px',
-                        color: 'rgba(255,255,255,0.45)',
+                        color: 'rgba(255,255,255,0.4)',
+                        marginTop: '4px',
                       }}
                     >
-                      {formatRelativeDate(u.created_at)}
-                    </div>
-                    <div>
-                      <button
-                        type="button"
-                        onClick={() => handleViewAs(u)}
-                        style={{
-                          fontFamily: 'var(--font-mono)',
-                          fontSize: '10px',
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.1em',
-                          color: '#c9a84c',
-                          background: 'transparent',
-                          border: '1px solid rgba(201,168,76,0.3)',
-                          padding: '6px 12px',
-                          cursor: 'pointer',
-                        }}
-                        onMouseEnter={e => {
-                          e.currentTarget.style.background = 'rgba(201,168,76,0.1)';
-                        }}
-                        onMouseLeave={e => {
-                          e.currentTarget.style.background = 'transparent';
-                        }}
-                      >
-                        Ver como usuario →
-                      </button>
+                      {u.email}
                     </div>
                   </div>
-                ))
-              )}
-            </div>
-          )}
-        </div>
+                  <div>
+                    <span
+                      style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: '10px',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.08em',
+                        color: u.role === 'admin' ? '#c9a84c' : 'rgba(255,255,255,0.35)',
+                        border: `1px solid ${u.role === 'admin' ? 'rgba(201,168,76,0.4)' : 'rgba(255,255,255,0.15)'}`,
+                        padding: '4px 8px',
+                      }}
+                    >
+                      {u.role}
+                    </span>
+                  </div>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '13px' }}>{u.caso_count}</div>
+                  <div
+                    style={{
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: '11px',
+                      color: 'rgba(255,255,255,0.45)',
+                    }}
+                  >
+                    {formatRelativeDate(u.created_at)}
+                  </div>
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => handleViewAs(u)}
+                      style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: '10px',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.1em',
+                        color: '#c9a84c',
+                        background: 'transparent',
+                        border: '1px solid rgba(201,168,76,0.3)',
+                        padding: '6px 12px',
+                        cursor: 'pointer',
+                        borderRadius: 0,
+                      }}
+                      onMouseEnter={e => {
+                        e.currentTarget.style.background = 'rgba(201,168,76,0.1)';
+                      }}
+                      onMouseLeave={e => {
+                        e.currentTarget.style.background = 'transparent';
+                      }}
+                    >
+                      Ver como usuario →
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
       </main>
     </div>
   );

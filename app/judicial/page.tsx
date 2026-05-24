@@ -470,9 +470,7 @@ export default function JudicialDashboardPage() {
           <button
             type="button"
             onClick={() => {
-              localStorage.removeItem('admin_viewing_user');
-              setViewingUser(null);
-              router.push('/admin');
+              router.push('/select');
             }}
             style={{
               background: 'transparent',
@@ -485,7 +483,7 @@ export default function JudicialDashboardPage() {
               padding: 0,
             }}
           >
-            Volver a mi cuenta →
+            Volver a módulos →
           </button>
         </div>
       )}
