@@ -1,4 +1,5 @@
 import { generarEscritoJudicial } from '@/lib/ai-service'
+import { denyUnlessCasoOwnerOrAdmin, requireAuthUser } from '@/lib/judicial-caso-access'
 import { getCasoById, saveEscritoJudicial } from '@/lib/judicial-db'
 
 export async function POST(
@@ -10,12 +11,18 @@ export async function POST(
   }
 
   try {
+    const auth = await requireAuthUser()
+    if ('response' in auth) return auth.response
+
     const { id } = await params
     const casoId = Number.parseInt(id, 10)
     const caso = await getCasoById(casoId)
     if (!caso) {
       return Response.json({ error: 'Caso no encontrado' }, { status: 404 })
     }
+
+    const denied = await denyUnlessCasoOwnerOrAdmin(caso, auth.user)
+    if (denied) return denied
 
     const body = await request.json() as {
       messages: Array<{ role: 'user' | 'assistant'; content: string }>

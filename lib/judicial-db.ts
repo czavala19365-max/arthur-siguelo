@@ -136,6 +136,7 @@ function mapCaso(row: CasoRow): Caso {
     archived_at: iso(row.archived_at),
     deleted_at: iso(row.deleted_at),
     parte_procesal: row.parte_procesal != null ? String(row.parte_procesal) : null,
+    user_id: row.user_id != null ? String(row.user_id) : null,
   }
 }
 

@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { Document, Packer, Paragraph, TextRun, AlignmentType } from 'docx'
 import * as XLSX from 'xlsx'
+import { denyUnlessCasoOwnerOrAdmin, requireAuthUser } from '@/lib/judicial-caso-access'
 import { getCasoById, getMovimientosByCaso, getEscritosByCaso, getAudienciasByCaso } from '@/lib/judicial-db'
 import { formatPartesDisplay } from '@/lib/format-partes-judicial'
 
@@ -257,6 +258,9 @@ function buildXlsx(params: {
 }
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const auth = await requireAuthUser()
+  if ('response' in auth) return auth.response
+
   const { id } = await ctx.params
   const casoId = Number.parseInt(String(id || ''), 10)
   if (!Number.isFinite(casoId) || casoId <= 0) {
@@ -276,6 +280,9 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     getAudienciasByCaso(casoId),
   ])
   if (!caso) return Response.json({ error: 'Caso no encontrado' }, { status: 404 })
+
+  const denied = await denyUnlessCasoOwnerOrAdmin(caso, auth.user)
+  if (denied) return denied
 
   const expediente = caso.numero_expediente || String(caso.id)
   const baseName = `Ayuda_Memoria_${safeFilePart(expediente)}_${todayYMD()}`
