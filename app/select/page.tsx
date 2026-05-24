@@ -126,6 +126,39 @@ export default function SelectModulePage() {
         </div>
       )}
 
+      {isAdmin && (
+        <button
+          type="button"
+          onClick={() => router.push('/admin')}
+          style={{
+            position: 'fixed',
+            top: viewingUser ? '52px' : '20px',
+            right: '20px',
+            zIndex: 4,
+            padding: '8px 14px',
+            cursor: 'pointer',
+            background: 'rgba(72, 92, 128, 0.35)',
+            border: '1px solid rgba(130, 160, 200, 0.4)',
+            borderRadius: 0,
+            fontFamily: 'var(--font-mono)',
+            fontSize: '10px',
+            letterSpacing: '0.08em',
+            color: 'rgba(200, 215, 235, 0.9)',
+            transition: 'all 0.15s ease',
+          }}
+          onMouseOver={e => {
+            e.currentTarget.style.background = 'rgba(90, 115, 155, 0.5)';
+            e.currentTarget.style.color = '#fff';
+          }}
+          onMouseOut={e => {
+            e.currentTarget.style.background = 'rgba(72, 92, 128, 0.35)';
+            e.currentTarget.style.color = 'rgba(200, 215, 235, 0.9)';
+          }}
+        >
+          Administrador
+        </button>
+      )}
+
       <AnimatedBackground />
       <div
         style={{
@@ -184,15 +217,6 @@ export default function SelectModulePage() {
           ¿Qué deseas gestionar hoy?
         </div>
 
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px',
-            flexWrap: 'wrap',
-            justifyContent: 'center',
-          }}
-        >
         <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap', justifyContent: 'center' }}>
           <div
             style={cardBase}
@@ -356,50 +380,6 @@ export default function SelectModulePage() {
             </div>
           </div>
 
-        </div>
-
-          {isAdmin && (
-            <button
-              type="button"
-              onClick={() => router.push('/admin')}
-              style={{
-                flexShrink: 0,
-                width: '108px',
-                minHeight: '168px',
-                padding: '18px 12px',
-                cursor: 'pointer',
-                background: 'rgba(72, 92, 128, 0.22)',
-                border: '1px solid rgba(130, 160, 200, 0.45)',
-                borderLeft: '3px solid rgba(130, 160, 200, 0.7)',
-                borderRadius: 0,
-                fontFamily: 'var(--font-mono)',
-                fontSize: '9px',
-                textTransform: 'uppercase',
-                letterSpacing: '0.14em',
-                lineHeight: 1.5,
-                color: 'rgba(190, 210, 235, 0.92)',
-                textAlign: 'center',
-                transition: 'all 0.2s ease',
-                boxShadow: '0 0 0 1px rgba(0,0,0,0.15) inset',
-              }}
-              onMouseOver={e => {
-                e.currentTarget.style.background = 'rgba(90, 115, 155, 0.35)';
-                e.currentTarget.style.borderColor = 'rgba(150, 180, 220, 0.65)';
-                e.currentTarget.style.color = '#e8f0fa';
-                e.currentTarget.style.transform = 'translateX(2px)';
-              }}
-              onMouseOut={e => {
-                e.currentTarget.style.background = 'rgba(72, 92, 128, 0.22)';
-                e.currentTarget.style.borderColor = 'rgba(130, 160, 200, 0.45)';
-                e.currentTarget.style.color = 'rgba(190, 210, 235, 0.92)';
-                e.currentTarget.style.transform = 'translateX(0)';
-              }}
-            >
-              versión
-              <br />
-              administrador
-            </button>
-          )}
         </div>
 
         <button
