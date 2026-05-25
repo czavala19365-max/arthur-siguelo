@@ -1,36 +1,20 @@
-import nodemailer from 'nodemailer'
+import { Resend } from 'resend'
 import type { MovimientoJudicialAlerta, NivelUrgencia } from '../alert-service'
 import { getAppBaseUrl } from '@/lib/app-url'
 
-function getTransporter() {
-  const host = process.env.EMAIL_HOST
-  const port = parseInt(process.env.EMAIL_PORT || '587')
-  const user = process.env.EMAIL_USER
-  const pass = process.env.EMAIL_PASS
-
-  if (!host || !user || !pass) return null
-
-  return nodemailer.createTransport({
-    host,
-    port,
-    secure: port === 465,
-    auth: { user, pass },
-  })
-}
-
 function buildSubject(m: MovimientoJudicialAlerta): string {
   const num = m.numeroExpediente
-  if (m.nivelUrgencia === 'alta') return `🔴 [URGENTE] Movimiento judicial – Exp. ${num}`
-  if (m.nivelUrgencia === 'media') return `🟡 [Atención] Movimiento judicial – Exp. ${num}`
+  if (m.nivelUrgencia === 'alta') return `[URGENTE] Movimiento judicial – Exp. ${num}`
+  if (m.nivelUrgencia === 'media') return `[Atención] Movimiento judicial – Exp. ${num}`
   return `Actualización judicial – Exp. ${num}`
 }
 
 function urgenciaHtml(nivel: NivelUrgencia): string {
   if (nivel === 'alta') {
-    return '<p style="color:#c0392b;font-weight:700;font-size:14px;margin:0 0 16px;">🔴 URGENCIA ALTA</p>'
+    return '<p style="color:#c0392b;font-weight:700;font-size:14px;margin:0 0 16px;">URGENCIA ALTA</p>'
   }
   if (nivel === 'media') {
-    return '<p style="color:#e67e22;font-weight:700;font-size:14px;margin:0 0 16px;">🟡 Urgencia media</p>'
+    return '<p style="color:#e67e22;font-weight:700;font-size:14px;margin:0 0 16px;">Urgencia media</p>'
   }
   return ''
 }
@@ -108,8 +92,8 @@ function buildHtml(m: MovimientoJudicialAlerta): string {
 
 function buildText(m: MovimientoJudicialAlerta): string {
   const lines: string[] = []
-  if (m.nivelUrgencia === 'alta') lines.push('🔴 URGENCIA ALTA\n')
-  else if (m.nivelUrgencia === 'media') lines.push('🟡 Urgencia media\n')
+  if (m.nivelUrgencia === 'alta') lines.push('URGENCIA ALTA\n')
+  else if (m.nivelUrgencia === 'media') lines.push('Urgencia media\n')
 
   lines.push('Nuevo movimiento judicial')
   lines.push(`Expediente: ${m.numeroExpediente}`)
@@ -126,22 +110,28 @@ export async function enviarEmail(
   destinatario: string,
   movimiento: MovimientoJudicialAlerta
 ): Promise<boolean> {
-  const transporter = getTransporter()
-  const user = process.env.EMAIL_USER
+  const apiKey = process.env.RESEND_API_KEY_JUDICIAL || process.env.RESEND_API_KEY
+  const fromEmail = process.env.RESEND_FROM_EMAIL || 'alertas@arthur-legal.com'
 
-  if (!transporter || !user) {
-    console.warn('[Email] EMAIL_HOST, EMAIL_USER o EMAIL_PASS no configurados')
+  if (!apiKey) {
+    console.warn('[Email] RESEND_API_KEY_JUDICIAL ni RESEND_API_KEY configurados')
     return false
   }
 
   try {
-    await transporter.sendMail({
-      from: `"Arthur-IA Legal" <${user}>`,
+    const resend = new Resend(apiKey)
+    const { error } = await resend.emails.send({
+      from: `Arthur-IA Legal <${fromEmail}>`,
       to: destinatario,
       subject: buildSubject(movimiento),
       html: buildHtml(movimiento),
       text: buildText(movimiento),
     })
+
+    if (error) {
+      console.error('[Email] Resend:', error.message)
+      return false
+    }
 
     console.log(`[Email] Enviado a ${destinatario}`)
     return true
