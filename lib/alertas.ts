@@ -110,11 +110,12 @@ function htmlEmail({ titulo, estadoAnterior, estadoNuevo, detectadoEn, detalle }
 }
 
 export async function enviarAlertaEmail(datos: DatosAlerta): Promise<void> {
-  const apiKey = process.env.RESEND_API_KEY
-  if (!apiKey) throw new Error('RESEND_API_KEY no configurada.')
+  const apiKey = process.env.RESEND_API_KEY_JUDICIAL || process.env.RESEND_API_KEY
+  if (!apiKey) throw new Error('RESEND_API_KEY_JUDICIAL ni RESEND_API_KEY configurados.')
 
   const resend = new Resend(apiKey)
-  const from = process.env.RESEND_FROM_EMAIL ?? 'alertas@arthur-siguelo.com'
+  const fromEmail = process.env.RESEND_FROM_EMAIL || 'alertas@arthur-legal.com'
+  const from = `Arthur-IA Legal <${fromEmail}>`
 
   // Soporta múltiples emails separados por coma
   const destinatarios = datos.titulo.email_cliente
@@ -262,11 +263,12 @@ function htmlConfirmacion({ titulo, estado, detalle, registradoEn }: DatosConfir
 }
 
 export async function enviarConfirmacionAgregado(datos: DatosConfirmacion): Promise<void> {
-  const apiKey = process.env.RESEND_API_KEY
-  if (!apiKey) throw new Error('RESEND_API_KEY no configurada.')
+  const apiKey = process.env.RESEND_API_KEY_JUDICIAL || process.env.RESEND_API_KEY
+  if (!apiKey) throw new Error('RESEND_API_KEY_JUDICIAL ni RESEND_API_KEY configurados.')
 
   const resend = new Resend(apiKey)
-  const from = process.env.RESEND_FROM_EMAIL ?? 'alertas@arthur-siguelo.com'
+  const fromEmail = process.env.RESEND_FROM_EMAIL || 'alertas@arthur-legal.com'
+  const from = `Arthur-IA Legal <${fromEmail}>`
 
   const destinatarios = datos.titulo.email_cliente
     .split(',')

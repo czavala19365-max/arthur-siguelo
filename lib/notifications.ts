@@ -1,5 +1,5 @@
 import twilio from 'twilio';
-import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 
 function getStatusEmoji(estado: string): string {
   if (estado === 'OBSERVADO' || estado === 'TACHA') return '🔴';
@@ -88,22 +88,13 @@ export async function sendEmail(
   tramiteId: number
 ): Promise<boolean> {
   try {
-    const host = process.env.EMAIL_HOST;
-    const port = parseInt(process.env.EMAIL_PORT || '587');
-    const user = process.env.EMAIL_USER;
-    const pass = process.env.EMAIL_PASS;
+    const apiKey = process.env.RESEND_API_KEY_JUDICIAL || process.env.RESEND_API_KEY;
+    const fromEmail = process.env.RESEND_FROM_EMAIL || 'alertas@arthur-legal.com';
 
-    if (!host || !user || !pass) {
-      console.warn('[Notifications] Email credentials not configured');
+    if (!apiKey) {
+      console.warn('[Notifications] RESEND_API_KEY_JUDICIAL ni RESEND_API_KEY configurados');
       return false;
     }
-
-    const transporter = nodemailer.createTransport({
-      host,
-      port,
-      secure: port === 465,
-      auth: { user, pass },
-    });
 
     const statusColor = getStatusColor(estado);
     const statusBg = getStatusBgColor(estado);
@@ -182,13 +173,19 @@ export async function sendEmail(
 </body>
 </html>`;
 
-    await transporter.sendMail({
-      from: `"Arthur-IA Legal" <${user}>`,
+    const resend = new Resend(apiKey);
+    const { error } = await resend.emails.send({
+      from: `Arthur-IA Legal <${fromEmail}>`,
       to,
       subject: `${emoji} ${alias} — ${estado} | Arthur-IA Legal`,
       html,
       text: `${alias}\nEstado: ${estado}\n\n${message}\n\nQué hacer: ${suggestion}`,
     });
+
+    if (error) {
+      console.error('[Notifications] Resend:', error.message);
+      return false;
+    }
 
     console.log(`[Notifications] Email sent to ${to}`);
     return true;
@@ -252,22 +249,13 @@ export async function sendJudicialEmail(
   casoId: number
 ): Promise<boolean> {
   try {
-    const host = process.env.EMAIL_HOST;
-    const port = parseInt(process.env.EMAIL_PORT || '587');
-    const user = process.env.EMAIL_USER;
-    const pass = process.env.EMAIL_PASS;
+    const apiKey = process.env.RESEND_API_KEY_JUDICIAL || process.env.RESEND_API_KEY;
+    const fromEmail = process.env.RESEND_FROM_EMAIL || 'alertas@arthur-legal.com';
 
-    if (!host || !user || !pass) {
-      console.warn('[Notifications] Email credentials not configured');
+    if (!apiKey) {
+      console.warn('[Notifications] RESEND_API_KEY_JUDICIAL ni RESEND_API_KEY configurados');
       return false;
     }
-
-    const transporter = nodemailer.createTransport({
-      host,
-      port,
-      secure: port === 465,
-      auth: { user, pass },
-    });
 
     const isAlta = urgencia === 'alta';
     const color = isAlta ? '#991b1b' : '#b8860b';
@@ -320,13 +308,19 @@ export async function sendJudicialEmail(
 </body>
 </html>`;
 
-    await transporter.sendMail({
-      from: `"Arthur-IA Judicial" <${user}>`,
+    const resend = new Resend(apiKey);
+    const { error } = await resend.emails.send({
+      from: `Arthur-IA Legal <${fromEmail}>`,
       to,
       subject: `${emoji} ${alias} — ${acto} | Arthur-IA Judicial`,
       html,
-      text: `Proceso: ${alias}\nMovimiento: ${acto}\nUrgencia: ${urgencia}\n\n${sumilla}\n\nQué hacer: ${sugerencia}`
+      text: `Proceso: ${alias}\nMovimiento: ${acto}\nUrgencia: ${urgencia}\n\n${sumilla}\n\nQué hacer: ${sugerencia}`,
     });
+
+    if (error) {
+      console.error('[Notifications] Resend:', error.message);
+      return false;
+    }
 
     return true;
   } catch (error) {
