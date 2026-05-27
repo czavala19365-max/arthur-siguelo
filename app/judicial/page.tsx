@@ -487,7 +487,7 @@ export default function JudicialDashboardPage() {
           </button>
         </div>
       )}
-      <div style={{ padding: '48px 64px' }}>
+      <div style={{ padding: '48px 32px 48px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderLeft: '4px solid #c2a46d', paddingLeft: '24px' }}>
         <div>
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.15em', color: '#c2a46d', marginBottom: '8px' }}>
@@ -523,9 +523,9 @@ export default function JudicialDashboardPage() {
         </div>
       )}
 
-      <div style={{ marginTop: '32px', background: 'var(--surface)', border: '1px solid var(--line)' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '90px 120px 1.4fr 220px 150px 170px 110px 120px 130px', padding: '12px 24px', background: 'var(--paper-dark)', fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--muted)', gap: '12px' }}>
-          <span>ESTADO</span><span>TIPO</span><span>ALIAS / CLIENTE</span><span>EXPEDIENTE</span><span>ÚLTIMA ACTUALIZACIÓN</span><span>PRÓXIMO EVENTO</span><span>PRIORIDAD</span><span>CEJ</span><span>GESTIÓN</span>
+      <div style={{ marginTop: '32px', background: 'var(--surface)', border: '1px solid var(--line)', overflowX: 'auto' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '72px 100px 1.4fr 180px 130px 150px 90px 110px 120px', minWidth: '900px', padding: '12px 24px', background: 'var(--paper-dark)', fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--muted)', gap: '12px' }}>
+          <span>ESTADO</span><span>TIPO</span><span>ALIAS / CLIENTE</span><span>EXPEDIENTE</span><span>ÚLTIMA ACTUALIZ.</span><span>PRÓXIMO EVENTO</span><span>PRIORIDAD</span><span>CEJ</span><span>GESTIÓN</span>
         </div>
 
         {(!Array.isArray(casos) || casos.length === 0) ? (
@@ -543,7 +543,7 @@ export default function JudicialDashboardPage() {
           const eventAlias = c.alias || c.cliente || 'Sin alias';
 
           return (
-            <div key={c.id} onClick={() => (window.location.href = `/judicial/${c.id}`)} style={{ display: 'grid', gridTemplateColumns: '90px 120px 1.4fr 220px 150px 170px 110px 120px 130px', padding: '0 24px', minHeight: '66px', alignItems: 'center', borderBottom: '1px solid var(--line-faint)', gap: '12px', cursor: 'pointer' }}>
+            <div key={c.id} onClick={() => (window.location.href = `/judicial/${c.id}`)} style={{ display: 'grid', gridTemplateColumns: '72px 100px 1.4fr 180px 130px 150px 90px 110px 120px', minWidth: '900px', padding: '0 24px', minHeight: '66px', alignItems: 'center', borderBottom: '1px solid var(--line-faint)', gap: '12px', cursor: 'pointer' }}>
               <div>
                 <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '50%', background: urgentNew ? '#991b1b' : normalNew ? '#d97706' : hasAny ? '#166534' : '#9ca3af', animation: urgentNew ? 'pulse 1.5s infinite' : undefined }} />
               </div>

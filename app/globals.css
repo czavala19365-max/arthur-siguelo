@@ -338,6 +338,13 @@ button {
   padding-left: 64px;
 }
 
+/* En móvil: asegurar que el contenido no quede debajo del ☰ */
+@media (max-width: 767px) {
+  .judicial-layout .arthur-main {
+    padding-top: 64px;
+  }
+}
+
 .campo-placeholder {
   background: rgba(194, 164, 109, 0.15);
   color: var(--accent);
