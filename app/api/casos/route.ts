@@ -250,23 +250,34 @@ export async function POST(request: Request) {
       estado: 'activo',
     })
 
-    let scrapeCEJ: (typeof import('@/lib/cej-scraper'))['scrapeCEJ']
-    try {
-      const mod = await import('@/lib/cej-scraper')
-      scrapeCEJ = mod.scrapeCEJ
-    } catch (modErr) {
-      console.error('[API] POST /casos: no se pudo cargar el módulo CEJ (Playwright/stealth):', modErr)
-      await updateCaso(caso.id, { last_checked: new Date().toISOString() })
-      return Response.json(
-        {
-          ...caso,
-          success: true,
-          portalDown: true,
-          message:
-            'Caso guardado en la base de datos. La consulta automática al CEJ no está disponible en este entorno (revisa consola del servidor).',
-        },
-        { status: 201 }
-      )
+    // If Railway scraper URL is configured, we don't need local Playwright at all.
+    // Only attempt to import the local scraper module when Railway is NOT available.
+    const hasRailwayScraper = !!process.env.CEJ_SCRAPER_URL?.trim()
+
+    let scrapeCEJ: ScrapeFn
+    if (hasRailwayScraper) {
+      // Railway handles scraping — create a placeholder that fetchCejFromScraperService will never call
+      scrapeCEJ = (async () => {
+        throw new Error('Railway scraper should handle this request')
+      }) as unknown as ScrapeFn
+    } else {
+      try {
+        const mod = await import('@/lib/cej-scraper')
+        scrapeCEJ = mod.scrapeCEJ
+      } catch (modErr) {
+        console.error('[API] POST /casos: no se pudo cargar el módulo CEJ (Playwright/stealth):', modErr)
+        await updateCaso(caso.id, { last_checked: new Date().toISOString() })
+        return Response.json(
+          {
+            ...caso,
+            success: true,
+            portalDown: true,
+            message:
+              'Caso guardado en la base de datos. La consulta automática al CEJ no está disponible en este entorno (revisa consola del servidor).',
+          },
+          { status: 201 },
+        )
+      }
     }
 
     // No esperar al scrape: `after()` asegura que Next ejecute el trabajo tras enviar la respuesta (no se pierde como con void suelto).
