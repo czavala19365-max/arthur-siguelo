@@ -61,7 +61,6 @@ export default function SelectModulePage() {
   }, []);
 
   const cardBase: React.CSSProperties = {
-    width: '320px',
     cursor: 'pointer',
     background: 'rgba(255,255,255,0.04)',
     border: `1px solid rgba(${gold}, 0.28)`,
