@@ -1,4 +1,4 @@
-import { after, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { addMovimientoJudicial, createCaso, getAllCasosActivosForUser, updateCaso, updateMovimientoJudicial, type Caso } from '@/lib/judicial-db'
 import { isUserAdmin, requireAuthUser } from '@/lib/judicial-caso-access'
 import { getAuthServerClient } from '@/lib/supabase-auth-server'
@@ -280,21 +280,19 @@ export async function POST(request: Request) {
       }
     }
 
-    // No esperar al scrape: `after()` asegura que Next ejecute el trabajo tras enviar la respuesta (no se pierde como con void suelto).
-    // La sincronización completa (movimientos + IA) vive en `runInitialCejSync` — equivalente al flujo inline de la rama bot, pero en background.
-    after(() =>
-      runInitialCejSync(caso, scrapeCEJ).catch(err => {
-        console.error('[API] runInitialCejSync error:', err)
-      })
-    )
+    // Esperamos al scrape para asegurar que Next retorne los datos con todo inicializado
+    try {
+      await runInitialCejSync(caso, scrapeCEJ);
+    } catch (err) {
+      console.error('[API] runInitialCejSync error:', err);
+    }
 
     return Response.json(
       {
         ...caso,
         success: true,
-        syncPending: true,
-        message:
-          'Caso guardado. Sincronizando con el CEJ en segundo plano (1–3 min). La lista se actualizará al terminar.',
+        syncPending: false,
+        message: 'Caso guardado y sincronizado.',
       },
       { status: 201 }
     )
@@ -307,3 +305,4 @@ export async function POST(request: Request) {
     )
   }
 }
+
