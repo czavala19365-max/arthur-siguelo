@@ -252,7 +252,7 @@ async function purgeJudicialCasosPapelera(): Promise<void> {
 }
 
 export async function getAllCasosActivos(): Promise<Caso[]> {
-  await purgeJudicialCasosPapelera()
+  purgeJudicialCasosPapelera().catch(e => console.error('[DB] purge error:', e))
   const supabase = getJudicialSupabase()
   const { data, error } = await supabase
     .from('casos')
@@ -266,7 +266,7 @@ export async function getAllCasosActivos(): Promise<Caso[]> {
 }
 
 export async function getAllCasosActivosForUser(userId: string): Promise<Caso[]> {
-  await purgeJudicialCasosPapelera()
+  purgeJudicialCasosPapelera().catch(e => console.error('[DB] purge error:', e))
   const supabase = getJudicialSupabase()
   const { data, error } = await supabase
     .from('casos')
@@ -281,7 +281,7 @@ export async function getAllCasosActivosForUser(userId: string): Promise<Caso[]>
 }
 
 export async function getCasosArchivados(): Promise<Caso[]> {
-  await purgeJudicialCasosPapelera()
+  purgeJudicialCasosPapelera().catch(e => console.error('[DB] purge error:', e))
   const supabase = getJudicialSupabase()
   const { data, error } = await supabase
     .from('casos')
@@ -294,7 +294,7 @@ export async function getCasosArchivados(): Promise<Caso[]> {
 }
 
 export async function getCasosPapelera(): Promise<Caso[]> {
-  await purgeJudicialCasosPapelera()
+  purgeJudicialCasosPapelera().catch(e => console.error('[DB] purge error:', e))
   const supabase = getJudicialSupabase()
   const { data, error } = await supabase
     .from('casos')
@@ -569,7 +569,9 @@ export async function getCasosStats(userId?: string): Promise<{
   proximasAudiencias: number
 }> {
   const supabase = getJudicialSupabase()
-  const activeFilter = async () => {
+
+  // 1. Total de Casos
+  const totalPromise = (async () => {
     let q = supabase
       .from('casos')
       .select('*', { count: 'exact', head: true })
@@ -578,21 +580,20 @@ export async function getCasosStats(userId?: string): Promise<{
       .is('deleted_at', null)
     if (userId) q = q.eq('user_id', userId)
     const { count, error } = await q
-    if (error) throw new Error(`getCasosStats total: ${error.message}`)
+    if (error) console.error(`getCasosStats total: ${error.message}`)
     return count ?? 0
-  }
+  })()
 
-  const total = await activeFilter()
+  // 2. Con alerta
+  const alertaPromise = (async () => {
+    const { data: movs } = await supabase
+      .from('movimientos_judiciales')
+      .select('caso_id')
+      .eq('es_nuevo', true)
+      .eq('urgencia', 'alta')
+    const distinctIds = [...new Set((movs ?? []).map(m => Number((m as any).caso_id)))]
+    if (distinctIds.length === 0) return 0
 
-  const { data: movs, error: movErr } = await supabase
-    .from('movimientos_judiciales')
-    .select('caso_id')
-    .eq('es_nuevo', true)
-    .eq('urgencia', 'alta')
-  if (movErr) throw new Error(`getCasosStats movimientos: ${movErr.message}`)
-  const distinctIds = [...new Set((movs ?? []).map(m => Number((m as { caso_id: number }).caso_id)))]
-  let conAlerta = 0
-  if (distinctIds.length > 0) {
     let q = supabase
       .from('casos')
       .select('*', { count: 'exact', head: true })
@@ -602,43 +603,53 @@ export async function getCasosStats(userId?: string): Promise<{
       .is('deleted_at', null)
     if (userId) q = q.eq('user_id', userId)
     const { count, error } = await q
-    if (error) throw new Error(`getCasosStats conAlerta: ${error.message}`)
-    conAlerta = count ?? 0
-  }
+    if (error) console.error(`getCasosStats conAlerta: ${error.message}`)
+    return count ?? 0
+  })()
 
-  const today = new Date()
-  const week = new Date(today)
-  week.setUTCDate(week.getUTCDate() + 7)
-  const d0 = today.toISOString().slice(0, 10)
-  const d1 = week.toISOString().slice(0, 10)
+  // 3. Próximas audiencias
+  const audPromise = (async () => {
+    const today = new Date()
+    const week = new Date(today)
+    week.setUTCDate(week.getUTCDate() + 7)
+    const d0 = today.toISOString().slice(0, 10)
+    const d1 = week.toISOString().slice(0, 10)
 
-  const { data: audSimple, error: audErr } = await supabase
-    .from('audiencias')
-    .select('id, fecha, caso_id')
-    .eq('completado', false)
-  if (audErr) throw new Error(`getCasosStats audiencias: ${audErr.message}`)
-  const audCasoIds = [...new Set((audSimple ?? []).map(a => Number((a as { caso_id: number }).caso_id)))]
-  let activeSet = new Set<number>()
-  if (audCasoIds.length > 0) {
-    let q = supabase
+    const { data: audSimple } = await supabase
+      .from('audiencias')
+      .select('id, fecha, caso_id')
+      .eq('completado', false)
+
+    const audCasoIds = [...new Set((audSimple ?? []).map(a => Number((a as any).caso_id)))]
+    if (audCasoIds.length === 0) return 0
+
+    let qCasos = supabase
       .from('casos')
       .select('id')
       .in('id', audCasoIds)
       .eq('activo', true)
       .is('archived_at', null)
       .is('deleted_at', null)
-    if (userId) q = q.eq('user_id', userId)
-    const { data: activeCasos, error: acErr } = await q
-    if (acErr) throw new Error(`getCasosStats audiencias casos: ${acErr.message}`)
-    activeSet = new Set((activeCasos ?? []).map(c => Number((c as { id: number }).id)))
-  }
-  let proximasAudiencias = 0
-  for (const a of audSimple ?? []) {
-    const row = a as { fecha: string; caso_id: number }
-    if (!activeSet.has(row.caso_id)) continue
-    const fd = (row.fecha || '').slice(0, 10)
-    if (fd >= d0 && fd <= d1) proximasAudiencias++
-  }
+    if (userId) qCasos = qCasos.eq('user_id', userId)
+
+    const { data: activeCasos } = await qCasos
+    const activeSet = new Set((activeCasos ?? []).map(c => Number((c as any).id)))
+
+    let count = 0
+    for (const a of audSimple ?? []) {
+      const row = a as any
+      if (!activeSet.has(row.caso_id)) continue
+      const fd = (row.fecha || '').slice(0, 10)
+      if (fd >= d0 && fd <= d1) count++
+    }
+    return count
+  })()
+
+  const [total, conAlerta, proximasAudiencias] = await Promise.all([
+    totalPromise,
+    alertaPromise,
+    audPromise
+  ])
 
   return { total, activos: total, conAlerta, proximasAudiencias }
 }
