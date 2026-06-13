@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { enviarSuscripcionWhatsApp } from '@/lib/channels/whatsapp-channel'
 import { addMovimientoJudicial, createCaso, getAllCasosActivosForUser, updateCaso, updateMovimientoJudicial, type Caso } from '@/lib/judicial-db'
 import { isUserAdmin, requireAuthUser } from '@/lib/judicial-caso-access'
 import { getAuthServerClient } from '@/lib/supabase-auth-server'
@@ -284,7 +285,15 @@ export async function POST(request: Request) {
     try {
       await runInitialCejSync(caso, scrapeCEJ);
     } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (/parte no coincide|no se encontraron|error de cone/i.test(msg)) {
+        const db = await getAuthServerClient(); await db.from('casos').delete().eq('id', caso.id);
+        return Response.json({ error: 'No se encontraron registros con los datos ingresados', detail: msg }, { status: 400 });
+      }
       console.error('[API] runInitialCejSync error:', err);
+    }
+    if (caso.whatsapp_number && caso.whatsapp_number.trim() !== '') {
+      enviarSuscripcionWhatsApp(caso.whatsapp_number, caso.alias || caso.cliente || 'Sin alias', caso.numero_expediente).catch(e => console.error(e));
     }
 
     return Response.json(
@@ -305,4 +314,6 @@ export async function POST(request: Request) {
     )
   }
 }
+
+
 

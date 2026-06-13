@@ -140,6 +140,7 @@ export default function JudicialDashboardPage() {
     email: '',
     polling_frequency_hours: 4,
   });
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStatus, setSubmitStatus] = useState('');
 
   // Refs for auto-advance in tab 1
@@ -267,6 +268,8 @@ export default function JudicialDashboardPage() {
       email: '',
       polling_frequency_hours: 4,
     });
+
+    setIsSubmitting(false);
     setSubmitStatus('');
   }
 
@@ -288,7 +291,8 @@ export default function JudicialDashboardPage() {
       numero_expediente = form.filtro_numero;
     }
 
-    setSubmitStatus('?? Extrayendo movimientos de CEJ en tiempo real (Puede tardar entre 20 a 45 segs. Por favor espera)...');
+    setIsSubmitting(true);
+    setSubmitStatus('');
 
     const payload: Record<string, unknown> = {
       numero_expediente,
@@ -327,10 +331,12 @@ export default function JudicialDashboardPage() {
     const data = await res.json() as Record<string, unknown>;
 
     if (data.portalDown) {
-      setSubmitStatus('⚠️ Proceso guardado. CEJ no disponible — revisión automática pendiente.');
-    } else if (data.captchaFailed) {
-      setSubmitStatus('⚠️ Proceso guardado. Captcha no resuelto — reintentará en próxima revisión.');
-    } else { setSubmitStatus('? Proceso y movimientos obtenidos satisfactoriamente.'); } const delay = 2500; setTimeout(() => {
+        setSubmitStatus('⚠️ Proceso guardado. CEJ no disponible.');
+      } else if (data.captchaFailed) {
+        setSubmitStatus('⚠️ Proceso guardado. Captcha no resuelto.');
+      } else {
+        setSubmitStatus('✅ Proceso y movimientos obtenidos satisfactoriamente.');
+      } const delay = 2500; setTimeout(() => {
       setDrawerOpen(false);
       resetForm();
       if (!data.syncPending) void loadData();
@@ -465,7 +471,7 @@ export default function JudicialDashboardPage() {
 
         <div style={{ marginTop: '32px', background: 'var(--surface)', border: '1px solid var(--line)', overflowX: 'auto' }}>
           <div style={{ display: 'grid', gridTemplateColumns: '72px 100px 1.4fr 180px 130px 150px 90px 110px 120px', minWidth: '900px', padding: '12px 24px', background: 'var(--paper-dark)', fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--muted)', gap: '12px' }}>
-            <span>ESTADO</span><span>TIPO</span><span>ALIAS / CLIENTE</span><span>EXPEDIENTE</span><span>ÚLTIMA ACTUALIZ.</span><span>PRÓXIMO EVENTO</span><span>PRIORIDAD</span><span>CEJ</span><span>GESTIÓN</span>
+            <span>ESTADO</span><span>TIPO</span><span>ALIAS / CLIENTE</span><span>EXPEDIENTE</span><span>ÚLTIMA ACTUALIZ.</span><span>PRÓXIMO EVENTO</span><span>PRIORIDAD</span><span>GESTIÓN</span>
           </div>
 
           {(!Array.isArray(casos) || casos.length === 0) ? (
@@ -483,7 +489,17 @@ export default function JudicialDashboardPage() {
             const eventAlias = c.alias || c.cliente || 'Sin alias';
 
             return (
-              <div key={c.id} onClick={() => (window.location.href = `/judicial/${c.id}`)} style={{ display: 'grid', gridTemplateColumns: '72px 100px 1.4fr 180px 130px 150px 90px 110px 120px', minWidth: '900px', padding: '0 24px', minHeight: '66px', alignItems: 'center', borderBottom: '1px solid var(--line-faint)', gap: '12px', cursor: 'pointer' }}>
+              <div 
+                key={c.id} 
+                onClick={() => (window.location.href = `/judicial/${c.id}`)} 
+                style={{ display: 'grid', gridTemplateColumns: '72px 100px 1.4fr 180px 130px 150px 90px 110px 120px', minWidth: '900px', padding: '0 24px', minHeight: '66px', alignItems: 'center', borderBottom: '1px solid var(--line-faint)', gap: '12px', cursor: 'pointer' }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = '#f0f0f0';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent';
+                }}
+                >
                 <div>
                   <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '50%', background: urgentNew ? '#991b1b' : normalNew ? '#d97706' : hasAny ? '#166534' : '#9ca3af', animation: urgentNew ? 'pulse 1.5s infinite' : undefined }} />
                 </div>
@@ -528,20 +544,17 @@ export default function JudicialDashboardPage() {
                     {c.prioridad}
                   </button>
                 </div>
-                <div>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); void pollNow(c.id); }}
-                    disabled={pollingId === c.id}
-                    style={{ background: 'transparent', border: '1px solid var(--line-strong)', borderRadius: 0, padding: '7px 10px', fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', cursor: pollingId === c.id ? 'not-allowed' : 'pointer', opacity: pollingId === c.id ? 0.6 : 1 }}
-                  >
-                    {pollingId === c.id ? '...' : 'Revisar ahora'}
-                  </button>
-                </div>
                 <div onClick={e => e.stopPropagation()} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <button
                     type="button"
                     onClick={() => void archiveCasoRow(c.id)}
                     style={{ background: 'transparent', border: '1px solid var(--line-strong)', padding: '5px 8px', fontFamily: 'var(--font-mono)', fontSize: '9px', textTransform: 'uppercase', cursor: 'pointer', color: 'var(--muted)' }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = '#adb5bd';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'transparent';
+                    }}
                   >
                     Archivar
                   </button>
@@ -549,6 +562,12 @@ export default function JudicialDashboardPage() {
                     type="button"
                     onClick={() => void eliminarCasoRow(c.id)}
                     style={{ background: 'transparent', border: '1px solid #991b1b', padding: '5px 8px', fontFamily: 'var(--font-mono)', fontSize: '9px', textTransform: 'uppercase', cursor: 'pointer', color: '#991b1b' }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = '#ff8787';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'transparent';
+                    }}
                   >
                     Eliminar
                   </button>
@@ -785,8 +804,55 @@ export default function JudicialDashboardPage() {
                 <option value={24}>Cada 24h</option>
               </select>
 
-              {submitStatus ? (
-                <div style={{
+              {isSubmitting ? (
+              <div
+                style={{
+                  padding: '24px',
+                  border: '1px solid var(--line)',
+                  background: 'var(--surface)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: '12px',
+                  marginTop: 8,
+                }}
+              >
+                <div
+                  style={{
+                    width: '28px',
+                    height: '28px',
+                    border: '3px solid #e5e7eb',
+                    borderTop: '3px solid #2563eb',
+                    borderRadius: '50%',
+                    animation: 'spin 0.8s linear infinite',
+                  }}
+                />
+
+                <div
+                  style={{
+                    fontFamily: 'var(--font-body)',
+                    fontSize: '12px',
+                    color: 'var(--muted)',
+                    textAlign: 'center',
+                    lineHeight: 1.5,
+                  }}
+                >
+                  Extrayendo movimientos de CEJ en tiempo real...
+                  <br />
+                  Este proceso puede tardar varios minutos
+                </div>
+
+                <style jsx>{`
+                  @keyframes spin {
+                    to {
+                      transform: rotate(360deg);
+                    }
+                  }
+                `}</style>
+              </div>
+            ) : submitStatus ? (
+              <div
+                style={{
                   padding: '16px',
                   border: '1px solid var(--line)',
                   background: 'var(--surface)',
@@ -794,17 +860,30 @@ export default function JudicialDashboardPage() {
                   fontSize: '13px',
                   color: 'var(--ink)',
                   marginTop: 8,
-                }}>
-                  {submitStatus}
-                </div>
-              ) : (
-                <button
-                  type="button" onClick={() => void createCaso()}
-                  style={{ width: '100%', background: 'var(--ink)', color: 'var(--paper)', border: 'none', borderRadius: 0, padding: '16px', fontFamily: 'var(--font-body)', fontSize: '14px', cursor: 'pointer', marginTop: 8 }}
-                >
-                  Comenzar seguimiento →
-                </button>
-              )}
+                }}
+              >
+                {submitStatus}
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => void createCaso()}
+                style={{
+                  width: '100%',
+                  background: 'var(--ink)',
+                  color: 'var(--paper)',
+                  border: 'none',
+                  borderRadius: 0,
+                  padding: '16px',
+                  fontFamily: 'var(--font-body)',
+                  fontSize: '14px',
+                  cursor: 'pointer',
+                  marginTop: 8,
+                }}
+              >
+                Comenzar seguimiento →
+              </button>
+            )}
             </div>
           </>
         )}
