@@ -6,6 +6,7 @@ import { getAuthServerClient } from '@/lib/supabase-auth-server'
 import { clasificarMovimientoCEJ } from '@/lib/ai-service'
 import { enviarAlertaMovimiento } from '@/lib/alert-service'
 import { getAlertaConfigParaCaso, logNotificacionJudicial } from '@/lib/judicial-db'
+import { enviarAlertaJudicialConIA } from '@/lib/judicial-alerts'
 
 export const runtime = 'nodejs'
 
@@ -172,9 +173,11 @@ async function runInitialCejSync(caso: Caso, scrapeCEJ: ScrapeFn) {
             nivelUrgencia: nivel,
             sugerenciaIA: cls.sugerencia || 'Revisar movimiento en CEJ.',
             casoNombre: caso.alias || caso.cliente || undefined,
+            documentoUrl: mov.documentoUrl || null,
           },
           cfg
         )
+
         for (const canal of alertaResult.canalesExitosos) {
           await logNotificacionJudicial(caso.id, canal, descripcion, nivel, cls.sugerencia || '', true)
         }

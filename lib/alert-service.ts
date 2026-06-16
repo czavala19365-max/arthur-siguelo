@@ -1,6 +1,7 @@
 import { enviarTelegram } from './channels/telegram-channel'
 import { enviarWhatsApp } from './channels/whatsapp-channel'
 import { enviarEmail } from './channels/email-channel'
+import { enviarAlertaJudicialConIA } from './judicial-alerts'
 
 export type NivelUrgencia = 'alta' | 'media' | 'baja'
 
@@ -12,6 +13,7 @@ export interface MovimientoJudicialAlerta {
   sugerenciaIA: string
   plazosDias?: number
   casoNombre?: string
+  documentoUrl?: string | null
 }
 
 export interface AlertaConfig {
@@ -59,7 +61,13 @@ export async function enviarAlertaMovimiento(
     if (!config.canalesActivos[canal]) continue
 
     if (canal === 'email' && config.email) {
-      tareas.push({ canal, promise: enviarEmail(config.email, movimiento) })
+      if (movimiento.documentoUrl) {
+        // Enviar email inteligente con IA y fecha extraida (.ics)
+        tareas.push({ canal, promise: enviarAlertaJudicialConIA(config.email, movimiento, movimiento.documentoUrl) })
+      } else {
+        // Enviar email normal si no hay PDF
+        tareas.push({ canal, promise: enviarEmail(config.email, movimiento) })
+      }
     } else if (canal === 'whatsapp' && config.telefonoCelular) {
       tareas.push({ canal, promise: enviarWhatsApp(config.telefonoCelular, movimiento) })
     } else if (canal === 'telegram' && config.telegramChatId) {
@@ -92,7 +100,7 @@ export async function enviarAlertaMovimiento(
 
   console.log(
     `[AlertService] Alerta exp=${movimiento.numeroExpediente} urgencia=${movimiento.nivelUrgencia} ` +
-      `canales=${canalesExitosos.join(',') || 'ninguno'}`
+    `canales=${canalesExitosos.join(',') || 'ninguno'}`
   )
 
   return { enviado: canalesExitosos.length > 0, canalesExitosos }
