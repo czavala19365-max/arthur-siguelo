@@ -1,7 +1,9 @@
 import {
   AlignmentType,
+  BorderStyle,
   Document,
   LevelFormat,
+  LineRuleType,
   Packer,
   PageBreak,
   Paragraph,
@@ -9,48 +11,73 @@ import {
   TableCell,
   TableRow,
   TextRun,
+  UnderlineType,
   WidthType,
-  BorderStyle,
 } from 'docx'
 import type { DatosJGA, SeccionActa } from '../types'
 import { getFirmantesTabla } from '../sections/signatures'
 
+// --- Formato corporativo ---
+// Página: A4 (Letter/A4 permitidos), márgenes de 1 pulgada (2.54 cm) en los 4 lados.
+const ONE_INCH = 1440 // twips
+const HANGING = 720 // 1.27 cm / 0.5 pulgada en twips
+
 const PAGE_CONFIG = {
-  size: { width: 11906, height: 16838 },
-  margin: { top: 1701, bottom: 1418, left: 1701, right: 1418 },
+  size: { width: 11906, height: 16838 }, // A4
+  margin: { top: ONE_INCH, bottom: ONE_INCH, left: ONE_INCH, right: ONE_INCH },
 }
 
-const FONT = 'Times New Roman'
-const BODY_SIZE = 24
-const TITLE_SIZE = 28
-const SECTION_SIZE = 24
+// Fuente y métricas corporativas (Estilo 'Normal')
+const FONT = 'Arial'
+const SIZE = 22 // 11 pt (half-points)
+const LINE = 276 // interlineado 1.15 (240 = sencillo)
+const AFTER = 240 // espaciado posterior 12 pt (twips)
+const COLOR = '000000'
 
-function bodyParagraph(text: string, opts?: { bold?: boolean; center?: boolean; indent?: boolean }): Paragraph {
+const NORMAL_SPACING = { line: LINE, lineRule: LineRuleType.AUTO, after: AFTER }
+
+function bodyParagraph(text: string, opts?: { center?: boolean; indent?: boolean }): Paragraph {
   return new Paragraph({
     alignment: opts?.center ? AlignmentType.CENTER : AlignmentType.JUSTIFIED,
-    spacing: { line: 360, after: 120 },
-    indent: opts?.indent !== false && !opts?.center ? { firstLine: 720 } : undefined,
+    spacing: NORMAL_SPACING,
+    indent: opts?.indent !== false && !opts?.center ? { firstLine: HANGING } : undefined,
+    children: [new TextRun({ text, font: FONT, size: SIZE, color: COLOR })],
+  })
+}
+
+// Título Principal: Arial 11, Negrita, Subrayado, MAYÚSCULAS, Centrado.
+function mainTitle(text: string, opts?: { after?: number }): Paragraph {
+  return new Paragraph({
+    alignment: AlignmentType.CENTER,
+    spacing: { line: LINE, lineRule: LineRuleType.AUTO, after: opts?.after ?? AFTER },
     children: [
       new TextRun({
-        text,
+        text: text.toUpperCase(),
         font: FONT,
-        size: opts?.bold ? SECTION_SIZE : BODY_SIZE,
-        bold: opts?.bold,
+        size: SIZE,
+        bold: true,
+        underline: { type: UnderlineType.SINGLE },
+        color: COLOR,
       }),
     ],
   })
 }
 
+// Títulos de Sección (ej. "I.- INTRODUCCIÓN"): Arial 11, Negrita, Subrayado,
+// MAYÚSCULAS, Izquierda, con tabulación colgante a 1.27 cm.
 function sectionTitle(text: string): Paragraph {
   return new Paragraph({
-    alignment: AlignmentType.CENTER,
-    spacing: { before: 240, after: 120, line: 360 },
+    alignment: AlignmentType.LEFT,
+    spacing: { before: AFTER, after: AFTER, line: LINE, lineRule: LineRuleType.AUTO },
+    indent: { left: HANGING, hanging: HANGING },
     children: [
       new TextRun({
         text: text.toUpperCase(),
         font: FONT,
-        size: SECTION_SIZE,
+        size: SIZE,
         bold: true,
+        underline: { type: UnderlineType.SINGLE },
+        color: COLOR,
       }),
     ],
   })
@@ -86,18 +113,18 @@ function buildSignatureTable(datos: DatosJGA): Table {
                 alignment: AlignmentType.CENTER,
                 spacing: { after: 60 },
                 border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: '000000' } },
-                children: [new TextRun({ text: ' ', font: FONT, size: BODY_SIZE })],
+                children: [new TextRun({ text: ' ', font: FONT, size: SIZE, color: COLOR })],
               }),
               new Paragraph({
                 alignment: AlignmentType.CENTER,
-                children: [new TextRun({ text: f.nombre, font: FONT, size: BODY_SIZE, bold: true })],
+                children: [new TextRun({ text: f.nombre, font: FONT, size: SIZE, bold: true, color: COLOR })],
               }),
               new Paragraph({
                 alignment: AlignmentType.CENTER,
-                children: [new TextRun({ text: f.cargo, font: FONT, size: BODY_SIZE })],
+                children: [new TextRun({ text: f.cargo, font: FONT, size: SIZE, color: COLOR })],
               }),
             ]
-          : [new Paragraph({ children: [new TextRun({ text: '' })] })],
+          : [new Paragraph({ children: [new TextRun({ text: '', font: FONT, size: SIZE })] })],
       })
 
     rows.push(new TableRow({ children: [cell(left), cell(right)] }))
@@ -114,27 +141,10 @@ export async function generarDocxJGA(secciones: SeccionActa[], datos: DatosJGA):
 
   for (const seccion of secciones) {
     if (seccion.tipo === 'encabezado') {
-      const lines = seccion.contenido.split('\n')
-      children.push(
-        new Paragraph({
-          alignment: AlignmentType.CENTER,
-          spacing: { after: 120, line: 360 },
-          children: [
-            new TextRun({ text: lines[0] ?? '', font: FONT, size: TITLE_SIZE, bold: true }),
-          ],
-        }),
-      )
-      if (lines[1]) {
-        children.push(
-          new Paragraph({
-            alignment: AlignmentType.CENTER,
-            spacing: { after: 360, line: 360 },
-            children: [
-              new TextRun({ text: lines[1], font: FONT, size: TITLE_SIZE, bold: true }),
-            ],
-          }),
-        )
-      }
+      const lines = seccion.contenido.split('\n').filter(Boolean)
+      lines.forEach((line, idx) => {
+        children.push(mainTitle(line, { after: idx === lines.length - 1 ? 360 : AFTER }))
+      })
       continue
     }
 
@@ -151,22 +161,8 @@ export async function generarDocxJGA(secciones: SeccionActa[], datos: DatosJGA):
       continue
     }
 
-    if (seccion.titulo && seccion.tipo !== 'desarrollo') {
+    if (seccion.titulo) {
       children.push(sectionTitle(seccion.titulo))
-    } else if (seccion.tipo === 'desarrollo' && seccion.titulo) {
-      children.push(
-        new Paragraph({
-          spacing: { before: 240, after: 120, line: 360 },
-          children: [
-            new TextRun({
-              text: seccion.titulo,
-              font: FONT,
-              size: SECTION_SIZE,
-              bold: true,
-            }),
-          ],
-        }),
-      )
     }
 
     if (seccion.tipo === 'agenda') {
@@ -175,9 +171,9 @@ export async function generarDocxJGA(secciones: SeccionActa[], datos: DatosJGA):
         children.push(
           new Paragraph({
             alignment: AlignmentType.JUSTIFIED,
-            spacing: { line: 360, after: 60 },
-            bullet: { level: 0 },
-            children: [new TextRun({ text: item, font: FONT, size: BODY_SIZE })],
+            spacing: NORMAL_SPACING,
+            numbering: { reference: 'agenda-bullets', level: 0 },
+            children: [new TextRun({ text: item, font: FONT, size: SIZE, color: COLOR })],
           }),
         )
       }
@@ -202,9 +198,11 @@ export async function generarDocxJGA(secciones: SeccionActa[], datos: DatosJGA):
             {
               level: 0,
               format: LevelFormat.BULLET,
-              text: '•',
+              // Viñeta en el margen izquierdo (0 cm) y texto con sangría
+              // francesa/colgante a 1.27 cm (0.5").
+              text: '\u2022',
               alignment: AlignmentType.LEFT,
-              style: { paragraph: { indent: { left: 720, hanging: 360 } } },
+              style: { paragraph: { indent: { left: HANGING, hanging: HANGING } } },
             },
           ],
         },
@@ -213,11 +211,11 @@ export async function generarDocxJGA(secciones: SeccionActa[], datos: DatosJGA):
     styles: {
       default: {
         document: {
-          run: { font: FONT, size: BODY_SIZE },
-          paragraph: { spacing: { line: 360, after: 120 } },
+          run: { font: FONT, size: SIZE, color: COLOR },
+          paragraph: { alignment: AlignmentType.JUSTIFIED, spacing: NORMAL_SPACING },
         },
         heading1: {
-          run: { font: FONT, size: TITLE_SIZE, bold: true },
+          run: { font: FONT, size: SIZE, bold: true, underline: { type: UnderlineType.SINGLE }, color: COLOR },
           paragraph: { alignment: AlignmentType.CENTER },
         },
       },
