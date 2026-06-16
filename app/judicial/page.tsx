@@ -142,6 +142,8 @@ export default function JudicialDashboardPage() {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStatus, setSubmitStatus] = useState('');
+  const [progress, setProgress] = useState(0);
+  const progressIntervalRef = useRef<number | null>(null);
 
   // Refs for auto-advance in tab 1
   const refSec = useRef<HTMLInputElement>(null);
@@ -243,6 +245,10 @@ export default function JudicialDashboardPage() {
         clearTimeout(cejSyncTimeoutRef.current);
         cejSyncTimeoutRef.current = null;
       }
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+        progressIntervalRef.current = null;
+      }
     },
     []
   );
@@ -271,6 +277,7 @@ export default function JudicialDashboardPage() {
 
     setIsSubmitting(false);
     setSubmitStatus('');
+    setProgress(0);
   }
 
   function advanceField(
@@ -293,6 +300,28 @@ export default function JudicialDashboardPage() {
 
     setIsSubmitting(true);
     setSubmitStatus('');
+    setProgress(0);
+
+    // Inicia animación de progreso realista y acorde al scraping
+    if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
+    let stage = 0; // 0-2: inicial lento, 2-50: medio, 50+: muy lento
+    progressIntervalRef.current = window.setInterval(() => {
+      setProgress(prev => {
+        let increment = 0;
+        if (prev < 25) {
+          // Fase inicial: subida lenta (simula bloqueos iniciales del sitio)
+          increment = 0.8 + Math.random() * 1.2;
+        } else if (prev < 70) {
+          // Fase media: progreso moderado
+          increment = 1.5 + Math.random() * 1.8;
+        } else {
+          // Fase final: muy lenta, casi imperceptible pero constante
+          increment = 0.5 + Math.random() * 0.8;
+        }
+        const newProgress = Math.min(prev + increment, 99);
+        return newProgress;
+      });
+    }, 800);
 
     const payload: Record<string, unknown> = {
       numero_expediente,
@@ -324,21 +353,29 @@ export default function JudicialDashboardPage() {
       } catch {
         if (text) msg = `${msg} (${text.slice(0, 120)})`;
       }
+      if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
+      setProgress(0);
       setSubmitStatus(msg);
+      setIsSubmitting(false);
       return;
     }
 
     const data = await res.json() as Record<string, unknown>;
 
+    // Limpia el intervalo de progreso y lleva a 100%
+    if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
+    setProgress(100);
+
     if (data.portalDown) {
-        setSubmitStatus('⚠️ Proceso guardado. CEJ no disponible.');
-      } else if (data.captchaFailed) {
-        setSubmitStatus('⚠️ Proceso guardado. Captcha no resuelto.');
-      } else {
-        setSubmitStatus('✅ Proceso y movimientos obtenidos satisfactoriamente.');
-      } const delay = 2500; setTimeout(() => {
+      setSubmitStatus('⚠️ Proceso guardado. CEJ no disponible.');
+    } else if (data.captchaFailed) {
+      setSubmitStatus('⚠️ Proceso guardado. Captcha no resuelto.');
+    } else {
+      setSubmitStatus('✅ Proceso y movimientos obtenidos satisfactoriamente.');
+    } const delay = 2500; setTimeout(() => {
       setDrawerOpen(false);
       resetForm();
+      setProgress(0);
       if (!data.syncPending) void loadData();
     }, delay);
   }
@@ -489,9 +526,9 @@ export default function JudicialDashboardPage() {
             const eventAlias = c.alias || c.cliente || 'Sin alias';
 
             return (
-              <div 
-                key={c.id} 
-                onClick={() => (window.location.href = `/judicial/${c.id}`)} 
+              <div
+                key={c.id}
+                onClick={() => (window.location.href = `/judicial/${c.id}`)}
                 style={{ display: 'grid', gridTemplateColumns: '72px 100px 1.4fr 180px 130px 150px 90px 110px 120px', minWidth: '900px', padding: '0 24px', minHeight: '66px', alignItems: 'center', borderBottom: '1px solid var(--line-faint)', gap: '12px', cursor: 'pointer' }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.background = '#f0f0f0';
@@ -499,7 +536,7 @@ export default function JudicialDashboardPage() {
                 onMouseLeave={(e) => {
                   e.currentTarget.style.background = 'transparent';
                 }}
-                >
+              >
                 <div>
                   <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '50%', background: urgentNew ? '#991b1b' : normalNew ? '#d97706' : hasAny ? '#166534' : '#9ca3af', animation: urgentNew ? 'pulse 1.5s infinite' : undefined }} />
                 </div>
@@ -805,85 +842,145 @@ export default function JudicialDashboardPage() {
               </select>
 
               {isSubmitting ? (
-              <div
-                style={{
-                  padding: '24px',
-                  border: '1px solid var(--line)',
-                  background: 'var(--surface)',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: '12px',
-                  marginTop: 8,
-                }}
-              >
                 <div
                   style={{
-                    width: '28px',
-                    height: '28px',
-                    border: '3px solid #e5e7eb',
-                    borderTop: '3px solid #2563eb',
-                    borderRadius: '50%',
-                    animation: 'spin 0.8s linear infinite',
-                  }}
-                />
-
-                <div
-                  style={{
-                    fontFamily: 'var(--font-body)',
-                    fontSize: '12px',
-                    color: 'var(--muted)',
-                    textAlign: 'center',
-                    lineHeight: 1.5,
+                    padding: '24px',
+                    border: '1px solid var(--line)',
+                    background: 'var(--surface)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '12px',
+                    marginTop: 8,
                   }}
                 >
-                  Extrayendo movimientos de CEJ en tiempo real...
-                  <br />
-                  Este proceso puede tardar varios minutos
-                </div>
+                  {/* Barra de progreso con shimmer */}
+                  <div
+                    style={{
+                      width: '100%',
+                      height: '10px',
+                      background: '#e5e7eb',
+                      borderRadius: '5px',
+                      overflow: 'hidden',
+                      position: 'relative',
+                    }}
+                  >
+                    <div
+                      style={{
+                        height: '100%',
+                        background: 'linear-gradient(90deg, #2563eb 0%, #1d4ed8 100%)',
+                        width: `${progress}%`,
+                        transition: 'width 0.4s ease-out',
+                        borderRadius: '5px',
+                        boxShadow: '0 0 12px rgba(37, 99, 235, 0.5)',
+                        position: 'relative',
+                        animation: 'shimmer-progress 1.5s infinite',
+                      }}
+                    >
+                      {/* Efecto de brillo pasando por la barra */}
+                      <div
+                        style={{
+                          position: 'absolute',
+                          top: 0,
+                          left: '-100%',
+                          width: '100%',
+                          height: '100%',
+                          background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent)',
+                          animation: 'shimmer-wave 1.2s infinite',
+                        }}
+                      />
+                    </div>
+                  </div>
 
-                <style jsx>{`
-                  @keyframes spin {
-                    to {
-                      transform: rotate(360deg);
+                  {/* Texto con porcentaje y estado */}
+                  <div
+                    style={{
+                      fontFamily: 'var(--font-body)',
+                      fontSize: '13px',
+                      color: 'var(--ink)',
+                      fontWeight: 600,
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <span>{Math.round(progress)}% - Extrayendo movimientos de CEJ</span>
+                    <span
+                      style={{
+                        fontSize: '11px',
+                        fontWeight: 'normal',
+                        color: '#2563eb',
+                        animation: 'pulse-dot 1s infinite',
+                      }}
+                    >
+                      ● En progreso
+                    </span>
+                  </div>
+
+                  <div
+                    style={{
+                      fontFamily: 'var(--font-body)',
+                      fontSize: '12px',
+                      color: 'var(--muted)',
+                      textAlign: 'left',
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    Este proceso puede tardar varios minutos. La página requiere validaciones que pueden ralentizar la búsqueda. Por favor, no cierre esta ventana.
+                  </div>
+
+                  <style jsx>{`
+                    @keyframes shimmer-wave {
+                      0% {
+                        left: -100%;
+                      }
+                      100% {
+                        left: 100%;
+                      }
                     }
-                  }
-                `}</style>
-              </div>
-            ) : submitStatus ? (
-              <div
-                style={{
-                  padding: '16px',
-                  border: '1px solid var(--line)',
-                  background: 'var(--surface)',
-                  fontFamily: 'var(--font-body)',
-                  fontSize: '13px',
-                  color: 'var(--ink)',
-                  marginTop: 8,
-                }}
-              >
-                {submitStatus}
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => void createCaso()}
-                style={{
-                  width: '100%',
-                  background: 'var(--ink)',
-                  color: 'var(--paper)',
-                  border: 'none',
-                  borderRadius: 0,
-                  padding: '16px',
-                  fontFamily: 'var(--font-body)',
-                  fontSize: '14px',
-                  cursor: 'pointer',
-                  marginTop: 8,
-                }}
-              >
-                Comenzar seguimiento →
-              </button>
-            )}
+                    @keyframes pulse-dot {
+                      0%, 100% {
+                        opacity: 1;
+                      }
+                      50% {
+                        opacity: 0.4;
+                      }
+                    }
+                  `}</style>
+                </div>
+              ) : submitStatus ? (
+                <div
+                  style={{
+                    padding: '16px',
+                    border: '1px solid var(--line)',
+                    background: 'var(--surface)',
+                    fontFamily: 'var(--font-body)',
+                    fontSize: '13px',
+                    color: 'var(--ink)',
+                    marginTop: 8,
+                  }}
+                >
+                  {submitStatus}
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => void createCaso()}
+                  style={{
+                    width: '100%',
+                    background: 'var(--ink)',
+                    color: 'var(--paper)',
+                    border: 'none',
+                    borderRadius: 0,
+                    padding: '16px',
+                    fontFamily: 'var(--font-body)',
+                    fontSize: '14px',
+                    cursor: 'pointer',
+                    marginTop: 8,
+                  }}
+                >
+                  Comenzar seguimiento →
+                </button>
+              )}
             </div>
           </>
         )}

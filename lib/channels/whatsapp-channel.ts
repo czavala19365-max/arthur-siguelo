@@ -32,7 +32,7 @@ function formatWhatsAppMessage(m: MovimientoJudicialAlerta): string {
   }
 
   lines.push('')
-  lines.push('Actuacion:')
+  lines.push('Ultima actuación:')
   lines.push(m.descripcion)
 
   if (m.plazosDias !== undefined) {
