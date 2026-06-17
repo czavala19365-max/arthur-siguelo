@@ -1,6 +1,7 @@
 import { Resend } from 'resend'
 import type { MovimientoJudicialAlerta, NivelUrgencia } from '../alert-service'
 import { getAppBaseUrl } from '@/lib/app-url'
+import { generateICalendar, icsToBuffer } from '../calendar-ics'
 
 function buildSubject(m: MovimientoJudicialAlerta): string {
   const num = m.numeroExpediente
@@ -19,7 +20,7 @@ function urgenciaHtml(nivel: NivelUrgencia): string {
   return ''
 }
 
-function buildHtml(m: MovimientoJudicialAlerta): string {
+function buildHtml(m: MovimientoJudicialAlerta, fechaPendiente?: { fecha: Date; descripcion: string }): string {
   const base = getAppBaseUrl()
   const casoLine = m.casoNombre
     ? `<tr><td style="padding:4px 0;font-size:14px;color:#444;">Caso: ${m.casoNombre}</td></tr>`
@@ -28,6 +29,21 @@ function buildHtml(m: MovimientoJudicialAlerta): string {
     m.plazosDias !== undefined
       ? `<tr><td style="padding:12px 0 4px;font-size:14px;color:#444;">Plazo: ${m.plazosDias} días restantes</td></tr>`
       : ''
+
+  const fechaPendienteHtml = fechaPendiente
+    ? `
+        <tr>
+          <td style="padding:20px 32px 0;">
+            <div style="border-left:4px solid #f39c12;background:rgba(243,156,18,0.08);padding:16px 20px;">
+              <div style="font-family:'Courier New',monospace;font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:#d68910;margin-bottom:6px;">⏰ FECHA PENDIENTE IDENTIFICADA</div>
+              <p style="margin:6px 0;color:#0f0f0f;font-size:14px;line-height:1.5;"><strong>${fechaPendiente.descripcion}</strong></p>
+              <p style="margin:6px 0;color:#0f0f0f;font-size:14px;"><strong>Fecha: ${new Date(fechaPendiente.fecha).toLocaleDateString('es-PE', { year: 'numeric', month: 'long', day: 'numeric' })}</strong></p>
+              <p style="margin:12px 0 0;color:#6b6560;font-size:12px;">Haz clic en el botón "Agregar a calendario" en tu cliente de email para programar automáticamente este evento.</p>
+            </div>
+          </td>
+        </tr>
+      `
+    : ''
 
   return `<!DOCTYPE html>
 <html lang="es">
@@ -65,6 +81,7 @@ function buildHtml(m: MovimientoJudicialAlerta): string {
             </table>
           </td>
         </tr>
+        ${fechaPendienteHtml}
         <tr>
           <td style="padding:20px 32px 0;">
             <div style="border-left:4px solid #1e8449;background:rgba(39,174,96,0.06);padding:16px 20px;">
@@ -90,7 +107,7 @@ function buildHtml(m: MovimientoJudicialAlerta): string {
 </html>`
 }
 
-function buildText(m: MovimientoJudicialAlerta): string {
+function buildText(m: MovimientoJudicialAlerta, fechaPendiente?: { fecha: Date; descripcion: string }): string {
   const lines: string[] = []
   if (m.nivelUrgencia === 'alta') lines.push('URGENCIA ALTA\n')
   else if (m.nivelUrgencia === 'media') lines.push('Urgencia media\n')
@@ -101,6 +118,12 @@ function buildText(m: MovimientoJudicialAlerta): string {
   lines.push('')
   lines.push(`Actuación: ${m.descripcion}`)
   if (m.plazosDias !== undefined) lines.push(`Plazo: ${m.plazosDias} días restantes`)
+  if (fechaPendiente) {
+    lines.push('')
+    lines.push('⏰ FECHA PENDIENTE IDENTIFICADA')
+    lines.push(fechaPendiente.descripcion)
+    lines.push(`Fecha: ${new Date(fechaPendiente.fecha).toLocaleDateString('es-PE', { year: 'numeric', month: 'long', day: 'numeric' })}`)
+  }
   lines.push('')
   lines.push(`Recomendación Arthur-IA: ${m.sugerenciaIA}`)
   return lines.join('\n')
@@ -108,7 +131,8 @@ function buildText(m: MovimientoJudicialAlerta): string {
 
 export async function enviarEmail(
   destinatario: string,
-  movimiento: MovimientoJudicialAlerta
+  movimiento: MovimientoJudicialAlerta,
+  fechaPendiente?: { fecha: Date; descripcion: string }
 ): Promise<boolean> {
   const apiKey = process.env.RESEND_API_KEY_JUDICIAL || process.env.RESEND_API_KEY
   const fromEmail = process.env.RESEND_FROM_EMAIL || 'alertas@arthur-legal.com'
@@ -120,20 +144,46 @@ export async function enviarEmail(
 
   try {
     const resend = new Resend(apiKey)
-    const { error } = await resend.emails.send({
+
+    // Generar iCalendar si existe fecha pendiente
+    let attachments: Array<{ filename: string; content: string }> | undefined
+
+    if (fechaPendiente) {
+      const icalendarEvent = generateICalendar({
+        title: `Plazo Judicial: ${movimiento.casoNombre || movimiento.numeroExpediente}`,
+        description: fechaPendiente.descripcion,
+        startDate: new Date(fechaPendiente.fecha),
+        // Añadir 1 día para que sea end date (eventos de un día completo)
+        endDate: new Date(new Date(fechaPendiente.fecha).getTime() + 24 * 60 * 60 * 1000),
+        attendeeEmail: destinatario,
+      })
+
+      attachments = [
+        {
+          filename: `plazo-judicial-${movimiento.numeroExpediente.replace(/\//g, '-')}.ics`,
+          content: icalendarEvent,
+        },
+      ]
+    }
+
+    const { data, error } = await resend.emails.send({
       from: `Arthur-IA Legal <${fromEmail}>`,
       to: destinatario,
       subject: buildSubject(movimiento),
-      html: buildHtml(movimiento),
-      text: buildText(movimiento),
+      html: buildHtml(movimiento, fechaPendiente),
+      text: buildText(movimiento, fechaPendiente),
+      attachments,
     })
 
     if (error) {
-      console.error('[Email] Resend:', error.message)
+      console.error('[Email] Error de Resend:', error.name, error.message)
+      if (error.name === 'validation_error' && error.message.includes('testing emails')) {
+        console.warn('\n⚠️ ATENCIÓN: Resend está en modo prueba. Solo puedes enviar al email registrado en Resend. Si enviaste a otro correo, Resend lo bloquerá.\n')
+      }
       return false
     }
 
-    console.log(`[Email] Enviado a ${destinatario}`)
+    console.log(`[Email] Enviado a ${destinatario}${fechaPendiente ? ' (con .ics adjunto)' : ''} (ID: ${data?.id})`)
     return true
   } catch (err) {
     console.error('[Email] Error:', err instanceof Error ? err.message : String(err))

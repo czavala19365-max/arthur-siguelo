@@ -1,10 +1,12 @@
-import { after, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
+import { enviarSuscripcionWhatsApp } from '@/lib/channels/whatsapp-channel'
 import { addMovimientoJudicial, createCaso, getAllCasosActivosForUser, updateCaso, updateMovimientoJudicial, type Caso } from '@/lib/judicial-db'
 import { isUserAdmin, requireAuthUser } from '@/lib/judicial-caso-access'
 import { getAuthServerClient } from '@/lib/supabase-auth-server'
 import { clasificarMovimientoCEJ } from '@/lib/ai-service'
 import { enviarAlertaMovimiento } from '@/lib/alert-service'
 import { getAlertaConfigParaCaso, logNotificacionJudicial } from '@/lib/judicial-db'
+import { enviarAlertaJudicialConIA } from '@/lib/judicial-alerts'
 
 export const runtime = 'nodejs'
 
@@ -171,9 +173,11 @@ async function runInitialCejSync(caso: Caso, scrapeCEJ: ScrapeFn) {
             nivelUrgencia: nivel,
             sugerenciaIA: cls.sugerencia || 'Revisar movimiento en CEJ.',
             casoNombre: caso.alias || caso.cliente || undefined,
+            documentoUrl: mov.documentoUrl || null,
           },
           cfg
         )
+
         for (const canal of alertaResult.canalesExitosos) {
           await logNotificacionJudicial(caso.id, canal, descripcion, nivel, cls.sugerencia || '', true)
         }
@@ -280,21 +284,27 @@ export async function POST(request: Request) {
       }
     }
 
-    // No esperar al scrape: `after()` asegura que Next ejecute el trabajo tras enviar la respuesta (no se pierde como con void suelto).
-    // La sincronización completa (movimientos + IA) vive en `runInitialCejSync` — equivalente al flujo inline de la rama bot, pero en background.
-    after(() =>
-      runInitialCejSync(caso, scrapeCEJ).catch(err => {
-        console.error('[API] runInitialCejSync error:', err)
-      })
-    )
+    // Esperamos al scrape para asegurar que Next retorne los datos con todo inicializado
+    try {
+      await runInitialCejSync(caso, scrapeCEJ);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (/parte no coincide|no se encontraron|error de cone/i.test(msg)) {
+        const db = await getAuthServerClient(); await db.from('casos').delete().eq('id', caso.id);
+        return Response.json({ error: 'No se encontraron registros con los datos ingresados', detail: msg }, { status: 400 });
+      }
+      console.error('[API] runInitialCejSync error:', err);
+    }
+    if (caso.whatsapp_number && caso.whatsapp_number.trim() !== '') {
+      enviarSuscripcionWhatsApp(caso.whatsapp_number, caso.alias || caso.cliente || 'Sin alias', caso.numero_expediente).catch(e => console.error(e));
+    }
 
     return Response.json(
       {
         ...caso,
         success: true,
-        syncPending: true,
-        message:
-          'Caso guardado. Sincronizando con el CEJ en segundo plano (1–3 min). La lista se actualizará al terminar.',
+        syncPending: false,
+        message: 'Caso guardado y sincronizado.',
       },
       { status: 201 }
     )
@@ -307,3 +317,6 @@ export async function POST(request: Request) {
     )
   }
 }
+
+
+

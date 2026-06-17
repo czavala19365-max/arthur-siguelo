@@ -71,7 +71,7 @@ class TwoCaptchaImageSolver implements CaptchaSolver {
   constructor(
     private apiKey: string,
     private opts: { timeoutMs: number; pollMs: number } = { timeoutMs: 120_000, pollMs: 4_000 }
-  ) {}
+  ) { }
 
   async solve(imageBase64: string): Promise<string> {
     if (!this.apiKey) throw new Error('TWOCAPTCHA_API_KEY not set')
@@ -115,7 +115,7 @@ class CapSolverImageSolver implements CaptchaSolver {
   constructor(
     private apiKey: string,
     private opts: { timeoutMs: number; pollMs: number } = { timeoutMs: 120_000, pollMs: 3_500 }
-  ) {}
+  ) { }
 
   async solve(imageBase64: string): Promise<string> {
     if (!this.apiKey) throw new Error('CAPSOLVER_API_KEY not set')
@@ -421,6 +421,7 @@ async function refreshImageCaptcha(page: Page) {
         return
       }
       const img = document.getElementById('captcha_image') as HTMLImageElement | null
+<<<<<<< HEAD
       if (img) img.src = `/cej/Captcha.jpg#${Date.now()}`
     })
   })
@@ -434,6 +435,17 @@ async function refreshImageCaptcha(page: Page) {
     before,
     { timeout: 10000 },
   ).catch(() => {})
+=======
+      img?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    }).catch(() => { })
+  })
+
+  await page.waitForFunction((prev) => {
+    const img = document.getElementById('captcha_image') as HTMLImageElement | null
+    const src = img?.src || ''
+    return src && src !== prev
+  }, before, { timeout: 8000 }).catch(() => { })
+>>>>>>> cde5c954b88912b9d97d88a154e146cb4823d45c
 
   await page.waitForTimeout(500)
   console.log('[CEJ] Nueva imagen captcha cargada')
@@ -453,11 +465,20 @@ async function solveImageCaptchaFromDom(
 
   baseResult.captchaDetected = true
 
+<<<<<<< HEAD
   if (isManualCaptchaMode()) {
     const code = await promptManualCaptchaCode()
     baseResult.captchaSolved = !!code
     return code
   }
+=======
+  await page.waitForFunction(() => {
+    const img = document.getElementById('captcha_image') as HTMLImageElement | null
+    return !!(img?.complete && (img?.naturalWidth ?? 0) > 10)
+  }, { timeout: 10000 }).catch(() => { })
+  await imgEl.scrollIntoViewIfNeeded().catch(() => { })
+  await page.waitForTimeout(250)
+>>>>>>> cde5c954b88912b9d97d88a154e146cb4823d45c
 
   const solver = getImageCaptchaSolver(attempt)
   const code = (await solver.solve(imgBuffer.toString('base64'))).trim()
@@ -637,144 +658,144 @@ async function parseActuaciones(page: Page): Promise<CejActuacion[]> {
   await page.waitForTimeout(2000)
 
   const parsed = await page.evaluate(() => {
-      const results: Array<{
-        numero: string
-        fecha: string
-        acto: string
-        folio: string
-        sumilla: string
-        tieneDocumento: boolean
-        documentoUrl: string
-        tieneResolucion: boolean
-      }> = []
-      const debugLines: string[] = []
+    const results: Array<{
+      numero: string
+      fecha: string
+      acto: string
+      folio: string
+      sumilla: string
+      tieneDocumento: boolean
+      documentoUrl: string
+      tieneResolucion: boolean
+    }> = []
+    const debugLines: string[] = []
 
-      debugLines.push(
-        '[CEJ parseActuaciones] Detección de documento — heurística en todos los <a href> del panel:',
-        `  • PDF: href contiene .pdf, /pdf, formato=pdf, type=pdf, application/pdf (minúsculas)`,
-        `  • Alternativo: href contiene documento, descarga, visor, verdoc`,
-        `  • documento_url = enlace PDF si hay; si no, el alternativo. Paneles: [id^="pnlSeguimiento"] + cpnlSeguimiento`
-      )
+    debugLines.push(
+      '[CEJ parseActuaciones] Detección de documento — heurística en todos los <a href> del panel:',
+      `  • PDF: href contiene .pdf, /pdf, formato=pdf, type=pdf, application/pdf (minúsculas)`,
+      `  • Alternativo: href contiene documento, descarga, visor, verdoc`,
+      `  • documento_url = enlace PDF si hay; si no, el alternativo. Paneles: [id^="pnlSeguimiento"] + cpnlSeguimiento`
+    )
 
-      const panels = document.querySelectorAll('[id^="pnlSeguimiento"]')
-      let actIdx = 0
-      panels.forEach((panel) => {
-        if (!panel.classList.contains('cpnlSeguimiento')) return
+    const panels = document.querySelectorAll('[id^="pnlSeguimiento"]')
+    let actIdx = 0
+    panels.forEach((panel) => {
+      if (!panel.classList.contains('cpnlSeguimiento')) return
 
-        const numero = panel.querySelector('.esquina')?.textContent?.trim() || ''
+      const numero = panel.querySelector('.esquina')?.textContent?.trim() || ''
 
-        const labels = panel.querySelectorAll('.roptionss, .roptionss-corto')
-        let fecha = ''
-        let resolucion = ''
-        let acto = ''
-        let sumilla = ''
-        let proveido = ''
+      const labels = panel.querySelectorAll('.roptionss, .roptionss-corto')
+      let fecha = ''
+      let resolucion = ''
+      let acto = ''
+      let sumilla = ''
+      let proveido = ''
 
-        labels.forEach((label) => {
-          const txt = label.textContent?.trim().toLowerCase() || ''
-          const next = label.nextElementSibling
-          const val = next?.textContent?.trim() || ''
-          if (txt.includes('fecha')) fecha = val
-          if (txt === 'resolución:' || txt === 'resolucion:') resolucion = val
-          if (txt === 'acto:') acto = val
-          if (txt === 'sumilla:') sumilla = val
-          if (txt === 'proveido:') proveido = val
-        })
-
-        let sumillaFinal = sumilla
-        if (proveido) {
-          sumillaFinal = sumilla ? `${sumilla} | Proveído: ${proveido}` : `Proveído: ${proveido}`
-        }
-
-        const anchors = Array.from(panel.querySelectorAll('a[href]')) as HTMLAnchorElement[]
-        let docPdf: HTMLAnchorElement | null = null
-        let docOther: HTMLAnchorElement | null = null
-        for (const a of anchors) {
-          const u = (a.href || '').toLowerCase()
-          const rel = (a.getAttribute('href') || '').toLowerCase()
-          if (
-            !docPdf &&
-            (u.includes('.pdf') ||
-              rel.includes('.pdf') ||
-              u.includes('/pdf') ||
-              u.includes('formato=pdf') ||
-              u.includes('type=pdf') ||
-              u.includes('application/pdf'))
-          ) {
-            docPdf = a
-          }
-          if (
-            !docOther &&
-            (u.includes('documento') ||
-              u.includes('descarga') ||
-              u.includes('visor') ||
-              u.includes('verdoc') ||
-              rel.includes('documento'))
-          ) {
-            docOther = a
-          }
-        }
-        const docUrl = (docPdf || docOther)?.href || ''
-        const tienePdf = !!docPdf
-        const tieneDocLink = !!docOther
-        const tieneDocumento = !!(docPdf || docOther)
-
-        let motivo = ''
-        if (!tieneDocumento) {
-          motivo =
-            'tiene_documento=false — ningún <a href> del panel coincide con PDF (case-insensitive) ni patrones documento/descarga/visor'
-        } else if (tienePdf && tieneDocLink && docPdf !== docOther) {
-          motivo =
-            'tiene_documento=true — enlace tipo PDF y otro tipo documento; documento_url prioriza PDF'
-        } else if (tienePdf) {
-          motivo = 'tiene_documento=true — enlace con indicadores de PDF en href'
-        } else {
-          motivo =
-            'tiene_documento=true — solo enlace documento/descarga/visor (sin .pdf explícito); documento_url = ese href'
-        }
-
-        const snippetPdf = docPdf?.outerHTML?.slice(0, 220) || '(ningún ancla tipo PDF)'
-        const snippetDoc =
-          docOther && docOther !== docPdf ? docOther.outerHTML?.slice(0, 220) || '' : '(mismo que PDF o ningún otro)'
-
-        const actoShort = acto.length > 60 ? acto.slice(0, 60) + '…' : acto
-
-        if (!(numero || fecha || acto || sumillaFinal)) return
-
-        actIdx += 1
-        debugLines.push(
-          `[CEJ parseActuaciones] actuación #${actIdx} numero="${numero}" fecha="${fecha}" acto="${actoShort}"`
-        )
-        debugLines.push(`  → ${motivo}`)
-        debugLines.push(`  → HTML ancla PDF (heurística): ${snippetPdf}`)
-        debugLines.push(`  → HTML ancla doc alternativa: ${snippetDoc}`)
-        if (docUrl) debugLines.push(`  → documento_url (completa): ${docUrl}`)
-        else debugLines.push(`  → documento_url: (vacío)`)
-
-        const actoL = acto.toLowerCase()
-        const sumL = sumillaFinal.toLowerCase()
-        const tieneResolucion =
-          !!resolucion ||
-          actoL.includes('resoluc') ||
-          actoL.includes('sentenc') ||
-          sumL.includes('resoluc') ||
-          sumL.includes('sentencia')
-
-        results.push({
-          numero,
-          fecha,
-          acto,
-          folio: '',
-          sumilla: sumillaFinal,
-          tieneDocumento,
-          documentoUrl: docUrl || '',
-          tieneResolucion,
-        })
+      labels.forEach((label) => {
+        const txt = label.textContent?.trim().toLowerCase() || ''
+        const next = label.nextElementSibling
+        const val = next?.textContent?.trim() || ''
+        if (txt.includes('fecha')) fecha = val
+        if (txt === 'resolución:' || txt === 'resolucion:') resolucion = val
+        if (txt === 'acto:') acto = val
+        if (txt === 'sumilla:') sumilla = val
+        if (txt === 'proveido:') proveido = val
       })
 
-      debugLines.push(`[CEJ parseActuaciones] total actuaciones con datos: ${results.length}`)
-      return { results, debugLines }
- }).catch(() => ({
+      let sumillaFinal = sumilla
+      if (proveido) {
+        sumillaFinal = sumilla ? `${sumilla} | Proveído: ${proveido}` : `Proveído: ${proveido}`
+      }
+
+      const anchors = Array.from(panel.querySelectorAll('a[href]')) as HTMLAnchorElement[]
+      let docPdf: HTMLAnchorElement | null = null
+      let docOther: HTMLAnchorElement | null = null
+      for (const a of anchors) {
+        const u = (a.href || '').toLowerCase()
+        const rel = (a.getAttribute('href') || '').toLowerCase()
+        if (
+          !docPdf &&
+          (u.includes('.pdf') ||
+            rel.includes('.pdf') ||
+            u.includes('/pdf') ||
+            u.includes('formato=pdf') ||
+            u.includes('type=pdf') ||
+            u.includes('application/pdf'))
+        ) {
+          docPdf = a
+        }
+        if (
+          !docOther &&
+          (u.includes('documento') ||
+            u.includes('descarga') ||
+            u.includes('visor') ||
+            u.includes('verdoc') ||
+            rel.includes('documento'))
+        ) {
+          docOther = a
+        }
+      }
+      const docUrl = (docPdf || docOther)?.href || ''
+      const tienePdf = !!docPdf
+      const tieneDocLink = !!docOther
+      const tieneDocumento = !!(docPdf || docOther)
+
+      let motivo = ''
+      if (!tieneDocumento) {
+        motivo =
+          'tiene_documento=false — ningún <a href> del panel coincide con PDF (case-insensitive) ni patrones documento/descarga/visor'
+      } else if (tienePdf && tieneDocLink && docPdf !== docOther) {
+        motivo =
+          'tiene_documento=true — enlace tipo PDF y otro tipo documento; documento_url prioriza PDF'
+      } else if (tienePdf) {
+        motivo = 'tiene_documento=true — enlace con indicadores de PDF en href'
+      } else {
+        motivo =
+          'tiene_documento=true — solo enlace documento/descarga/visor (sin .pdf explícito); documento_url = ese href'
+      }
+
+      const snippetPdf = docPdf?.outerHTML?.slice(0, 220) || '(ningún ancla tipo PDF)'
+      const snippetDoc =
+        docOther && docOther !== docPdf ? docOther.outerHTML?.slice(0, 220) || '' : '(mismo que PDF o ningún otro)'
+
+      const actoShort = acto.length > 60 ? acto.slice(0, 60) + '…' : acto
+
+      if (!(numero || fecha || acto || sumillaFinal)) return
+
+      actIdx += 1
+      debugLines.push(
+        `[CEJ parseActuaciones] actuación #${actIdx} numero="${numero}" fecha="${fecha}" acto="${actoShort}"`
+      )
+      debugLines.push(`  → ${motivo}`)
+      debugLines.push(`  → HTML ancla PDF (heurística): ${snippetPdf}`)
+      debugLines.push(`  → HTML ancla doc alternativa: ${snippetDoc}`)
+      if (docUrl) debugLines.push(`  → documento_url (completa): ${docUrl}`)
+      else debugLines.push(`  → documento_url: (vacío)`)
+
+      const actoL = acto.toLowerCase()
+      const sumL = sumillaFinal.toLowerCase()
+      const tieneResolucion =
+        !!resolucion ||
+        actoL.includes('resoluc') ||
+        actoL.includes('sentenc') ||
+        sumL.includes('resoluc') ||
+        sumL.includes('sentencia')
+
+      results.push({
+        numero,
+        fecha,
+        acto,
+        folio: '',
+        sumilla: sumillaFinal,
+        tieneDocumento,
+        documentoUrl: docUrl || '',
+        tieneResolucion,
+      })
+    })
+
+    debugLines.push(`[CEJ parseActuaciones] total actuaciones con datos: ${results.length}`)
+    return { results, debugLines }
+  }).catch(() => ({
     results: [] as CejActuacion[],
     debugLines: ['[CEJ parseActuaciones] page.evaluate falló — sin datos'],
   }))
@@ -1154,7 +1175,7 @@ async function scrapeResultsPage(page: Page, baseResult: CejCaseData, numeroExpe
   let hasNext = await page.$('a:has-text("Siguiente"), .siguiente, [title="Siguiente"]')
   let pageNum = 2
   while (hasNext && pageNum <= 20) {
-    await page.click('a:has-text("Siguiente"), .siguiente, [title="Siguiente"]').catch(() => {})
+    await page.click('a:has-text("Siguiente"), .siguiente, [title="Siguiente"]').catch(() => { })
     await page.waitForTimeout(2000)
     const more = await parseActuaciones(page)
     if (more.length === 0) break
@@ -1181,14 +1202,19 @@ async function fillAndScrape(
   const parts = numeroExpediente.split('-')
   const firstNum = parseInt(parts[0] || '0', 10)
   const isOldFormat = firstNum >= 1990 && firstNum <= 2030
-  const anio    = isOldFormat ? parts[0] || '' : parts[1] || ''
-  const nroExp  = isOldFormat ? parts[1] || '' : parts[0] || ''
-  const inc     = parts[2] || '0'
-  const dist    = parts[3] || ''
+  const anio = isOldFormat ? parts[0] || '' : parts[1] || ''
+  const nroExp = isOldFormat ? parts[1] || '' : parts[0] || ''
+  const inc = parts[2] || '0'
+  const dist = parts[3] || ''
   const instCod = parts[4] || ''
+<<<<<<< HEAD
   const espCod  = parts[5] || ''
   const orgCod  = parts[6] || ''
   const distrito = resolveDistritoForPortal(dist)
+=======
+  const espCod = parts[5] || ''
+  const orgCod = parts[6] || ''
+>>>>>>> cde5c954b88912b9d97d88a154e146cb4823d45c
 
   await page.waitForSelector('#consultarExpedientes', { timeout: 20000, state: 'attached' })
     .catch(() => console.log('[CEJ] #consultarExpedientes not found immediately'))
@@ -1204,12 +1230,19 @@ async function fillAndScrape(
     const courtNum = String(orgCod || '').padStart(2, '0').slice(-2)
 
     for (let capAttempt = 1; capAttempt <= 3; capAttempt++) {
+<<<<<<< HEAD
       console.log('[CEJ] Tab2 captcha intento %s/3', capAttempt)
       if (capAttempt > 1) {
         await refreshImageCaptcha(page).catch(err => {
           console.warn('[CEJ] refreshImageCaptcha:', err instanceof Error ? err.message : String(err))
         })
       }
+=======
+      // Ensure Tab 1 visible for captcha
+      await page.click('a[href="#tabs-1"], a:has-text("Por filtros"), #tabs-1').catch(() => { })
+      await page.waitForTimeout(350)
+      if (capAttempt > 1) await refreshImageCaptcha(page).catch(() => { })
+>>>>>>> cde5c954b88912b9d97d88a154e146cb4823d45c
 
       const captchaCode = await solveImageCaptchaFromDom(page, baseResult, { attempt: capAttempt }).catch(() => '')
       if (!captchaCode) {
@@ -1218,7 +1251,7 @@ async function fillAndScrape(
       }
 
       // Switch to Tab 2
-      await page.click('a[href="#tabs-2"], a:has-text("Por Código"), #tabs-2').catch(() => {})
+      await page.click('a[href="#tabs-2"], a:has-text("Por Código"), #tabs-2').catch(() => { })
       await page.waitForTimeout(800)
 
       console.log(
@@ -1244,13 +1277,21 @@ async function fillAndScrape(
           }
         }
       }, {
+<<<<<<< HEAD
         cod_expediente:   nroExp,
         cod_anio:         anio,
         cod_incidente:    inc,
         cod_distprov:     distrito.portalCode,
         cod_organo:       instCod,
+=======
+        cod_expediente: nroExp,
+        cod_anio: anio,
+        cod_incidente: inc,
+        cod_distprov: dist,
+        cod_organo: instCod,
+>>>>>>> cde5c954b88912b9d97d88a154e146cb4823d45c
         cod_especialidad: espCod,
-        cod_instancia:    courtNum,
+        cod_instancia: courtNum,
       })
 
       console.log('[CEJ] Tab2 fields: exp=%s anio=%s dist(exp)=%s dist(portal)=%s organo=%s esp=%s inst=%s parte=%s (capAttempt %s)',
@@ -1331,6 +1372,7 @@ async function fillAndScrape(
 
   // ── Strategy 2: Tab 1 "Por filtros" ─────────────────────────────────────
   console.log('[CEJ] Trying Tab 1 (Por filtros)...')
+<<<<<<< HEAD
   try {
     // Navigate back to search page to try Tab 1
     await page.goto(CEJ_SEARCH_URL, { waitUntil: 'load', timeout: 30000 })
@@ -1417,39 +1459,55 @@ async function fillAndScrape(
         const sel = document.querySelector('#organoJurisdiccional') as HTMLSelectElement | null
         return sel && sel.options.length > 1
       }, { timeout: 8000 }).catch(() => {})
+=======
+  for (let capAttempt1 = 1; capAttempt1 <= 3; capAttempt1++) {
+    try {
+      // Navigate back to search page to try Tab 1
+      await page.goto(CEJ_SEARCH_URL, { waitUntil: 'load', timeout: 30000 })
+      await page.waitForTimeout(2000)
+      await page.click('a[href="#tabs-1"], a:has-text("Por filtros")').catch(() => { })
+>>>>>>> cde5c954b88912b9d97d88a154e146cb4823d45c
       await page.waitForTimeout(500)
-    }
 
-    if (instCod) {
-      const instText = INST_NAME[instCod.toUpperCase()] || null
-      await page.evaluate((keyword: string | null) => {
-        const sel = document.querySelector('#organoJurisdiccional') as HTMLSelectElement | null
-        if (!sel || sel.options.length < 2) return
-        const opt = keyword
-          ? Array.from(sel.options).find(o => o.text.toUpperCase().includes(keyword.toUpperCase()))
-          : sel.options[1]
-        if (opt) { sel.value = opt.value; sel.dispatchEvent(new Event('change', { bubbles: true })) }
-      }, instText).catch(() => {})
-      await page.waitForFunction(() => {
-        const sel = document.querySelector('#especialidad') as HTMLSelectElement | null
-        return sel && sel.options.length > 1
-      }, { timeout: 8000 }).catch(() => {})
-      await page.waitForTimeout(300)
-    }
+      const DIST_NAME: Record<string, string> = {
+        '1801': 'LIMA', '0701': 'CALLAO', '1802': 'LIMA ESTE', '1803': 'LIMA NORTE',
+        '1804': 'LIMA SUR', '1805': 'VENTANILLA', '0201': 'AMAZONAS', '0301': 'ANCASH',
+        '0401': 'APURIMAC', '0501': 'AREQUIPA', '0601': 'CAJAMARCA', '0802': 'CUSCO',
+        '1001': 'HUANCAVELICA', '1101': 'HUANUCO', '1201': 'ICA', '1301': 'JUNIN',
+        '1401': 'LA LIBERTAD', '1501': 'LAMBAYEQUE', '1601': 'LORETO',
+        '1701': 'MADRE DE DIOS', '1901': 'MOQUEGUA', '2001': 'PASCO',
+        '2101': 'PIURA', '2102': 'SULLANA', '2201': 'PUNO',
+        '2301': 'SAN MARTIN', '2401': 'TACNA', '2501': 'TUMBES', '2601': 'UCAYALI',
+      }
+      const INST_NAME: Record<string, string> = {
+        'JR': 'ESPECIALIZADO', 'JP': 'PAZ LETRADO', 'MX': 'MIXTO',
+        'SA': 'SALA SUPERIOR', 'ST': 'SALA SUPERIOR', 'SC': 'SALA SUPERIOR',
+        'SP': 'SALA SUPERIOR', 'SL': 'SALA SUPERIOR', 'CS': 'SALA SUPREMA',
+      }
+      const ESP_NAME: Record<string, string> = {
+        'CI': 'CIVIL', 'PE': 'PENAL', 'LA': 'LABORAL', 'FA': 'FAMILIA',
+        'CO': 'COMERCIAL', 'CA': 'CONSTITUCIONAL', 'AD': 'CONTENCIOSO',
+        'CT': 'CONTENCIOSO', 'NI': 'NIÑO', 'LC': 'LIQUIDACION',
+      }
+      const distName = DIST_NAME[dist] || null
 
-    if (espCod) {
-      const espText = ESP_NAME[espCod.toUpperCase()] || null
-      await page.evaluate((keyword: string | null) => {
-        const sel = document.querySelector('#especialidad') as HTMLSelectElement | null
-        if (!sel || sel.options.length < 2) return
-        const opt = keyword
-          ? Array.from(sel.options).find(o => o.text.toUpperCase().includes(keyword.toUpperCase()))
-          : sel.options[1]
-        if (opt) { sel.value = opt.value; sel.dispatchEvent(new Event('change', { bubbles: true })) }
-      }, espText).catch(() => {})
-      await page.waitForTimeout(300)
-    }
+      if (dist) {
+        await page.evaluate((args: { name: string | null; code: string }) => {
+          const sel = document.querySelector('#distritoJudicial') as HTMLSelectElement | null
+          if (!sel) return
+          const opt = args.name
+            ? Array.from(sel.options).find(o => o.text.trim().toUpperCase().includes(args.name!.toUpperCase()))
+            : Array.from(sel.options).find(o => o.text.includes(args.code))
+          if (opt) { sel.value = opt.value; sel.dispatchEvent(new Event('change', { bubbles: true })) }
+        }, { name: distName, code: dist }).catch(() => { })
+        await page.waitForFunction(() => {
+          const sel = document.querySelector('#organoJurisdiccional') as HTMLSelectElement | null
+          return sel && sel.options.length > 1
+        }, { timeout: 8000 }).catch(() => { })
+        await page.waitForTimeout(500)
+      }
 
+<<<<<<< HEAD
     if (anio) {
       await page.evaluate((y: string) => {
         const sel = document.querySelector('#anio') as HTMLSelectElement | null
@@ -1574,6 +1632,156 @@ async function fillAndScrape(
   } catch (e: unknown) {
     console.log('[CEJ] Tab 1 error:', e instanceof Error ? e.message : String(e))
   }
+=======
+      if (instCod) {
+        const instText = INST_NAME[instCod.toUpperCase()] || null
+        await page.evaluate((keyword: string | null) => {
+          const sel = document.querySelector('#organoJurisdiccional') as HTMLSelectElement | null
+          if (!sel || sel.options.length < 2) return
+          const opt = keyword
+            ? Array.from(sel.options).find(o => o.text.toUpperCase().includes(keyword.toUpperCase()))
+            : sel.options[1]
+          if (opt) { sel.value = opt.value; sel.dispatchEvent(new Event('change', { bubbles: true })) }
+        }, instText).catch(() => { })
+        await page.waitForFunction(() => {
+          const sel = document.querySelector('#especialidad') as HTMLSelectElement | null
+          return sel && sel.options.length > 1
+        }, { timeout: 8000 }).catch(() => { })
+        await page.waitForTimeout(300)
+      }
+
+      if (espCod) {
+        const espText = ESP_NAME[espCod.toUpperCase()] || null
+        await page.evaluate((keyword: string | null) => {
+          const sel = document.querySelector('#especialidad') as HTMLSelectElement | null
+          if (!sel || sel.options.length < 2) return
+          const opt = keyword
+            ? Array.from(sel.options).find(o => o.text.toUpperCase().includes(keyword.toUpperCase()))
+            : sel.options[1]
+          if (opt) { sel.value = opt.value; sel.dispatchEvent(new Event('change', { bubbles: true })) }
+        }, espText).catch(() => { })
+        await page.waitForTimeout(300)
+      }
+
+      if (anio) {
+        await page.evaluate((y: string) => {
+          const sel = document.querySelector('#anio') as HTMLSelectElement | null
+          if (!sel) return
+          const opt = Array.from(sel.options).find(o => o.value === y || o.text === y)
+          if (opt) { sel.value = opt.value; sel.dispatchEvent(new Event('change', { bubbles: true })) }
+        }, anio).catch(() => { })
+        await page.waitForTimeout(200)
+      }
+
+      // Tab 1 #numeroExpediente expects just the number (e.g. "33088"), not the full format string
+      const numInput = await page.$('#numeroExpediente')
+      if (numInput) { await numInput.click(); await numInput.fill(nroExp) }
+
+      console.log('[CEJ] Tab1 form filled: dist=%s inst=%s esp=%s anio=%s nroExp=%s', dist, instCod, espCod, anio, nroExp)
+      await page.waitForTimeout(600)
+
+      // Solve image captcha for Tab 1
+      console.log('[CEJ] Tab1 image captcha solving (attempt %s)...', capAttempt1)
+      if (capAttempt1 > 1) {
+        await refreshImageCaptcha(page).catch(() => { })
+      }
+      const captchaCode1 = await solveImageCaptchaFromDom(page, baseResult).catch(() => '')
+      if (captchaCode1) {
+        const captchaInput = await page.$('#codigoCaptcha, input[name*="captcha"], input[id*="captcha"]')
+        if (captchaInput) {
+          await captchaInput.fill(captchaCode1)
+          console.log('[CEJ] Tab1 captcha filled:', captchaCode1)
+        }
+      }
+
+      // Fill parte using page.fill() for reliable value setting
+      if (parte) {
+        await page.fill('input[placeholder*="APELLIDO"], input[name="parte"], #parte', parte).catch(() =>
+          page.evaluate((p: string) => {
+            const parteEl = document.getElementById('parte') as HTMLInputElement | null
+            if (parteEl) {
+              parteEl.value = p
+              if (!parteEl.name) parteEl.name = 'parte'
+              parteEl.dispatchEvent(new Event('input', { bubbles: true }))
+              parteEl.dispatchEvent(new Event('change', { bubbles: true }))
+            }
+          }, parte)
+        )
+      }
+
+      // Verify parte in DOM before Tab 1 click
+      const tab1ParteInDom = await page.evaluate(() => {
+        const el = document.getElementById('parte') as HTMLInputElement | null
+        return el?.value || '(empty)'
+      }).catch(() => '(error)')
+      console.log('[CEJ] parte in DOM before Tab1 click:', tab1ParteInDom)
+
+      // Intercept Tab 1 AJAX (ValidarFiltros.htm) to fail fast on errors
+      const tab1AjaxReqPromise = page.waitForRequest(
+        req => req.url().includes('ValidarFiltros') && !req.url().includes('ValidarFiltrosCodigo'),
+        { timeout: 30000 }
+      ).catch(() => null)
+      const tab1AjaxRespPromise = page.waitForResponse(
+        resp => resp.url().includes('ValidarFiltros') && !resp.url().includes('ValidarFiltrosCodigo'),
+        { timeout: 30000 }
+      ).catch(() => null)
+      const navPromise1 = page.waitForNavigation({ waitUntil: 'load', timeout: 45000 }).catch(() => null)
+
+      await page.click('#consultarExpedientes').catch(async () => {
+        await page.evaluate(() => {
+          const win = window as unknown as Record<string, unknown>
+          const fn = win['consultarExpedientes']
+          if (typeof fn === 'function') (fn as () => void)()
+          else (document.getElementById('busquedaFiltros') as HTMLFormElement | null)?.submit()
+        })
+      })
+
+      // Log Tab 1 AJAX request body
+      const tab1AjaxReq = await tab1AjaxReqPromise
+      if (tab1AjaxReq) {
+        console.log('[CEJ] ValidarFiltros request body:', (tab1AjaxReq.postData() || '(none)').substring(0, 300))
+      }
+
+      // Check Tab 1 AJAX response
+      const tab1AjaxResp = await tab1AjaxRespPromise
+      if (tab1AjaxResp) {
+        const tab1AjaxBody = await tab1AjaxResp.body().catch(() => Buffer.alloc(0))
+        const tab1AjaxText = tab1AjaxBody.toString('utf-8').trim()
+        console.log('[CEJ] ValidarFiltros response:', tab1AjaxText.substring(0, 200))
+        const errorCodes1 = ['1', '2', '3', '4', '5', '-C', '-CM', '-CV', 'PE', 'parte_req', 'index', 'DistJud_x', 'Error...']
+        if (errorCodes1.includes(tab1AjaxText) || tab1AjaxText.startsWith('Sin conexion') || tab1AjaxText.startsWith('Sin servicio') || tab1AjaxText.startsWith('No existen')) {
+          const errorMap1: Record<string, string> = {
+            '1': 'parte no coincide con el expediente',
+            '2': 'error de conexión a la base de datos',
+            '3': 'no se encontraron registros',
+            '-C': 'captcha incorrecto',
+            '-CM': 'problema con captcha',
+            '-CV': 'captcha vacío',
+            'parte_req': 'parte requerida',
+          }
+          console.log('[CEJ] Tab 1 AJAX validation failed:', errorMap1[tab1AjaxText] || tab1AjaxText)
+          if (tab1AjaxText === '-C' || tab1AjaxText === '-CV' || tab1AjaxText === '-CM') {
+            continue
+          }
+          throw new Error(`Tab1 AJAX failed: ${errorMap1[tab1AjaxText] || tab1AjaxText}`)
+        }
+      } else {
+        console.log('[CEJ] Tab 1 AJAX did not fire (client-side validation failed?)')
+      }
+
+      await navPromise1
+      console.log('[CEJ] Tab1 navigated to:', page.url())
+
+      const result = await scrapeResultsPage(page, { ...baseResult }, numeroExpediente, true)
+      if (result) {
+        console.log('[CEJ] Tab 1 result — actuaciones:', result.actuaciones.length)
+        return result
+      }
+    } catch (e: unknown) {
+      console.log(`[CEJ] Tab 1 error (attempt ${capAttempt1}):`, e instanceof Error ? e.message : String(e))
+    }
+  } // end for loop
+>>>>>>> cde5c954b88912b9d97d88a154e146cb4823d45c
 
   return null
 }
@@ -1649,7 +1857,7 @@ async function tryDirectAccess(
 
   } catch (err: unknown) {
     console.log('[CEJ] Direct access failed:', err instanceof Error ? err.message : String(err))
-    if (browser) await browser.close().catch(() => {})
+    if (browser) await browser.close().catch(() => { })
     return null
   }
 }
@@ -1800,7 +2008,7 @@ async function _scrapeCEJ(numeroExpediente: string, maxRetries: number, parte: s
             if (typeof win['ocs'] === 'function') (win['ocs'] as () => void)()
           }, captchaToken)
 
-          await page.waitForNavigation({ waitUntil: 'load', timeout: 30000 }).catch(() => {})
+          await page.waitForNavigation({ waitUntil: 'load', timeout: 30000 }).catch(() => { })
           console.log('[CEJ] Radware hCaptcha solved, now at:', page.url())
           baseResult.captchaSolved = true
         } else {
@@ -1820,7 +2028,7 @@ async function _scrapeCEJ(numeroExpediente: string, maxRetries: number, parte: s
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error)
       console.error(`[CEJ] hCaptcha attempt ${attempt} failed:`, msg)
-      if (browser) { await browser.close().catch(() => {}); browser = null }
+      if (browser) { await browser.close().catch(() => { }); browser = null }
       if (attempt < maxRetries) await new Promise(r => setTimeout(r, 6000 * attempt))
     }
   }
