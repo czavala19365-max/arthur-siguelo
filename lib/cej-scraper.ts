@@ -5,7 +5,6 @@ import type { Browser, Page } from 'playwright'
 import crypto from 'crypto'
 import fs from 'fs'
 import path from 'path'
-import readline from 'readline'
 import { uploadPdfToSupabase } from './supabase-storage'
 
 /** Aplicar stealth solo al abrir el navegador (evita fallos al importar el módulo en Next/API). */
@@ -23,49 +22,11 @@ function applyCejStealthOnce() {
 const CEJ_SEARCH_URL = 'https://cej.pj.gob.pe/cej/forms/busquedaform.html'
 const CEJ_DETAIL_URL = 'https://cej.pj.gob.pe/cej/forms/detalleform.html'
 
-/**
- * Mapeo código distrito en expediente CEJ → `value` del <select id="distritoJudicial">.
- * El código del expediente (ej. 18A5) no siempre coincide con el atributo value del HTML.
- * Inspeccionar el portal y reemplazar el placeholder con el value exacto del <option>.
- */
-const CEJ_DISTRITO_HTML_VALUE: Record<string, string> = {
-  // Inspección CEJ 2026: <option value="17216">VENTANILLA - LIMA NOROESTE</option>
-  '18A5': '17216',
-}
-
-/**
- * Mapeo código expediente → valor para Tab 2 (#cod_distprov) si difiere del código visible.
- */
-const CEJ_DISTRITO_PORTAL_CODE: Record<string, string> = {
-  // Tab 2: input#cod_distprov maxLength=4 — acepta el código del expediente tal cual
-  '18A5': '18A5',
-}
-
-function resolveDistritoForPortal(distRaw: string) {
-  const dist = distRaw.trim().toUpperCase()
-  const htmlValue = CEJ_DISTRITO_HTML_VALUE[dist]
-  const portalCode = CEJ_DISTRITO_PORTAL_CODE[dist]
-  return {
-    expedienteCode: dist,
-    htmlSelectValue:
-      htmlValue && !htmlValue.startsWith('__PEGAR_') ? htmlValue : null,
-    portalCode:
-      portalCode && !portalCode.startsWith('__PEGAR_') ? portalCode : dist,
-  }
-}
-
 // ── CAPTCHA SOLVING (image captcha) ─────────────────────────────────────────
 
 export interface CaptchaSolver {
   solve(imageBase64: string): Promise<string>
 }
-
-/** CEJ captcha: 4 caracteres alfanuméricos, sensible a mayúsculas. */
-const CEJ_CAPTCHA_MIN_LEN = 4
-const CEJ_CAPTCHA_MAX_LEN = 4
-const CEJ_CAPTCHA_SCALE = 3
-const CEJ_CAPTCHA_INSTRUCTIONS =
-  'Ingresa exactamente 4 caracteres alfanuméricos (letras y números). Respeta mayúsculas y minúsculas.'
 
 class TwoCaptchaImageSolver implements CaptchaSolver {
   constructor(
@@ -84,10 +45,6 @@ class TwoCaptchaImageSolver implements CaptchaSolver {
         method: 'base64',
         body: imageBase64,
         json: '1',
-        regsense: '1',
-        min_len: String(CEJ_CAPTCHA_MIN_LEN),
-        max_len: String(CEJ_CAPTCHA_MAX_LEN),
-        textinstructions: CEJ_CAPTCHA_INSTRUCTIONS,
       }),
     }).then(r => r.json() as Promise<{ status: 0 | 1; request: string }>)
 
@@ -130,9 +87,6 @@ class CapSolverImageSolver implements CaptchaSolver {
           module: 'common',
           websiteURL: CEJ_SEARCH_URL,
           body: imageBase64,
-          case: true,
-          minLength: CEJ_CAPTCHA_MIN_LEN,
-          maxLength: CEJ_CAPTCHA_MAX_LEN,
         },
       }),
     }).then(r => r.json() as Promise<{ errorId: number; errorCode?: string; taskId?: string }>)
@@ -166,242 +120,38 @@ class CapSolverImageSolver implements CaptchaSolver {
   }
 }
 
-/**
- * CEJ image captcha: 2captcha (humanos) primero; CapSolver como respaldo.
- * En reintentos alterna el orden para no depender de un solo OCR.
- */
-class CejImageCaptchaSolver implements CaptchaSolver {
-  constructor(private attempt = 1) {}
-
+/** CEJ image captcha: CapSolver first; 2captcha only if CapSolver fails or if only TWOCAPTCHA is set. */
+class CapSolverImageWithTwoCaptchaFallback implements CaptchaSolver {
   async solve(imageBase64: string): Promise<string> {
     const capKey = process.env.CAPSOLVER_API_KEY?.trim()
     const twoKey = process.env.TWOCAPTCHA_API_KEY?.trim()
-    if (!capKey && !twoKey) {
-      throw new Error(
-        'No CAPTCHA provider configured. Set TWOCAPTCHA_API_KEY (primary for CEJ) or CAPSOLVER_API_KEY (fallback).',
-      )
-    }
 
-    const preferTwoCaptcha = this.attempt % 2 === 1
-    const primary = preferTwoCaptcha ? '2captcha' : 'CapSolver'
-    const fallback = preferTwoCaptcha ? 'CapSolver' : '2captcha'
-    console.log('[CEJ] Image captcha solver order (intento %s): %s → %s', this.attempt, primary, fallback)
-
-    const tryTwoCaptcha = async () => {
-      if (!twoKey) throw new Error('TWOCAPTCHA_API_KEY not set')
-      return await new TwoCaptchaImageSolver(twoKey).solve(imageBase64)
-    }
-    const tryCapSolver = async () => {
-      if (!capKey) throw new Error('CAPSOLVER_API_KEY not set')
-      return await new CapSolverImageSolver(capKey).solve(imageBase64)
-    }
-
-    const primaryFn = preferTwoCaptcha ? tryTwoCaptcha : tryCapSolver
-    const fallbackFn = preferTwoCaptcha ? tryCapSolver : tryTwoCaptcha
-
-    try {
-      const code = await primaryFn()
-      console.log('[CEJ] Captcha resuelto por %s:', primary, code ? `"${code}"` : '(vacío)')
-      return code
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      console.warn('[CEJ] %s image captcha failed:', primary, msg)
-      const code = await fallbackFn()
-      console.log('[CEJ] Captcha resuelto por %s (fallback):', fallback, code ? `"${code}"` : '(vacío)')
-      return code
-    }
-  }
-}
-
-function getImageCaptchaSolver(attempt = 1): CaptchaSolver {
-  return new CejImageCaptchaSolver(attempt)
-}
-
-const CEJ_CAPTCHA_INPUT = '#codigoCaptcha'
-const CEJ_CAPTCHA_IMAGE = '#captcha_image'
-const CEJ_CAPTCHA_RELOAD = '#btnReload'
-
-const CEJ_CAPTCHA_RETRY_ERRORS = new Set(['-C', '-CM', '-CV'])
-const DEBUG_CAPTCHA_PATH = path.join(process.cwd(), 'debug-captcha.png')
-const DEBUG_CAPTCHA_ENHANCED_PATH = path.join(process.cwd(), 'debug-captcha-enhanced.png')
-
-function isManualCaptchaMode(): boolean {
-  return process.env.CEJ_MANUAL_CAPTCHA === '1'
-}
-
-/** Pausa y pide el captcha por terminal (CEJ_MANUAL_CAPTCHA=1). */
-function promptManualCaptchaCode(): Promise<string> {
-  return new Promise(resolve => {
-    const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
-    console.log('\n[CEJ] ═══ MODO MANUAL CAPTCHA (CEJ_MANUAL_CAPTCHA=1) ═══')
-    console.log('[CEJ] Mira el navegador visible, lee el captcha en pantalla y escríbelo aquí.')
-    rl.question('[CEJ] Código captcha → ', answer => {
-      rl.close()
-      const code = answer.trim().toUpperCase()
-      console.log('[CEJ] Código manual ingresado:', code ? `"${code}"` : '(vacío)')
-      resolve(code)
-    })
-  })
-}
-
-/**
- * Extrae el captcha ya cargado en el DOM vía canvas (sin fetch a img.src).
- * Escala x3 para mejorar lectura OCR. Fallback: screenshot del elemento.
- */
-async function captureCaptchaScreenshot(page: Page): Promise<Buffer> {
-  const imgEl = await page.$(CEJ_CAPTCHA_IMAGE)
-  if (!imgEl) {
-    console.warn('[CEJ] Elemento captcha no encontrado:', CEJ_CAPTCHA_IMAGE)
-    return Buffer.alloc(0)
-  }
-
-  await page.waitForFunction(() => {
-    const img = document.getElementById('captcha_image') as HTMLImageElement | null
-    return !!(img?.complete && (img?.naturalWidth ?? 0) > 10)
-  }, { timeout: 10000 }).catch(() => {})
-
-  await imgEl.scrollIntoViewIfNeeded().catch(() => {})
-  await page.waitForTimeout(400)
-
-  const capture = await page.evaluate((scale) => {
-    const img = document.getElementById('captcha_image') as HTMLImageElement | null
-    if (!img || !img.complete || img.naturalWidth < 10) {
-      return { ok: false as const, reason: 'image-not-ready' }
-    }
-
-    const w = img.naturalWidth * scale
-    const h = img.naturalHeight * scale
-    const canvas = document.createElement('canvas')
-    canvas.width = w
-    canvas.height = h
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return { ok: false as const, reason: 'no-canvas-context' }
-
-    ctx.imageSmoothingEnabled = false
-    ctx.drawImage(img, 0, 0, w, h)
-
-    const dataUrl = canvas.toDataURL('image/png')
-    const base64 = dataUrl.split(',')[1] || ''
-    return {
-      ok: true as const,
-      base64,
-      naturalW: img.naturalWidth,
-      naturalH: img.naturalHeight,
-      clientW: img.clientWidth,
-      clientH: img.clientHeight,
-      scaledW: w,
-      scaledH: h,
-      src: img.src?.substring(0, 80) ?? '',
-    }
-  }, CEJ_CAPTCHA_SCALE).catch(() => ({ ok: false as const, reason: 'evaluate-failed' }))
-
-  let imgBuffer = Buffer.alloc(0)
-  let captureMode = 'canvas'
-
-  if (capture.ok && capture.base64) {
-    imgBuffer = Buffer.from(capture.base64, 'base64')
-    console.log(
-      '[CEJ] Captcha canvas (sin fetch, escala x%s): %s bytes | natural=%dx%d | client=%dx%d | scaled=%dx%d | src=%s',
-      CEJ_CAPTCHA_SCALE,
-      imgBuffer.length,
-      capture.naturalW,
-      capture.naturalH,
-      capture.clientW,
-      capture.clientH,
-      capture.scaledW,
-      capture.scaledH,
-      capture.src,
-    )
-  } else {
-    captureMode = 'screenshot-fallback'
-    const dims = await imgEl.evaluate(el => {
-      const img = el as HTMLImageElement
-      return {
-        naturalW: img.naturalWidth,
-        naturalH: img.naturalHeight,
-        clientW: img.clientWidth,
-        clientH: img.clientHeight,
-        src: img.src?.substring(0, 80) ?? '',
+    if (capKey) {
+      try {
+        return await new CapSolverImageSolver(capKey).solve(imageBase64)
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        console.warn('[CEJ] CapSolver image captcha failed:', msg)
+        if (!twoKey) throw e
+        console.log('[CEJ] Image captcha: falling back to 2captcha')
+        return await new TwoCaptchaImageSolver(twoKey).solve(imageBase64)
       }
-    }).catch(() => ({ naturalW: 0, naturalH: 0, clientW: 0, clientH: 0, src: '' }))
+    }
 
-    imgBuffer = (await imgEl.screenshot({ type: 'png' }).catch(() => Buffer.alloc(0))) as Buffer<ArrayBuffer>
-    console.warn(
-      '[CEJ] Canvas captcha falló (%s) — screenshot fallback: %s bytes | natural=%dx%d | client=%dx%d',
-      'reason' in capture ? capture.reason : 'unknown',
-      imgBuffer.length,
-      dims.naturalW,
-      dims.naturalH,
-      dims.clientW,
-      dims.clientH,
+    if (twoKey) return await new TwoCaptchaImageSolver(twoKey).solve(imageBase64)
+    throw new Error('No CAPTCHA provider configured. Set CAPSOLVER_API_KEY (CEJ) or TWOCAPTCHA_API_KEY as fallback.')
+  }
+}
+
+function getImageCaptchaSolver(): CaptchaSolver {
+  const capKey = process.env.CAPSOLVER_API_KEY?.trim()
+  const twoKey = process.env.TWOCAPTCHA_API_KEY?.trim()
+  if (!capKey && !twoKey) {
+    throw new Error(
+      'No CAPTCHA provider configured. Set CAPSOLVER_API_KEY (primary for CEJ) or TWOCAPTCHA_API_KEY (fallback).',
     )
   }
-
-  if (imgBuffer.length > 0) {
-    fs.writeFileSync(DEBUG_CAPTCHA_PATH, imgBuffer)
-    console.log('[CEJ] Auditoría: imagen guardada en', DEBUG_CAPTCHA_PATH, `(${captureMode})`)
-    fs.writeFileSync(DEBUG_CAPTCHA_ENHANCED_PATH, imgBuffer)
-  }
-
-  return imgBuffer
-}
-
-async function clearCaptchaInput(page: Page): Promise<void> {
-  const input = page.locator(CEJ_CAPTCHA_INPUT)
-  if ((await input.count()) === 0) return
-  await input.scrollIntoViewIfNeeded().catch(() => {})
-  await input.click({ clickCount: 3 }).catch(() => {})
-  await input.fill('').catch(() => {})
-  await page.waitForTimeout(120)
-}
-
-/** Tipeo humano en #codigoCaptcha (compartido Tab 1 y Tab 2) + Tab/blur para validación CEJ. */
-async function fillCaptchaHumanLike(page: Page, code: string): Promise<boolean> {
-  // El input CEJ fuerza mayúsculas en el DOM; normalizamos al tipear.
-  const normalized = code.trim().toUpperCase()
-  if (!normalized) {
-    console.warn('[CEJ] Captcha vacío — no se escribe en el input')
-    return false
-  }
-
-  const input = page.locator(CEJ_CAPTCHA_INPUT)
-  if ((await input.count()) === 0) {
-    console.warn('[CEJ] Input captcha no encontrado:', CEJ_CAPTCHA_INPUT)
-    return false
-  }
-
-  await input.scrollIntoViewIfNeeded().catch(() => {})
-  await clearCaptchaInput(page)
-  await input.click()
-  await page.waitForTimeout(150)
-
-  console.log('[CEJ] Tipeando captcha en %s: "%s"', CEJ_CAPTCHA_INPUT, normalized)
-  await input.pressSequentially(normalized, { delay: 100 })
-
-  await input.press('Tab').catch(() => {})
-  await page.waitForTimeout(200)
-
-  await page.evaluate((selector) => {
-    const el = document.querySelector(selector) as HTMLInputElement | null
-    if (!el) return
-    el.dispatchEvent(new Event('input', { bubbles: true }))
-    el.dispatchEvent(new Event('change', { bubbles: true }))
-    el.dispatchEvent(new Event('blur', { bubbles: true }))
-  }, CEJ_CAPTCHA_INPUT)
-
-  const inDom = await page.evaluate((selector) => {
-    const el = document.querySelector(selector) as HTMLInputElement | null
-    return el?.value?.trim().toUpperCase() || ''
-  }, CEJ_CAPTCHA_INPUT)
-
-  const ok = inDom === normalized
-  console.log(
-    '[CEJ] Captcha en DOM tras tipeo: esperado="%s" actual="%s" %s',
-    normalized,
-    inDom || '(vacío)',
-    ok ? 'OK' : 'FALLO',
-  )
-  return ok
+  return new CapSolverImageWithTwoCaptchaFallback()
 }
 
 async function refreshImageCaptcha(page: Page) {
@@ -410,32 +160,9 @@ async function refreshImageCaptcha(page: Page) {
     return img?.src || ''
   }).catch(() => '')
 
-  console.log('[CEJ] Refrescando captcha (#btnReload) antes de reintento...')
-  await clearCaptchaInput(page).catch(() => {})
-
-  await page.click(CEJ_CAPTCHA_RELOAD).catch(async () => {
+  await page.click('#captcha_image, img#captcha_image').catch(async () => {
     await page.evaluate(() => {
-      const w = window as unknown as Record<string, unknown>
-      if (typeof w['reloadcode'] === 'function') {
-        (w['reloadcode'] as () => void)()
-        return
-      }
       const img = document.getElementById('captcha_image') as HTMLImageElement | null
-<<<<<<< HEAD
-      if (img) img.src = `/cej/Captcha.jpg#${Date.now()}`
-    })
-  })
-
-  await page.waitForFunction(
-    (prev) => {
-      const img = document.getElementById('captcha_image') as HTMLImageElement | null
-      const src = img?.src || ''
-      return !!src && src !== prev && !!img?.complete && (img?.naturalWidth ?? 0) > 10
-    },
-    before,
-    { timeout: 10000 },
-  ).catch(() => {})
-=======
       img?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     }).catch(() => { })
   })
@@ -445,43 +172,27 @@ async function refreshImageCaptcha(page: Page) {
     const src = img?.src || ''
     return src && src !== prev
   }, before, { timeout: 8000 }).catch(() => { })
->>>>>>> cde5c954b88912b9d97d88a154e146cb4823d45c
 
-  await page.waitForTimeout(500)
-  console.log('[CEJ] Nueva imagen captcha cargada')
+  await page.waitForTimeout(300)
 }
 
-async function solveImageCaptchaFromDom(
-  page: Page,
-  baseResult: { captchaDetected: boolean; captchaSolved: boolean },
-  options?: { attempt?: number },
-): Promise<string> {
-  const attempt = options?.attempt ?? 1
-  const imgBuffer = await captureCaptchaScreenshot(page)
-  if (!imgBuffer.length || imgBuffer.length < 200) {
-    console.warn('[CEJ] Screenshot captcha vacío o demasiado pequeño — revisa', DEBUG_CAPTCHA_PATH)
-    return ''
-  }
-
+async function solveImageCaptchaFromDom(page: Page, baseResult: { captchaDetected: boolean; captchaSolved: boolean }): Promise<string> {
+  const imgEl = await page.$('#captcha_image, img[id=\"captcha_image\"]')
+  if (!imgEl) return ''
   baseResult.captchaDetected = true
 
-<<<<<<< HEAD
-  if (isManualCaptchaMode()) {
-    const code = await promptManualCaptchaCode()
-    baseResult.captchaSolved = !!code
-    return code
-  }
-=======
   await page.waitForFunction(() => {
     const img = document.getElementById('captcha_image') as HTMLImageElement | null
     return !!(img?.complete && (img?.naturalWidth ?? 0) > 10)
   }, { timeout: 10000 }).catch(() => { })
   await imgEl.scrollIntoViewIfNeeded().catch(() => { })
   await page.waitForTimeout(250)
->>>>>>> cde5c954b88912b9d97d88a154e146cb4823d45c
 
-  const solver = getImageCaptchaSolver(attempt)
-  const code = (await solver.solve(imgBuffer.toString('base64'))).trim()
+  const imgBuffer = await imgEl.screenshot({ type: 'jpeg', quality: 80 }).catch(() => Buffer.alloc(0))
+  if (!imgBuffer.length || imgBuffer.length < 200) return ''
+
+  const solver = getImageCaptchaSolver()
+  const code = await solver.solve(imgBuffer.toString('base64'))
   baseResult.captchaSolved = !!code
   return code
 }
@@ -621,14 +332,9 @@ function isCejBrowserDebug(): boolean {
 
 function cejChromiumLaunchOptions() {
   const debug = isCejBrowserDebug()
-  // TEMP: navegador visible para depurar distrito 18A5 (CEJ_FORCE_VISIBLE=1 o CEJ_DEBUG=1)
-  const forceVisible =
-    process.env.CEJ_FORCE_VISIBLE === '1' ||
-    process.env.CEJ_ISOLATED_TEST === '1' ||
-    debug
   return {
-    headless: !forceVisible,
-    devtools: debug || process.env.CEJ_FORCE_VISIBLE === '1',
+    headless: !debug,
+    devtools: debug,
     executablePath: process.env.CHROME_EXECUTABLE_PATH || undefined,
     args: makeBrowserArgs(),
   }
@@ -1207,14 +913,8 @@ async function fillAndScrape(
   const inc = parts[2] || '0'
   const dist = parts[3] || ''
   const instCod = parts[4] || ''
-<<<<<<< HEAD
-  const espCod  = parts[5] || ''
-  const orgCod  = parts[6] || ''
-  const distrito = resolveDistritoForPortal(dist)
-=======
   const espCod = parts[5] || ''
   const orgCod = parts[6] || ''
->>>>>>> cde5c954b88912b9d97d88a154e146cb4823d45c
 
   await page.waitForSelector('#consultarExpedientes', { timeout: 20000, state: 'attached' })
     .catch(() => console.log('[CEJ] #consultarExpedientes not found immediately'))
@@ -1230,42 +930,16 @@ async function fillAndScrape(
     const courtNum = String(orgCod || '').padStart(2, '0').slice(-2)
 
     for (let capAttempt = 1; capAttempt <= 3; capAttempt++) {
-<<<<<<< HEAD
-      console.log('[CEJ] Tab2 captcha intento %s/3', capAttempt)
-      if (capAttempt > 1) {
-        await refreshImageCaptcha(page).catch(err => {
-          console.warn('[CEJ] refreshImageCaptcha:', err instanceof Error ? err.message : String(err))
-        })
-      }
-=======
       // Ensure Tab 1 visible for captcha
       await page.click('a[href="#tabs-1"], a:has-text("Por filtros"), #tabs-1').catch(() => { })
       await page.waitForTimeout(350)
       if (capAttempt > 1) await refreshImageCaptcha(page).catch(() => { })
->>>>>>> cde5c954b88912b9d97d88a154e146cb4823d45c
 
-      const captchaCode = await solveImageCaptchaFromDom(page, baseResult, { attempt: capAttempt }).catch(() => '')
-      if (!captchaCode) {
-        console.warn('[CEJ] Tab2 intento %s: solver no devolvió código', capAttempt)
-        continue
-      }
+      const captchaCode = await solveImageCaptchaFromDom(page, baseResult).catch(() => '')
 
       // Switch to Tab 2
       await page.click('a[href="#tabs-2"], a:has-text("Por Código"), #tabs-2').catch(() => { })
       await page.waitForTimeout(800)
-
-      console.log(
-        '[CEJ] [DEBUG] Tab2 — valores a inyectar antes de enviar: expediente=%s | año=%s | inc=%s | distrito(exp)=%s | distrito(portal)=%s | órgano=%s | esp=%s | instancia=%s | parte=%s',
-        nroExp,
-        anio,
-        inc,
-        distrito.expedienteCode,
-        distrito.portalCode,
-        instCod,
-        espCod,
-        courtNum,
-        parte.substring(0, 40),
-      )
 
       await page.evaluate((args: Record<string, string>) => {
         for (const [id, val] of Object.entries(args)) {
@@ -1277,26 +951,23 @@ async function fillAndScrape(
           }
         }
       }, {
-<<<<<<< HEAD
-        cod_expediente:   nroExp,
-        cod_anio:         anio,
-        cod_incidente:    inc,
-        cod_distprov:     distrito.portalCode,
-        cod_organo:       instCod,
-=======
         cod_expediente: nroExp,
         cod_anio: anio,
         cod_incidente: inc,
         cod_distprov: dist,
         cod_organo: instCod,
->>>>>>> cde5c954b88912b9d97d88a154e146cb4823d45c
         cod_especialidad: espCod,
         cod_instancia: courtNum,
       })
 
-      console.log('[CEJ] Tab2 fields: exp=%s anio=%s dist(exp)=%s dist(portal)=%s organo=%s esp=%s inst=%s parte=%s (capAttempt %s)',
-        nroExp, anio, distrito.expedienteCode, distrito.portalCode, instCod, espCod, courtNum, parte.substring(0, 20), capAttempt)
+      console.log('[CEJ] Tab2 fields: exp=%s anio=%s dist=%s organo=%s esp=%s inst=%s parte=%s (capAttempt %s)',
+        nroExp, anio, dist, instCod, espCod, courtNum, parte.substring(0, 20), capAttempt)
       await page.waitForTimeout(450)
+
+      await page.evaluate((captcha: string) => {
+        const captchaEl = document.getElementById('codigoCaptcha') as HTMLInputElement | null
+        if (captchaEl) { captchaEl.value = captcha; captchaEl.dispatchEvent(new Event('input', { bubbles: true })) }
+      }, captchaCode)
 
       await page.fill('input[placeholder*="APELLIDO"], input[name="parte"], #parte', parte).catch(() =>
         page.evaluate((p: string) => {
@@ -1309,12 +980,6 @@ async function fillAndScrape(
         }, parte)
       )
 
-      const captchaFilled = await fillCaptchaHumanLike(page, captchaCode)
-      if (!captchaFilled) {
-        console.warn('[CEJ] Tab2 intento %s: captcha no quedó en DOM — reintento', capAttempt)
-        continue
-      }
-
       const ajaxRespPromise = page.waitForResponse(
         resp => resp.url().includes('ValidarFiltrosCodigo'),
         { timeout: 35000 }
@@ -1322,12 +987,22 @@ async function fillAndScrape(
       const navPromise = page.waitForNavigation({ waitUntil: 'load', timeout: 45000 }).catch(() => null)
 
       await page.click('#consultarExpedientes').catch(async () => {
-        await page.evaluate(() => {
+        // Fallback: call the CEJ JS function so their AJAX validation runs.
+        await page.evaluate((code: string) => {
           const win = window as unknown as Record<string, unknown>
           const fn = win['consultarExpedientes']
+          // Ensure captcha is present for the submit path too
+          const form = document.getElementById('busquedaPorCodigo') as HTMLFormElement | null
+          if (form && !form.querySelector('input[name="codigoCaptcha"]')) {
+            const hidden = document.createElement('input')
+            hidden.type = 'hidden'
+            hidden.name = 'codigoCaptcha'
+            hidden.value = code
+            form.appendChild(hidden)
+          }
           if (typeof fn === 'function') (fn as () => void)()
-          else (document.getElementById('busquedaPorCodigo') as HTMLFormElement | null)?.submit()
-        })
+          else form?.submit()
+        }, captchaCode)
       })
 
       const ajaxResp = await ajaxRespPromise
@@ -1347,8 +1022,7 @@ async function fillAndScrape(
             'DistJud_x': 'distrito judicial incorrecto',
           }
           console.log('[CEJ] Tab 2 AJAX validation failed:', errorMap[ajaxText] || ajaxText)
-          if (CEJ_CAPTCHA_RETRY_ERRORS.has(ajaxText)) {
-            console.log('[CEJ] Tab2 captcha rechazado (%s) — reintento %s/3', ajaxText, capAttempt)
+          if (ajaxText === '-C' || ajaxText === '-CM' || ajaxText === '-CV') {
             continue
           }
           throw new Error(`Tab2 AJAX failed: ${errorMap[ajaxText] || ajaxText}`)
@@ -1372,101 +1046,12 @@ async function fillAndScrape(
 
   // ── Strategy 2: Tab 1 "Por filtros" ─────────────────────────────────────
   console.log('[CEJ] Trying Tab 1 (Por filtros)...')
-<<<<<<< HEAD
-  try {
-    // Navigate back to search page to try Tab 1
-    await page.goto(CEJ_SEARCH_URL, { waitUntil: 'load', timeout: 30000 })
-    await page.waitForTimeout(2000)
-    await page.click('a[href="#tabs-1"], a:has-text("Por filtros")').catch(() => {})
-    await page.waitForTimeout(500)
-
-    const DIST_NAME: Record<string, string> = {
-      '1801': 'LIMA', '0701': 'CALLAO', '1802': 'LIMA ESTE', '1803': 'LIMA NORTE',
-      '1804': 'LIMA SUR', '1805': 'VENTANILLA',
-      // 18A5 → VENTANILLA - LIMA NOROESTE (value HTML 17216)
-      '18A5': 'VENTANILLA',
-      '0201': 'AMAZONAS', '0301': 'ANCASH',
-      '0401': 'APURIMAC', '0501': 'AREQUIPA', '0601': 'CAJAMARCA', '0802': 'CUSCO',
-      '1001': 'HUANCAVELICA', '1101': 'HUANUCO', '1201': 'ICA', '1301': 'JUNIN',
-      '1401': 'LA LIBERTAD', '1501': 'LAMBAYEQUE', '1601': 'LORETO',
-      '1701': 'MADRE DE DIOS', '1901': 'MOQUEGUA', '2001': 'PASCO',
-      '2101': 'PIURA', '2102': 'SULLANA', '2201': 'PUNO',
-      '2301': 'SAN MARTIN', '2401': 'TACNA', '2501': 'TUMBES', '2601': 'UCAYALI',
-    }
-    const INST_NAME: Record<string, string> = {
-      'JR': 'ESPECIALIZADO', 'JP': 'PAZ LETRADO', 'MX': 'MIXTO',
-      'SA': 'SALA SUPERIOR', 'ST': 'SALA SUPERIOR', 'SC': 'SALA SUPERIOR',
-      'SP': 'SALA SUPERIOR', 'SL': 'SALA SUPERIOR', 'CS': 'SALA SUPREMA',
-    }
-    const ESP_NAME: Record<string, string> = {
-      'CI': 'CIVIL', 'PE': 'PENAL', 'LA': 'LABORAL', 'FA': 'FAMILIA',
-      'CO': 'COMERCIAL', 'CA': 'CONSTITUCIONAL', 'AD': 'CONTENCIOSO',
-      'CT': 'CONTENCIOSO', 'NI': 'NIÑO', 'LC': 'LIQUIDACION',
-    }
-    const distName = DIST_NAME[distrito.expedienteCode] || DIST_NAME[dist] || null
-
-    console.log(
-      '[CEJ] [DEBUG] Tab1 — valores a inyectar antes de enviar: distrito(exp)=%s | distrito(htmlValue)=%s | distrito(nombre)=%s | órgano=%s | esp=%s | año=%s | nroExp=%s | parte=%s',
-      distrito.expedienteCode,
-      distrito.htmlSelectValue ?? '(búsqueda por nombre/texto)',
-      distName ?? '(sin mapeo nombre)',
-      instCod,
-      espCod,
-      anio,
-      nroExp,
-      parte.substring(0, 40),
-    )
-
-    if (dist) {
-      const distritoSel = '#distritoJudicial'
-      if (distrito.htmlSelectValue) {
-        await page.waitForSelector(
-          `${distritoSel} option[value="${distrito.htmlSelectValue}"]`,
-          { timeout: 12000 },
-        ).catch(() => {
-          console.warn('[CEJ] Tab1: option distrito value=%s no apareció a tiempo', distrito.htmlSelectValue)
-        })
-        await page.selectOption(distritoSel, distrito.htmlSelectValue).catch(async () => {
-          await page.evaluate((args: { htmlValue: string }) => {
-            const sel = document.querySelector('#distritoJudicial') as HTMLSelectElement | null
-            if (!sel) return
-            const byValue = Array.from(sel.options).find(o => o.value === args.htmlValue)
-            if (byValue) {
-              sel.value = byValue.value
-              sel.dispatchEvent(new Event('change', { bubbles: true }))
-            }
-          }, { htmlValue: distrito.htmlSelectValue! })
-        })
-      } else {
-        await page.evaluate((args: { name: string | null; code: string }) => {
-          const sel = document.querySelector('#distritoJudicial') as HTMLSelectElement | null
-          if (!sel) return
-          const opt = args.name
-            ? Array.from(sel.options).find(o => o.text.trim().toUpperCase().includes(args.name!.toUpperCase()))
-            : Array.from(sel.options).find(o => o.text.includes(args.code) || o.value === args.code)
-          if (opt) { sel.value = opt.value; sel.dispatchEvent(new Event('change', { bubbles: true })) }
-        }, { name: distName, code: distrito.expedienteCode }).catch(() => {})
-      }
-
-      const distritoInDom = await page.evaluate(() => {
-        const sel = document.querySelector('#distritoJudicial') as HTMLSelectElement | null
-        const opt = sel?.selectedOptions?.[0]
-        return { value: sel?.value ?? '', text: opt?.text?.trim() ?? '' }
-      }).catch(() => ({ value: '', text: '' }))
-      console.log('[CEJ] Tab1 distrito en DOM:', distritoInDom)
-
-      await page.waitForFunction(() => {
-        const sel = document.querySelector('#organoJurisdiccional') as HTMLSelectElement | null
-        return sel && sel.options.length > 1
-      }, { timeout: 8000 }).catch(() => {})
-=======
   for (let capAttempt1 = 1; capAttempt1 <= 3; capAttempt1++) {
     try {
       // Navigate back to search page to try Tab 1
       await page.goto(CEJ_SEARCH_URL, { waitUntil: 'load', timeout: 30000 })
       await page.waitForTimeout(2000)
       await page.click('a[href="#tabs-1"], a:has-text("Por filtros")').catch(() => { })
->>>>>>> cde5c954b88912b9d97d88a154e146cb4823d45c
       await page.waitForTimeout(500)
 
       const DIST_NAME: Record<string, string> = {
@@ -1507,132 +1092,6 @@ async function fillAndScrape(
         await page.waitForTimeout(500)
       }
 
-<<<<<<< HEAD
-    if (anio) {
-      await page.evaluate((y: string) => {
-        const sel = document.querySelector('#anio') as HTMLSelectElement | null
-        if (!sel) return
-        const opt = Array.from(sel.options).find(o => o.value === y || o.text === y)
-        if (opt) { sel.value = opt.value; sel.dispatchEvent(new Event('change', { bubbles: true })) }
-      }, anio).catch(() => {})
-      await page.waitForTimeout(200)
-    }
-
-    // Tab 1 #numeroExpediente expects just the number (e.g. "33088"), not the full format string
-    const numInput = await page.$('#numeroExpediente')
-    if (numInput) { await numInput.click(); await numInput.fill(nroExp) }
-
-    console.log('[CEJ] Tab1 form filled: dist=%s inst=%s esp=%s anio=%s nroExp=%s', dist, instCod, espCod, anio, nroExp)
-    await page.waitForTimeout(600)
-
-    if (parte) {
-      await page.fill('input[placeholder*="APELLIDO"], input[name="parte"], #parte', parte).catch(() =>
-        page.evaluate((p: string) => {
-          const parteEl = document.getElementById('parte') as HTMLInputElement | null
-          if (parteEl) {
-            parteEl.value = p
-            if (!parteEl.name) parteEl.name = 'parte'
-            parteEl.dispatchEvent(new Event('input', { bubbles: true }))
-            parteEl.dispatchEvent(new Event('change', { bubbles: true }))
-          }
-        }, parte)
-      )
-    }
-
-    const tab1ParteInDom = await page.evaluate(() => {
-      const el = document.getElementById('parte') as HTMLInputElement | null
-      return el?.value || '(empty)'
-    }).catch(() => '(error)')
-    console.log('[CEJ] parte in DOM before Tab1 submit:', tab1ParteInDom)
-
-    for (let capAttempt = 1; capAttempt <= 3; capAttempt++) {
-      console.log('[CEJ] Tab1 captcha intento %s/3', capAttempt)
-      if (capAttempt > 1) {
-        await refreshImageCaptcha(page).catch(err => {
-          console.warn('[CEJ] refreshImageCaptcha:', err instanceof Error ? err.message : String(err))
-        })
-      }
-
-      const captchaCode = await solveImageCaptchaFromDom(page, baseResult, { attempt: capAttempt }).catch(() => '')
-      if (!captchaCode) {
-        console.warn('[CEJ] Tab1 intento %s: solver no devolvió código', capAttempt)
-        continue
-      }
-
-      const captchaFilled = await fillCaptchaHumanLike(page, captchaCode)
-      if (!captchaFilled) {
-        console.warn('[CEJ] Tab1 intento %s: captcha no quedó en DOM — reintento', capAttempt)
-        continue
-      }
-
-      const tab1AjaxReqPromise = page.waitForRequest(
-        req => req.url().includes('ValidarFiltros') && !req.url().includes('ValidarFiltrosCodigo'),
-        { timeout: 30000 },
-      ).catch(() => null)
-      const tab1AjaxRespPromise = page.waitForResponse(
-        resp => resp.url().includes('ValidarFiltros') && !resp.url().includes('ValidarFiltrosCodigo'),
-        { timeout: 30000 },
-      ).catch(() => null)
-      const navPromise1 = page.waitForNavigation({ waitUntil: 'load', timeout: 45000 }).catch(() => null)
-
-      await page.click('#consultarExpedientes').catch(async () => {
-        await page.evaluate(() => {
-          const win = window as unknown as Record<string, unknown>
-          const fn = win['consultarExpedientes']
-          if (typeof fn === 'function') (fn as () => void)()
-          else (document.getElementById('busquedaFiltros') as HTMLFormElement | null)?.submit()
-        })
-      })
-
-      const tab1AjaxReq = await tab1AjaxReqPromise
-      if (tab1AjaxReq) {
-        console.log('[CEJ] ValidarFiltros request body:', (tab1AjaxReq.postData() || '(none)').substring(0, 300))
-      }
-
-      const tab1AjaxResp = await tab1AjaxRespPromise
-      if (tab1AjaxResp) {
-        const tab1AjaxBody = await tab1AjaxResp.body().catch(() => Buffer.alloc(0))
-        const tab1AjaxText = tab1AjaxBody.toString('utf-8').trim()
-        console.log('[CEJ] ValidarFiltros response:', tab1AjaxText.substring(0, 200))
-        const errorCodes1 = ['1', '2', '3', '4', '5', '-C', '-CM', '-CV', 'PE', 'parte_req', 'index', 'DistJud_x', 'Error...']
-        if (errorCodes1.includes(tab1AjaxText) || tab1AjaxText.startsWith('Sin conexion') || tab1AjaxText.startsWith('Sin servicio') || tab1AjaxText.startsWith('No existen')) {
-          const errorMap1: Record<string, string> = {
-            '1': 'parte no coincide con el expediente',
-            '2': 'error de conexión a la base de datos',
-            '3': 'no se encontraron registros',
-            '-C': 'captcha incorrecto',
-            '-CM': 'problema con captcha',
-            '-CV': 'captcha vacío',
-            'parte_req': 'parte requerida',
-          }
-          console.log('[CEJ] Tab 1 AJAX validation failed:', errorMap1[tab1AjaxText] || tab1AjaxText)
-          if (CEJ_CAPTCHA_RETRY_ERRORS.has(tab1AjaxText)) {
-            console.log('[CEJ] Tab1 captcha rechazado (%s) — reintento %s/3', tab1AjaxText, capAttempt)
-            continue
-          }
-          throw new Error(`Tab1 AJAX failed: ${errorMap1[tab1AjaxText] || tab1AjaxText}`)
-        }
-      } else {
-        console.log('[CEJ] Tab 1 AJAX did not fire (client-side validation failed?)')
-        if (capAttempt < 3) continue
-      }
-
-      await navPromise1
-      console.log('[CEJ] Tab1 navigated to:', page.url())
-
-      const result = await scrapeResultsPage(page, { ...baseResult }, numeroExpediente, true)
-      if (result) {
-        console.log('[CEJ] Tab 1 result — actuaciones:', result.actuaciones.length)
-        return result
-      }
-      break
-    }
-
-    console.log('[CEJ] Tab 1 captcha retries exhausted')
-  } catch (e: unknown) {
-    console.log('[CEJ] Tab 1 error:', e instanceof Error ? e.message : String(e))
-  }
-=======
       if (instCod) {
         const instText = INST_NAME[instCod.toUpperCase()] || null
         await page.evaluate((keyword: string | null) => {
@@ -1781,7 +1240,6 @@ async function fillAndScrape(
       console.log(`[CEJ] Tab 1 error (attempt ${capAttempt1}):`, e instanceof Error ? e.message : String(e))
     }
   } // end for loop
->>>>>>> cde5c954b88912b9d97d88a154e146cb4823d45c
 
   return null
 }
@@ -1864,16 +1322,6 @@ async function tryDirectAccess(
 
 export async function scrapeCEJ(numeroExpediente: string, parte: string): Promise<CejCaseData> {
   try {
-    // Prueba aislada local — sin DB (activar: CEJ_ISOLATED_TEST=1). Usa expediente/parte del llamado.
-    if (process.env.CEJ_ISOLATED_TEST === '1') {
-      const isolatedExp = process.env.CEJ_ISOLATED_EXPEDIENTE?.trim() || numeroExpediente
-      const isolatedParte = process.env.CEJ_ISOLATED_PARTE?.trim() || parte || 'TEST'
-      console.log('[CEJ] [ISOLATED TEST] Expediente:', isolatedExp, '| parte:', isolatedParte)
-      console.log('[CEJ] [ISOLATED TEST] Sin conexión a base de datos — solo scrape CEJ')
-      process.env.CEJ_FORCE_VISIBLE = '1'
-      return await _scrapeCEJ(isolatedExp, 1, isolatedParte)
-    }
-
     const MAX_RETRIES = process.env.NODE_ENV === 'test' ? 1 : 3
     return await _scrapeCEJ(numeroExpediente, MAX_RETRIES, parte)
   } catch (err: unknown) {
