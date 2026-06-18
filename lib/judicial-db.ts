@@ -42,7 +42,7 @@ export interface MovimientoJudicial {
   acto: string | null
   folio: string | null
   sumilla: string | null
-  tiene_documento: number
+  tiene_documento: boolean
   documento_url: string | null
   tiene_resolucion: number
   es_nuevo: number
@@ -149,7 +149,7 @@ function mapMovimiento(row: MovRow): MovimientoJudicial {
     acto: row.acto != null ? String(row.acto) : null,
     folio: row.folio != null ? String(row.folio) : null,
     sumilla: row.sumilla != null ? String(row.sumilla) : null,
-    tiene_documento: boolToInt(row.tiene_documento as boolean | undefined),
+    tiene_documento: row.tiene_documento as boolean,
     documento_url: row.documento_url != null ? String(row.documento_url) : null,
     tiene_resolucion: boolToInt(row.tiene_resolucion as boolean | undefined),
     es_nuevo: boolToInt(row.es_nuevo as boolean | undefined),

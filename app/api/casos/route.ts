@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server'
 import { enviarSuscripcionWhatsApp } from '@/lib/channels/whatsapp-channel'
-import { addMovimientoJudicial, createCaso, getAllCasosActivosForUser, updateCaso, updateMovimientoJudicial, type Caso } from '@/lib/judicial-db'
+import { addMovimientoJudicial, createCaso, getAllCasosActivosForUser, getMovimientosByCaso, updateCaso, updateMovimientoJudicial, type Caso } from '@/lib/judicial-db'
 import { isUserAdmin, requireAuthUser } from '@/lib/judicial-caso-access'
 import { getAuthServerClient } from '@/lib/supabase-auth-server'
 import { clasificarMovimientoCEJ } from '@/lib/ai-service'
 import { enviarAlertaMovimiento } from '@/lib/alert-service'
 import { getAlertaConfigParaCaso, logNotificacionJudicial } from '@/lib/judicial-db'
 import { enviarAlertaJudicialConIA } from '@/lib/judicial-alerts'
+import { extraerYGuardarAudienciasDeMovimientos } from '@/lib/judicial-documento-extractor'
 
 export const runtime = 'nodejs'
 
@@ -295,6 +296,20 @@ export async function POST(request: Request) {
       }
       console.error('[API] runInitialCejSync error:', err);
     }
+
+    // Extraer fechas de PDFs y guardar como audiencias
+    try {
+      console.log('[API] 🎯 Iniciando extracción de audiencias de documentos...');
+      const movimientos = await getMovimientosByCaso(caso.id);
+      if (movimientos.length > 0) {
+        const audienciasCreadas = await extraerYGuardarAudienciasDeMovimientos(caso.id, movimientos);
+        console.log(`[API] ✅ Se crearon ${audienciasCreadas} audiencias`);
+      }
+    } catch (err) {
+      console.error('[API] Error extrayendo audiencias:', err instanceof Error ? err.message : String(err));
+      // No fallar el POST si esto falla, solo loguear
+    }
+
     if (caso.whatsapp_number && caso.whatsapp_number.trim() !== '') {
       enviarSuscripcionWhatsApp(caso.whatsapp_number, caso.alias || caso.cliente || 'Sin alias', caso.numero_expediente).catch(e => console.error(e));
     }
