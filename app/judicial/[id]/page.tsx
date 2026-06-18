@@ -144,15 +144,35 @@ export default function JudicialCaseDetail({ params }: { params: Promise<{ id: s
   }, [caso?.ultimo_movimiento_fecha]);
 
   async function handleReviewNow() {
-    setDemoStep('Conectando con el CEJ...');
-    await new Promise(r => setTimeout(r, 1200));
-    setDemoStep('Descargando movimientos del expediente...');
-    await new Promise(r => setTimeout(r, 1300));
-    setDemoStep('Analizando con Arthur-IA...');
-    await new Promise(r => setTimeout(r, 1000));
-    await fetch(`/api/casos/${id}/poll-now`, { method: 'POST' });
-    await loadData();
-    setDemoStep(null);
+    setDemoStep('Conectando con CEJ...');
+    try {
+      await new Promise(r => setTimeout(r, 800));
+      setDemoStep('Obteniendo movimientos...');
+
+      const res = await fetch(`/api/casos/${id}/poll-now`, { method: 'POST' });
+
+      if (!res.ok) {
+        setDemoStep(null);
+        alert('Error al actualizar el caso. Intenta nuevamente.');
+        return;
+      }
+
+      setDemoStep('Extrayendo fechas de documentos...');
+      await new Promise(r => setTimeout(r, 1200));
+
+      setDemoStep('Analizando con Arthur-IA...');
+      await new Promise(r => setTimeout(r, 800));
+
+      await loadData();
+
+      setDemoStep('✓ Caso actualizado');
+      await new Promise(r => setTimeout(r, 1000));
+      setDemoStep(null);
+    } catch (err) {
+      console.error('[Actualizar] Error:', err);
+      setDemoStep(null);
+      alert('Error al actualizar el caso. Revisa la consola.');
+    }
   }
 
   async function downloadAyudaMemoria(format: 'docx' | 'xlsx') {
@@ -229,8 +249,36 @@ export default function JudicialCaseDetail({ params }: { params: Promise<{ id: s
           >
             {downloading === 'xlsx' ? 'Descargando...' : 'Ayuda Memoria (Excel)'}
           </button>
-          <button onClick={() => void handleReviewNow()} disabled={!!demoStep || !!downloading} style={{ background: 'transparent', border: '1px solid var(--line-strong)', padding: '10px 20px', fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', cursor: demoStep || downloading ? 'not-allowed' : 'pointer', opacity: demoStep || downloading ? 0.7 : 1 }}>
-            {demoStep || 'Revisar ahora'}
+          <button
+            onClick={() => void handleReviewNow()}
+            disabled={!!demoStep || !!downloading}
+            style={{
+              background: demoStep ? 'var(--accent-navy)' : 'var(--accent-navy)',
+              color: 'white',
+              border: '1px solid var(--accent-navy)',
+              padding: '10px 20px',
+              fontFamily: 'var(--font-mono)',
+              fontSize: '10px',
+              textTransform: 'uppercase',
+              fontWeight: 600,
+              letterSpacing: '0.1em',
+              cursor: demoStep || downloading ? 'not-allowed' : 'pointer',
+              opacity: demoStep || downloading ? 0.6 : 1,
+              transition: 'all 0.2s ease'
+            }}
+            onMouseEnter={(e) => {
+              if (!demoStep && !downloading) {
+                e.currentTarget.style.background = 'rgba(1, 40, 80, 0.9)';
+                e.currentTarget.style.boxShadow = '0 2px 8px rgba(1, 40, 80, 0.3)';
+              }
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'var(--accent-navy)';
+              e.currentTarget.style.boxShadow = 'none';
+            }}
+            title="Rescraping del expediente para obtener últimos movimientos"
+          >
+            {demoStep ? `⟳ ${demoStep}` : '⟳ Actualizar caso'}
           </button>
         </div>
       </div>

@@ -5,6 +5,7 @@ import type { Browser, Page } from 'playwright'
 import crypto from 'crypto'
 import fs from 'fs'
 import path from 'path'
+import sharp from 'sharp'
 import { uploadPdfToSupabase } from './supabase-storage'
 
 /** Aplicar stealth solo al abrir el navegador (evita fallos al importar el módulo en Next/API). */
@@ -85,8 +86,10 @@ class CapSolverImageSolver implements CaptchaSolver {
         task: {
           type: 'ImageToTextTask',
           module: 'common',
-          websiteURL: CEJ_SEARCH_URL,
           body: imageBase64,
+          case: true,
+          minLength: 4,
+          maxLength: 4,
         },
       }),
     }).then(r => r.json() as Promise<{ errorId: number; errorCode?: string; taskId?: string }>)
@@ -188,11 +191,32 @@ async function solveImageCaptchaFromDom(page: Page, baseResult: { captchaDetecte
   await imgEl.scrollIntoViewIfNeeded().catch(() => { })
   await page.waitForTimeout(250)
 
-  const imgBuffer = await imgEl.screenshot({ type: 'jpeg', quality: 80 }).catch(() => Buffer.alloc(0))
-  if (!imgBuffer.length || imgBuffer.length < 200) return ''
+  const imgBuffer = await imgEl.screenshot({ type: 'png'}).catch(() => Buffer.alloc(0))
+
+  const processedBuffer = await sharp(imgBuffer)
+  .resize({ width: 400 })
+  .grayscale()
+  .normalize()
+  .sharpen()
+  .png()
+  .toBuffer()
+
+  const captchaPath = path.join(
+    process.cwd(),
+    'captchas',
+    `captcha-${Date.now()}.png`
+  )
+
+  fs.writeFileSync(captchaPath, processedBuffer)
+
+  console.log('[CEJ] Captcha guardado en:', captchaPath)
+  console.log('[CEJ] Captcha guardado')
+
+  if (!processedBuffer.length || processedBuffer.length < 200) return ''
 
   const solver = getImageCaptchaSolver()
-  const code = await solver.solve(imgBuffer.toString('base64'))
+  const code = await solver.solve(processedBuffer.toString('base64'))
+  console.log('[CEJ-TEST] Captcha solved:', code)
   baseResult.captchaSolved = !!code
   return code
 }
