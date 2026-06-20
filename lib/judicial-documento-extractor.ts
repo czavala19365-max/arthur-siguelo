@@ -19,7 +19,6 @@ async function descargarDocumento(url: string): Promise<Buffer | null> {
   try {
     const response = await fetch(url, {
       method: 'GET',
-      timeout: 15000, // 15 segundos de timeout
     })
 
     if (!response.ok) {
