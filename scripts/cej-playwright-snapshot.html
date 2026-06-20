@@ -1,0 +1,847 @@
+<!DOCTYPE html><html lang="es"><head>
+<title>CEJ - Consulta de Expedientes Judiciales - Búsqueda de Expedientes</title>
+
+
+
+
+
+<link type="text/css" href="/cej/jquery-ui-1.10.4.custom/css/custom-theme/jquery-ui-1.8.17.custom.css" rel="stylesheet">
+<link rel="icon" href="/cej/img/favicon.ico">
+
+
+<link href="/cej/css/bootstrap.min.css" rel="stylesheet">
+<link href="/cej/css/style.min.css" rel="stylesheet">
+<link href="/cej/css/menu.min.css" rel="stylesheet">
+<link href="/cej/json/manifest.json" rel="manifest">
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta http-equiv="Cache-control" content="private">
+<meta http-equiv="Cache-control" content="no-cache">
+<meta http-equiv="Cache-control" content="no-store">
+<meta charset="utf-8">
+<meta name="_csrf" content="">
+<!-- default header name is X-CSRF-TOKEN -->
+<meta name="_csrf_header" content="">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no, maximum-scale=1">
+<meta http-equiv="Expires" content="-1">
+<meta name="theme-color" content="#9A1413">
+<script type="text/javascript" async="" src="https://www.google-analytics.com/analytics.js"></script><script type="text/javascript" async="" src="https://www.googletagmanager.com/gtag/js?id=G-5T2QNMBP5E&amp;cx=c&amp;gtm=4e6631"></script><script async="" src="/18f5227b-e27b-445a-a53f-f845fbe69b40/stormcaster.js"></script><script type="text/javascript" src="/cej/jquery-ui-1.10.4.custom/js/jquery-1.10.2.js"></script>
+<script type="text/javascript" src="/cej/jquery-ui-1.10.4.custom/js/jquery-ui-1.10.4.custom.min.js"></script>
+
+
+<script type="text/javascript">
+	$(document).scroll(function(e) {
+		var scrollTop = $(document).scrollTop();
+		// 		console.log('scrollTop : ' + scrollTop)
+		// 		if($('#divBuscar').length == 0){
+		if (scrollTop > 78) {
+			$('.navbar').removeClass('navbar-static-top').addClass('navbar-fixed-top');
+			// 			$('.horaSessionTime').css('margin-top', '');
+			// 			$('.horaSessionTime').css('position', 'sticky');
+			// 			$('.horaSessionTime').css('top', '8px');
+		} else {
+			$('.navbar').removeClass('navbar-fixed-top').addClass('navbar-static-top');
+			// 			$('.horaSessionTime').css('margin-top', '');
+			// 			$('.horaSessionTime').css('position', 'relative');
+			// 			$('.horaSessionTime').css('top', '');
+		}
+		// 		}
+		if ($(this).scrollTop() > 100) {
+			$('.scrollup').fadeIn();
+		} else {
+			$('.scrollup').fadeOut();
+		}
+	});
+	// 	$('.scrollup').click(function() {
+	// //  		console.log("--> " + $("#topPrincipal").offset().top);
+	// 		$("html, body").animate({ scrollTop : $("#topPrincipal").offset().top }, 600);
+	// 		return false;
+	// 	});
+
+	function redirect(url) {
+		window.href.location = url;
+	}
+	$(function() {
+		// Tabs
+		$('#tabs').tabs();
+	});
+	window.history.forward();
+	function noBack() {
+		window.history.forward();
+	}
+
+	$(document).ready(function() {
+		/*    
+		 function disableBack() { window.history.forward() }
+		 window.onload = disableBack();
+		 window.onpageshow = function(evt) { if (evt.persisted) disableBack() }
+		 */
+		$("#myTab a").click(function(e) {
+			e.preventDefault();
+			$(this).tab('show');
+		});
+		$('div.ayudaText').hide();
+		$('#cod_expediente').focus(function() {
+			$('div#cod_expedienteF1').css('display', 'block');
+// 			$('#cod_expedienteError').css('display', 'none');
+			$('#cod_expedienteError').css('color', '#fbfafa');
+		}).blur(function() {
+			$('div#cod_expedienteF1').fadeOut(1);
+// 			$('#cod_expedienteError').css('display', 'block');
+			$('#cod_expedienteError').css('color', '#ff0000');
+		});
+		$('#cod_anio').focus(function() {
+			$('div#cod_anioF1').css('display', 'block');
+// 			$('#cod_anioError').css('display', 'none');
+			$('#cod_anioError').css('color', '#fbfafa');
+		}).blur(function() {
+			$('div#cod_anioF1').fadeOut(1);
+// 			$('#cod_anioError').css('display', 'block');
+			$('#cod_anioError').css('color', '#ff0000');
+		});
+		$('#cod_incidente').focus(function() {
+			$('div#cod_incidenteF1').css('display', 'block');
+// 			$('#cod_incidenteError').css('display', 'none');
+			$('#cod_incidenteError').css('color', '#fbfafa');
+		}).blur(function() {
+			$('div#cod_incidenteF1').fadeOut(1);
+// 			$('#cod_incidenteError').css('display', 'block');
+			$('#cod_incidenteError').css('color', '#ff0000');
+		});
+		$('#cod_distprov').focus(function() {
+			$('div#cod_distprovF1').css('display', 'block');
+// 			$('#cod_distprovError').css('display', 'none');
+			$('#cod_distprovError').css('color', '#fbfafa');
+		}).blur(function() {
+			$('div#cod_distprovF1').fadeOut(1);
+// 			$('#cod_distprovError').css('display', 'block');
+			$('#cod_distprovError').css('color', '#ff0000');
+		});
+		$('#cod_organo').focus(function() {
+			$('div#cod_organoF1').css('display', 'block');
+// 			$('#cod_organoError').css('display', 'none');
+			$('#cod_organoError').css('color', '#fbfafa');
+		}).blur(function() {
+			$('div#cod_organoF1').fadeOut(1);
+// 			$('#cod_organoError').css('display', 'block');
+			$('#cod_organoError').css('color', '#ff0000');
+		});
+		$('#cod_especialidad').focus(function() {
+			$('div#cod_especialidadF1').css('display', 'block');
+// 			$('#cod_especialidadError').css('display', 'none');
+			$('#cod_especialidadError').css('color', '#fbfafa');
+		}).blur(function() {
+			$('div#cod_especialidadF1').fadeOut(1);
+// 			$('#cod_especialidadError').css('display', 'block');
+			$('#cod_especialidadError').css('color', '#ff0000');
+		});
+		$('#cod_instancia').focus(function() {
+			$('div#cod_instanciaF1').css('display', 'block');
+// 			$('#cod_instanciaError').css('display', 'none');
+			$('#cod_instanciaError').css('color', '#fbfafa');
+		}).blur(function() {
+			$('div#cod_instanciaF1').fadeOut(1);
+// 			$('#cod_instanciaError').css('display', 'block');
+			$('#cod_instanciaError').css('color', '#ff0000');
+		});
+	});
+</script>
+
+<script type="text/javascript" src="/cej/js/filtro-2.3.21.min.js"></script>
+<script type="text/javascript">
+	var contextPath1 = '/cej';
+	var contextPath = '/cej';
+	function reloadcode(){
+		document.getElementById('captcha_image').src = '/cej/Captcha.jpg#' + new Date().getTime();
+		document.getElementById('codigoCaptcha').value="";
+		document.getElementById('codigoCaptcha').focus();
+	}
+
+	    $("#divTabs").tabs({
+		    fx: { opacity: 'toggle', speed: 'fast' },
+		    show: function(event, nav) {
+		      console.log(nav.index);
+		      if(nav.index === 0) { $('#distritoJudicial').focus();}
+		      if(nav.index === 1) { $('#cod_expediente').focus();}
+		      if(nav.index === 2) { $('#cod_expediente').focus();}
+		    }
+		});
+
+		function setFocusToTextBox(textBox){
+		  document.getElementById(textBox).focus();
+		}
+
+	  $(document).ready(function() {	  
+
+	  	$('#divTabs ul li a').click(function(){
+	  		var data = $(this).attr("href");
+	  		console.log(data);
+	  		if(data==="#tabs-1"){
+	  			setTimeout(function() { $('#distritoJudicial').focus() }, 300);
+		  	}
+	  		if(data==="#tabs-2"){
+	  			setTimeout(function() { $('#cod_expediente').focus() }, 300);
+		  	}
+	  	});
+		  
+	  		$("#btnReload").keyup(function(event) {
+		        if (event.which === 13) {
+		        	document.getElementById('captcha_image').src = '/cej/Captcha.jpg#' + new Date().getTime();
+				  	document.getElementById('codigoCaptcha').value="";
+		        }
+		    });
+	  	
+		  	$("#btnReload").click(function(){
+
+
+		  		document.getElementById('captcha_image').src = '/cej/Captcha.jpg#' + new Date().getTime();
+		  		document.getElementById('codigoCaptcha').value="";
+				document.getElementById('codigoCaptcha').focus();
+			});
+				
+
+		  	$("#btnRepro").keyup(function(event) {
+		        if (event.which === 13) {
+		        	$("#btnRepro").click();
+		        }
+		    });
+		  	
+			$("#btnRepro").click(function(){
+				$.ajax({
+					type : 'GET',
+					url : '/cej/xyhtml',
+					success : function(result) {
+						$("#deleteSound").html(result);
+						var no_soy_robot = document.getElementById("1zirobotz0").value;
+					  	var utterance  = new SpeechSynthesisUtterance();
+					  	utterance.text = no_soy_robot;
+					  	utterance.rate = 0.6;
+			  			speechSynthesis.speak(utterance);
+					}
+				});
+				
+// 		  		var no_soy_robot = document.getElementById("1zirobotz0").value;
+// 		  		speechSynthesis.speak(new SpeechSynthesisUtterance(no_soy_robot)); 		
+// 			  	var utterance  = new SpeechSynthesisUtterance();
+// 			  	utterance.text = no_soy_robot;
+// 			  	utterance.rate = 0.7;
+// 	  			speechSynthesis.speak(utterance);
+			});
+
+// 		  	$("#captcha_image").on('load', function () {
+// 		  		 $.ajax({
+// 					type : 'GET',
+// 					url : '/cej/xyhtml',
+// 					success : function(result) {
+// 						$("#deleteSound").html(result);
+// 					}
+// 				});
+// 		  	});
+			
+			$("#cod_expediente, #cod_anio, #cod_incidente, #cod_distprov, #cod_organo, #cod_especialidad, #cod_instancia").bind("paste", function(e){
+			    e.preventDefault();
+			    let xFormatoExpe = e.originalEvent.clipboardData.getData('text');
+			    let valores = xFormatoExpe.split("-");
+			    if(valores.length==7){
+			        $("#cod_expediente").val(valores[0]);
+			        $("#cod_anio").val(valores[1]);
+			        $("#cod_incidente").val(valores[2]);
+			        $("#cod_distprov").val(valores[3]);
+			        $("#cod_organo").val(valores[4]);
+			        $("#cod_especialidad").val(valores[5]);
+			        $("#cod_instancia").val(valores[6]);
+	
+			    }
+			});
+			
+			$('#cod_instancia').on( "keyup",function(event){
+				javascript:saltoCajaTexto(event,this,2,'parte');
+			})
+			$('#numeroExpediente').on( "keyup",function(event){
+				javascript:saltoCajaTexto(event,this,5,'parte')
+			})
+			$("#divParteImg").hide();
+
+		});
+	
+		function popup01f(){
+			var modal = document.getElementById('popup1');
+	   		modal.style.visibility = "visible";
+		}
+		
+		function popup02f(){
+			var modal = document.getElementById('popup2');
+	   		modal.style.visibility = "visible";
+		}
+		
+		function popup01Cerrar() {
+			var modal = document.getElementById('popup1');
+		    modal.style.visibility = "hidden";
+		}
+		
+		function popup02Cerrar() {
+			var modal = document.getElementById('popup2');
+		    modal.style.visibility = "hidden";
+		}
+	</script>
+	<!-- Global site tag (gtag.js) - Google Analytics -->
+	<script async="" src="https://www.googletagmanager.com/gtag/js?id=UA-47013024-7"></script>
+	<script>
+	  window.dataLayer = window.dataLayer || [];
+	  function gtag(){dataLayer.push(arguments);}
+	  gtag('js', new Date());
+	  gtag('config', 'UA-47013024-7');
+	</script>
+<script>var __uzdbm_1 = "59070fde-9417-44ac-9e50-8a6cf5a2147f";var __uzdbm_2 = "NzIzZTA2MzUtZHo3ZS00YmYzLWE0YzUtODgzZWU3MDM0ODM5JDc3LjIxMS40LjI3";var __uzdbm_3 = "7f900059070fde-9417-44ac-9e50-8a6cf5a2147f1-17806637501170-000323197966ba7661d10";var __uzdbm_4 = "false";var __uzdbm_5 = "uzmx";var __uzdbm_6 = "7f9000c8bfd02d-e70f-41bf-b90f-71cb86f760f61-17806637501170-13476db22796f76d10";var __uzdbm_7 = "pj.gob.pe";</script> <script>   (function (w, d, e, u, c, g, a, b) {     w["SSJSConnectorObj"] = w["SSJSConnectorObj"] || {       ss_cid: c,       domain_info: "auto",     };     w[g] = function (i, j) {       w["SSJSConnectorObj"][i] = j;     };     a = d.createElement(e);     a.async = true;     if (       navigator.userAgent.indexOf('MSIE') !== -1 ||       navigator.appVersion.indexOf('Trident/') > -1     ) {       u = u.replace("/advanced/", "/advanced/ie/");     }     a.src = u;     b = d.getElementsByTagName(e)[0];     b.parentNode.insertBefore(a, b);   })(     window, document, "script", "/18f5227b-e27b-445a-a53f-f845fbe69b40/stormcaster.js", "dz7g", "ssConf"   );   ssConf("c1", "https://cej.pj.gob.pe");   ssConf("c3", "c99a4269-161c-4242-a3f0-28d44fa6ce24");   ssConf("au", "cej.pj.gob.pe");   ssConf("cu", "validate.perfdrive.com, ssc"); </script> <style></style><style></style></head>
+<body style="">
+	<script type="text/javascript">
+	$(function () {
+	  if ($('pdp-accord-toggle').attr('aria-expanded') === true) {
+	    $(this).find(".accordion-plus").toggleClass("accordion-minus");
+	  }
+	})
+	function horaSessionTimeMT(){
+		if ($("button").attr('aria-expanded')== "true") {
+// 			document.getElementsByClassName("horaSessionTime")[0].style.marginTop="-42px";
+			document.getElementsByClassName("horaSessionTime")[0].style.marginTop="auto";
+		}else{
+// 			document.getElementsByClassName("horaSessionTime")[0].style.marginTop="-208px";
+			document.getElementsByClassName("horaSessionTime")[0].style.marginTop="-150px";
+		}
+	}
+</script>
+<header style="background-color:#F0F0F0;">
+	<div class="container clearfix">
+		<div class="row">
+	  	<div class="col-md-5 left_side" style="padding-right: 0px;"><a href="#"><img src="/cej/img/logo-pj.png" alt="Imagen logo poder judicial del Perú" style="/*width: 364px;*/ height: 55px;margin-top:3px;" class="img-responsive"></a></div>
+	    <div class="col-md-5 right_side" style="padding-left: 0px;"><div><a href="#"><img src="/cej/img/logo-cej.png" alt="Imagen logo consulta de expedientes judiciales" style="/*width: 256px;*/ height: 63px;" class="img-responsive"></a></div>
+	    	<div class="version">
+					<div id="lblVersion" style="text-align: right"> Versión 2.5.0</div>
+	      </div>
+      </div>
+    </div>
+	</div>
+</header>
+<nav class="navbar navbar-red navbar-static-top">
+	<div class="container">
+  	<div class="navbar-header">
+    	<button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navbar" aria-expanded="false" aria-controls="navbar">
+<!--       onclick="horaSessionTimeMT();"> -->
+        <span class="sr-only">Toggle navigation</span>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+      </button>
+    </div>
+    <div id="navbar" class="collapse navbar-collapse" style="border: 0;">
+    	<ul class="nav navbar-nav" style="float: none;">
+      	<li><a href="busquedaform.html" title="inicio">INICIO</a></li>
+        <li><a href="videosTutoriales.html" title="video tutoriales">VIDEOTUTORIALES</a></li>
+        <li><a href="preguntasFrecuentes.html" title="preguntas frecuentes">PREGUNTAS FRECUENTES</a></li>
+        <li style="float: right;">
+					<div class="horaSessionTime">
+					 	<div id="lblHora" class="txtright">Fecha: 05/06/2026 Hora: 14:49:18</div>
+					 	<div id="lblSessionTime" class="txtright">Tiempo restante de sesión: 07':55"</div>
+					</div>
+        </li>
+      </ul>
+    </div>
+  </div>
+	<div id="topPrincipal"></div>
+	<a href="#" class="scrollup">Scroll</a>
+</nav>
+	<div class="container">
+		<div id="myModal" class="modal fade" role="dialog" style="padding: 0px; background-color: rgba(154, 19, 19, 0.62);">
+			<div id="myModalD" class="modal-dialog" style="/*margin: 10% auto; max-width: 800px; max-height: 600px;*//*min-width: 80%; min-height: 80%; margin-top: 10%;*/">
+				<div class="modal-content">
+	        <div class="modal-header" style="background-color: #9A1413; color: white;">
+	          <button type="button" class="close" data-dismiss="modal" style="position: absolute; top: 4px; right: 4px; color: #9A1413; font-size: 40px; font-weight: bold; transition: 0.3s; 
+	          background-color: #f5f5f5; /*padding: 8px;*/ border-radius: 200px 200px 200px 200px; -moz-border-radius: 200px 200px 200px 200px; -webkit-border-radius: 200px 200px 200px 200px;
+	          padding: 5px; opacity: 1;">&nbsp;X&nbsp;</button>
+	          <h4 class="modal-title" style="text-align: center; font-weight: bold;">GUIA RAPIDA DEL CEJ</h4>
+	        </div>
+	        <div class="modal-body">
+	        	<img src="../img/CEJ_Captcha.gif" style="width: 100%; height: 100%;">
+	        	<div class="loaders"></div>
+	        </div>
+	        <div class="modal-footer" style="text-align: center; background-color: #9A1413;">
+	          <button type="button" class="btn btn-default" data-dismiss="modal" style="    font-weight: bold; font-size: 20px; color: #9a1413; max-width: 90vw;">CERRAR</button>
+	        </div>
+	      </div>
+			</div>
+		</div>
+		<div id="divCuerpo" style="/*grid-template-rows: auto auto 1fr; -ms-grid-rows: auto auto 1fr;*/">
+			<div id="divBuscar" class="">
+				
+				
+					<div style="text-align: center;
+					    border: 1px solid #9a1413;
+					    color: #9a1413;
+					    border-radius: 8px;
+					    margin: 1rem;
+					    padding: 0.5rem;">
+					    
+					    
+						<div style="font-size: 18px; font-weight: 600">
+							COMUNICADO
+						</div>
+						
+				
+					    <div style="font-size: 15px;">
+					    	Se ha incluido un nuevo campo como medida técnica de protección, para que solo las partes puedan acceder a sus expedientes; a requerimiento de la Autoridad Nacional de Protección de Datos Personales y la Dirección de Fiscalización e Instrucción del Ministerio de Justicia y Derechos Humanos - MINJUSDH. <br>Al amparo de la ley N° 29733, Ley de Protección de Datos Personales.
+					    </div>
+
+					</div>
+				
+				<div id="divBuscarT" style="font-weight: bold; color: #900; text-align: center; /*grid-column: 2; -ms-grid-column: 2;*/">
+					<h3>BÚSQUEDA DE EXPEDIENTES</h3>
+				</div>
+				<div style="/*grid-column: 2; -ms-grid-column: 2; grid-row: 2; -ms-grid-row: 2;*/  padding: 15px 15px 0 15px;">
+					<div class="panel panel-default " style="margin-bottom: 0; border:none; ">
+						<div class="panel-body panel-pj shadow">
+							<div id="divTabs">
+								<ul class="nav nav-tabs nav-justified nav-busqueda" id="myTab">
+									<li class="active"><a href="#tabs-1" style="border: 1px solid #dedede;" title="Por filtros">Por filtros</a></li>
+									<li><a href="#tabs-2" style="border: 1px solid #dedede;" title="Por código de expediente">Por Código de Expediente</a></li>
+								</ul>
+								<div class="tab-content">
+									<div id="tabs-1" class="tab-pane fade in active" style="min-height: 300px;">
+										<div class="box " style="padding-bottom: 1px;">
+											
+											<form id="busquedaFiltros" style="margin: 0;" class="form-horizontal" action="busquedaform.html" method="post">
+<!-- 												<div id="row"> -->
+													<div id="djT" class="col-xs-12 col-sm-3 col-sm-offset-2 etiqCmb" style="">
+														<label for="inputdjudicial">Distrito judicial<span class="msjError"> (*)</span></label>
+													</div>
+													<div id="djV" class="col-xs-11 col-sm-5">
+														<select id="distritoJudicial" name="distritoJudicial" class="cuerpo6 form-control" title="Distrito judicial" tabindex="1" onmouseover="this.style.cursor='pointer'">
+															<option onmouseover="this.style.cursor='pointer'" value="">--Seleccionar</option>
+															<option value="29586">AMAZONAS</option><option value="53898">ANCASH</option><option value="72036">APURIMAC</option><option value="08416">AREQUIPA</option><option value="53984">AYACUCHO</option><option value="63313">CAJAMARCA</option><option value="76516">CALLAO</option><option value="74902">CAÑETE</option><option value="54757">CUSCO</option><option value="65144">DEL SANTA</option><option value="06302">HUANCAVELICA</option><option value="49945">HUANUCO</option><option value="45165">HUAURA</option><option value="80837">ICA</option><option value="86636">JUNIN</option><option value="04975">LA LIBERTAD</option><option value="35016">LAMBAYEQUE</option><option value="58337">LIMA</option><option value="13466">LIMA ESTE</option><option value="91184">LIMA NORTE</option><option value="70557">LIMA SUR</option><option value="36384">LORETO</option><option value="56335">MADRE DE DIOS</option><option value="74529">MOQUEGUA</option><option value="52345">PASCO</option><option value="11168">PIURA</option><option value="70424">PUNO</option><option value="80711">SAN MARTIN</option><option value="22098">SELVA CENTRAL</option><option value="21136">SULLANA</option><option value="80382">TACNA</option><option value="70342">TUMBES</option><option value="25744">UCAYALI</option><option value="17216">VENTANILLA - LIMA NOROESTE</option>
+														</select>
+													</div>
+													
+													
+													<div id="popup02f" style="visibility: hidden;" class="col-xs-1">
+														<span id="span01" onclick="popup02f()" onmouseover="this.style.cursor='pointer'"></span>
+													</div>
+													<div id="djE" class="gridCellCenter col-xs-10" style="text-align: right; height: 20px;">
+														<span id="distritoJudicialError" class="msjError noVisible">Seleccione un distrito Judicial</span>
+													</div>
+													<div id="f_organoT" class="col-xs-12 col-sm-3 col-sm-offset-2 etiqCmb" style="">
+														<label for="ojurisdiccional">Instancia<span class="msjError"> (*)</span></label>
+													</div>
+													<div id="f_organoV" style="/*display: none;*/" class="col-xs-11 col-sm-5">
+														<select id="organoJurisdiccional" name="organoJurisdiccional" class="cuerpo6 form-control" title="Instancia" tabindex="2" onmouseover="this.style.cursor='pointer'"></select>
+													</div>
+													<div id="f_organoE" class="gridCellCenter col-xs-10" style="text-align: right; height: 20px;">
+														<span id="organoJurisdiccionalError" class="msjError noVisible">Seleccione una Instancia</span>
+													</div>
+													<div id="f_especialidadT" class="col-xs-12 col-sm-3 col-sm-offset-2 etiqCmb" style="">
+														<label for="especialidad">Especialidad<span class="msjError"> (*)</span></label>
+													</div>
+													<div id="f_especialidadV" style="/*display: none;*/" class="col-xs-11 col-sm-5">
+														<select id="especialidad" name="especialidad" class="cuerpo6 form-control" title="Especialidad" tabindex="3" onmouseover="this.style.cursor='pointer'"></select>
+													</div>
+													<div id="f_especialidadE" class="gridCellCenter col-xs-10" style="text-align: right; height: 20px;">
+														<span id="especialidadError" class="msjError noVisible">Seleccione una especialidad</span>
+													</div>
+													<div id="yearsT" class="col-xs-12 col-sm-3 col-sm-offset-2 etiqCmb" style="">
+														<label for="inputano">Año<span class="msjError"> (*)</span></label>
+													</div>
+													<div id="yearsV" class="col-xs-11 col-sm-5" style="">
+														<select id="anio" name="anio" class="cuerpo6 form-control" title="Año de expediente" tabindex="4" onmouseover="this.style.cursor='pointer'">
+															<option onmouseover="this.style.cursor='pointer'" value="">--Seleccionar</option>
+															<option value="2026">2026</option><option value="2025">2025</option><option value="2024">2024</option><option value="2023">2023</option><option value="2022">2022</option><option value="2021">2021</option><option value="2020">2020</option><option value="2019">2019</option><option value="2018">2018</option><option value="2017">2017</option><option value="2016">2016</option><option value="2015">2015</option><option value="2014">2014</option><option value="2013">2013</option><option value="2012">2012</option><option value="2011">2011</option><option value="2010">2010</option><option value="2009">2009</option><option value="2008">2008</option><option value="2007">2007</option><option value="2006">2006</option><option value="2005">2005</option><option value="2004">2004</option><option value="2003">2003</option><option value="2002">2002</option><option value="2001">2001</option><option value="2000">2000</option><option value="1999">1999</option><option value="1998">1998</option><option value="1997">1997</option><option value="1996">1996</option><option value="1995">1995</option><option value="1994">1994</option><option value="1993">1993</option><option value="1992">1992</option><option value="1991">1991</option><option value="1990">1990</option><option value="1989">1989</option><option value="1988">1988</option><option value="1987">1987</option><option value="1986">1986</option><option value="1985">1985</option><option value="1984">1984</option><option value="1983">1983</option><option value="1982">1982</option><option value="1981">1981</option><option value="1980">1980</option><option value="1979">1979</option><option value="1978">1978</option><option value="1977">1977</option>
+														</select>
+													</div>
+													<div id="yearsE" class="gridCellCenter col-xs-10" style="text-align: right; height: 20px;">
+														<span id="anioError" class="msjError noVisible">Seleccione un año</span>
+													</div>
+													<div id="nroExpT" class="col-xs-12 col-sm-3 col-sm-offset-2 etiqCmb" style="">
+														<label for="inputexp">N° Expediente<span class="msjError"> (*)</span></label>
+													</div>
+<!-- 													<div id="nroExpV" style="/*display: none;*/" class="col-xs-11 col-sm-5"> -->
+
+
+<!-- 													</div> -->
+													
+													<app-cej-filtros _nghost-ctj-c0="" ng-version="13.0.3"><div _ngcontent-ctj-c0=""><div _ngcontent-ctj-c0="" id="nroExpV" class="col-xs-11 col-sm-5"><input _ngcontent-ctj-c0="" id="numeroExpediente" name="numeroExpediente" title="Número de expediente" tabindex="5" onmouseover="this.style.cursor='pointer'" onkeyup="javascript:saltoCajaTexto(event,this,5,'codigoCaptcha');" placeholder="N° Expediente" type="text" value="" size="5" maxlength="5" autocomplete="off" class="cuerpo6 form-control" style="text-align: center; cursor: pointer;"></div></div></app-cej-filtros>
+													<script src="/cej/js/runtime.90be9c2565874b80.js" type="module"></script>
+													<script src="/cej/js/polyfills.d51e5e7aa9bdaba1.js" type="module"></script>
+													<script src="/cej/js/main.8e34a28a755fd498.js" type="module"></script>
+													
+													<div id="nroExpE" class="gridCellCenter col-xs-10" style="text-align: right; height: 20px;">
+														<span id="numeroExpedienteError" class="msjError noVisible">Ingrese número de Expediente</span>
+													</div>
+<!-- 												</div> -->
+											</form>
+										</div>
+									</div>
+									<div id="tabs-2" class="tab-pane fade" style="min-height: 300px;">
+										<div class="boxexp ">
+											
+											<form id="busquedaPorCodigo" action="busquedacodform.html" method="post">
+												<div style="text-align: center;">
+													<h5 style="font-size: 13px; font-weight: bold; padding-top: 8px; padding-bottom: 16px;">Código del expediente:</h5>
+												</div>
+												
+												
+												
+<!-- 												<div class="" style="text-align: center; display: table; margin: 0 auto;"> -->
+<!-- 													<div style="display: inline-table;"> -->
+<!-- 														<div style=""> -->
+<!-- 															<span id="cod_expedienteError" class="msjError">(*)</span> -->
+<!-- 														</div> -->
+<!-- 														<div style=""> -->
+
+
+
+
+<!-- 															<div id="cod_expedienteF1" class="ayudaText" style="position: absolute; margin-left: 5px;"> -->
+<!-- 																<div class="msjSup msjSupNum"></div> -->
+
+<!-- 															</div> -->
+<!-- 														</div> -->
+<!-- 													</div> -->
+<!-- 													<div style="display: inline-table;"> -->
+<!-- 														<div style=""> -->
+<!-- 															<span id="cod_anioError" class="msjError">(*)</span> -->
+<!-- 														</div> -->
+<!-- 														<div style="">&#8211; -->
+
+
+<!-- 															<div id="cod_anioF1" class="ayudaText" style="height: 45px; position: absolute; margin-left: 9px;"> -->
+<!-- 																<div class="msjSup msjSupYear"></div> -->
+
+<!-- 															</div> -->
+<!-- 														</div> -->
+<!-- 													</div> -->
+<!-- 													<div style="display: inline-table;"> -->
+<!-- 														<div style=""> -->
+<!-- 															<span id="cod_incidenteError" class="msjError">(*)</span> -->
+<!-- 														</div> -->
+<!-- 														<div style="">&#8211; -->
+
+
+<!-- 															<div id="cod_incidenteF1" class="ayudaText" style="height: 45px; position: absolute; margin-left: 4px;"> -->
+<!-- 																<div class="msjSup msjSupInc"></div> -->
+
+<!-- 															</div> -->
+<!-- 														</div> -->
+<!-- 													</div> -->
+<!-- 													<div style="display: inline-table;"> -->
+<!-- 														<div style=""> -->
+<!-- 															<span id="cod_distprovError" class="msjError">(*)</span> -->
+<!-- 														</div> -->
+<!-- 														<div style="">&#8211; -->
+
+
+<!-- 															<div id="cod_distprovF1" class="ayudaText" style="height: 45px; position: absolute; margin-left: 9px;"> -->
+<!-- 																<div class="msjSup msjSupDist"></div> -->
+
+<!-- 															</div> -->
+<!-- 														</div> -->
+<!-- 													</div> -->
+<!-- 													<div style="display: inline-table;"> -->
+<!-- 														<div style=""> -->
+<!-- 															<span id="cod_organoError" class="msjError">(*)</span> -->
+<!-- 														</div> -->
+<!-- 														<div style="">&#8211; -->
+
+
+<!-- 															<div id="cod_organoF1" class="ayudaText" style="height: 45px; position: absolute; margin-left: -4px;"> -->
+<!-- 																<div class="msjSup msjSupOrg"></div> -->
+
+<!-- 															</div> -->
+<!-- 														</div> -->
+<!-- 													</div> -->
+<!-- 													<div style="display: inline-table;"> -->
+<!-- 														<div style=""> -->
+<!-- 															<span id="cod_especialidadError" class="msjError">(*)</span> -->
+<!-- 														</div> -->
+<!-- 														<div style="">&#8211; -->
+
+
+<!-- 															<div id="cod_especialidadF1" class="ayudaText" style="height: 45px; position: absolute; margin-left: -5px;"> -->
+<!-- 																<div class="msjSup msjSupEsp"></div> -->
+
+<!-- 															</div> -->
+<!-- 														</div> -->
+<!-- 													</div> -->
+<!-- 													<div style="display: inline-table;"> -->
+<!-- 														<div style=""> -->
+<!-- 															<span id="cod_instanciaError" class="msjError">(*)</span> -->
+<!-- 														</div> -->
+<!-- 														<div style="">&#8211; -->
+
+
+<!-- 															<div id="cod_instanciaF1" class="ayudaText" style="height: 45px; position: absolute;"> -->
+<!-- 																<div class="msjSup msjSupInst"></div> -->
+
+<!-- 															</div> -->
+<!-- 														</div> -->
+<!-- 													</div> -->
+<!-- 												</div> -->
+												
+												
+												<app-cej-exp _nghost-vrm-c0="" ng-version="13.0.3"><div _ngcontent-vrm-c0=""><div _ngcontent-vrm-c0="" style="text-align: center; display: table; margin: 0 auto;"><div _ngcontent-vrm-c0="" style="display: inline-table;"><div _ngcontent-vrm-c0=""><span _ngcontent-vrm-c0="" id="cod_expedienteError" class="msjError" style="color: rgb(255, 0, 0);">(*)</span></div><div _ngcontent-vrm-c0=""><input _ngcontent-vrm-c0="" id="cod_expediente" name="cod_expediente" title="Secuencia 5 digitos : 00001" onmouseover="this.style.cursor='pointer'" onkeyup="javascript:saltoCajaTexto(event,this,5,'cod_anio');" type="text" tabindex="6" value="" size="5" maxlength="5" autocomplete="off" class="cuerpo6" style="text-align: center; cursor: pointer;"><div _ngcontent-vrm-c0="" id="cod_expedienteF1" class="ayudaText" style="position: absolute; margin-left: 5px; display: none;"><div _ngcontent-vrm-c0="" class="msjSup msjSupNum"></div><div _ngcontent-vrm-c0="" style="background-image: url(/cej/img/ejexpediente.png); height: 16px; width: 52px; background-position: 358px 136px; margin: 0px 2px;"></div></div></div></div><div _ngcontent-vrm-c0="" style="display: inline-table;"><div _ngcontent-vrm-c0=""><span _ngcontent-vrm-c0="" id="cod_anioError" class="msjError" style="color: rgb(255, 0, 0);">(*)</span></div><div _ngcontent-vrm-c0="">– <input _ngcontent-vrm-c0="" id="cod_anio" name="cod_anio" title="Número de 4 digitos : 2010" onmouseover="this.style.cursor='pointer'" onkeyup="javascript:saltoCajaTexto(event,this,4,'cod_incidente');" type="text" value="" tabindex="7" size="4" maxlength="4" autocomplete="off" class="cuerpo6" style="text-align: center; cursor: pointer;"><div _ngcontent-vrm-c0="" id="cod_anioF1" class="ayudaText" style="height: 45px; position: absolute; margin-left: 9px; display: none;"><div _ngcontent-vrm-c0="" class="msjSup msjSupYear"></div><div _ngcontent-vrm-c0="" style="background-image: url(/cej/img/ejexpediente.png); height: 16px; width: 42px; background-position: 298px 135px; margin: 0px 2px;"></div></div></div></div><div _ngcontent-vrm-c0="" style="display: inline-table;"><div _ngcontent-vrm-c0=""><span _ngcontent-vrm-c0="" id="cod_incidenteError" class="msjError" style="color: rgb(255, 0, 0);">(*)</span></div><div _ngcontent-vrm-c0="">– <input _ngcontent-vrm-c0="" id="cod_incidente" name="cod_incidente" title="Número de digitos entre 1 a 4 : 0" onmouseover="this.style.cursor='pointer'" onkeyup="javascript:saltoCajaTexto(event,this,4,'cod_distprov');" type="text" value="" tabindex="8" size="4" maxlength="4" autocomplete="off" class="cuerpo6" style="text-align: center; cursor: pointer;"><div _ngcontent-vrm-c0="" id="cod_incidenteF1" class="ayudaText" style="height: 45px; position: absolute; margin-left: 4px; display: none;"><div _ngcontent-vrm-c0="" class="msjSup msjSupInc"></div><div _ngcontent-vrm-c0="" style="background-image: url(/cej/img/ejexpediente.png); height: 16px; width: 13px; background-position: 248px 135px; margin: 0px 23px;"></div></div></div></div><div _ngcontent-vrm-c0="" style="display: inline-table;"><div _ngcontent-vrm-c0=""><span _ngcontent-vrm-c0="" id="cod_distprovError" class="msjError">(*)</span></div><div _ngcontent-vrm-c0="">– <input _ngcontent-vrm-c0="" id="cod_distprov" name="cod_distprov" title="Número de 4 digitos : 1817" onmouseover="this.style.cursor='pointer'" onkeyup="javascript:saltoCajaTexto(event,this,4,'cod_organo');" type="text" value="" tabindex="9" size="4" maxlength="4" autocomplete="off" class="cuerpo6" style="text-align: center; cursor: pointer;"><div _ngcontent-vrm-c0="" id="cod_distprovF1" class="ayudaText" style="height: 45px; position: absolute; margin-left: 9px; display: none;"><div _ngcontent-vrm-c0="" class="msjSup msjSupDist"></div><div _ngcontent-vrm-c0="" style="background-image: url(/cej/img/ejexpediente.png); height: 16px; width: 43px; background-position: 229px 135px; margin: 1px 2px;"></div></div></div></div><div _ngcontent-vrm-c0="" style="display: inline-table;"><div _ngcontent-vrm-c0=""><span _ngcontent-vrm-c0="" id="cod_organoError" class="msjError" style="color: rgb(255, 0, 0);">(*)</span></div><div _ngcontent-vrm-c0="">– <input _ngcontent-vrm-c0="" id="cod_organo" name="cod_organo" title="Secuencia de 2 carateres : JR" onmouseover="this.style.cursor='pointer'" onkeyup="javascript:saltoCajaTexto(event,this,2,'cod_especialidad');" type="text" value="" tabindex="10" size="2" maxlength="2" autocomplete="off" class="cuerpo6" style="text-align: center; cursor: pointer;"><div _ngcontent-vrm-c0="" id="cod_organoF1" class="ayudaText" style="height: 45px; position: absolute; margin-left: -4px; display: none;"><div _ngcontent-vrm-c0="" class="msjSup msjSupOrg"></div><div _ngcontent-vrm-c0="" style="background-image: url(/cej/img/ejexpediente.png); height: 16px; width: 25px; background-position: 178px 135px; margin: 1px 20px;"></div></div></div></div><div _ngcontent-vrm-c0="" style="display: inline-table;"><div _ngcontent-vrm-c0=""><span _ngcontent-vrm-c0="" id="cod_especialidadError" class="msjError">(*)</span></div><div _ngcontent-vrm-c0="">– <input _ngcontent-vrm-c0="" id="cod_especialidad" name="cod_especialidad" title="Secuencia de 2 carateres : CO" onmouseover="this.style.cursor='pointer'" onkeyup="javascript:saltoCajaTexto(event,this,2,'cod_instancia');" type="text" value="" tabindex="11" size="2" maxlength="2" autocomplete="off" class="cuerpo6" style="text-align: center;"><div _ngcontent-vrm-c0="" id="cod_especialidadF1" class="ayudaText" style="height: 45px; position: absolute; margin-left: -5px; display: none;"><div _ngcontent-vrm-c0="" class="msjSup msjSupEsp"></div><div _ngcontent-vrm-c0="" style="background-image: url(/cej/img/ejexpediente.png); height: 16px; width: 29px; background-position: 146px 135px; margin: 1px 18px;"></div></div></div></div><div _ngcontent-vrm-c0="" style="display: inline-table;"><div _ngcontent-vrm-c0=""><span _ngcontent-vrm-c0="" id="cod_instanciaError" class="msjError">(*)</span></div><div _ngcontent-vrm-c0="">– <input _ngcontent-vrm-c0="" id="cod_instancia" name="cod_instancia" title="Secuencia de 2 digitos : 06" onmouseover="this.style.cursor='pointer'" onkeyup="javascript:saltoCajaTexto(event,this,2,'codigoCaptcha');" type="text" value="" tabindex="12" size="2" maxlength="2" autocomplete="off" class="cuerpo6" style="text-align: center;"><div _ngcontent-vrm-c0="" id="cod_instanciaF1" class="ayudaText" style="height: 45px; position: absolute; display: none;"><div _ngcontent-vrm-c0="" class="msjSup msjSupInst"></div><div _ngcontent-vrm-c0="" style="background-image: url(/cej/img/ejexpediente.png); height: 16px; width: 22px; background-position: 110px 135px; margin: 1px 15px;"></div></div></div></div></div></div></app-cej-exp>
+												<script src="/cej/js/runtime.f8d7844389e48efc.js" type="module"></script>
+												<script src="/cej/js/polyfills.4be35088be73d4ce.js" type="module"></script>
+												<script src="/cej/js/main.ca1c63dcb391c551.js" type="module"></script>
+												
+												
+												<div style="height: 2px; text-align: center; vertical-align: middle;">
+													<span id="cod_especialidadNoSoportada" class="msjError" style="display: none"> (*) La búsqueda de la especialidad Penal no está permitida</span>
+												</div>
+												<div style="text-align: center;">
+													<img src="/cej/img/ejexpediente.png" title="Formato de numero de expediente" alt="Imagen de formato de número de expediente" class="img-responsive" width="550" height="200" style="margin: 5px 0; display: inline-block;">
+												</div>
+											</form>
+										</div>
+									</div>
+								</div>
+							</div>
+							<div class="row" style="margin: 0">
+								<div class="col-md-12">
+									<div id="parteT" class="col-xs-12 col-sm-3 col-sm-offset-2 etiqCmb" style="">
+										<label>Parte<span class="msjError"> (*)</span></label>
+									</div>
+									<div id="parteV" style="/*display: none;*/" class="col-xs-11 col-sm-5">
+										<input type="text" id="parte" tabindex="13" autocomplete="off" title="Ingresar apellido paterno y apellido materno o razón social de la parte" class="form-control" placeholder="APELLIDO PATERNO Y APELLIDO MATERNO O RAZÓN SOCIAL" onmouseover="this.style.cursor='pointer'" onkeyup="this.value=this.value.toUpperCase();" style="text-align: center;">
+										<span class="lbl-parte">Ingresar ambos apellidos (paterno y materno) o la razón social de alguna de las partes involucradas en el proceso, respetando el orden y la forma exacta en que aparecen en cualquiera de las resoluciones del expediente.</span>
+									</div>
+									<div id="parteE" class="gridCellCenter col-xs-10" style="text-align: right; height: 20px;">
+										<span id="parteError" class="msjError noVisible">Ingresar los datos de la parte</span>
+									</div>
+								</div>
+								
+							</div>
+							
+							<div style="text-align: center; color: #D60808; font-size: 0.9em; margin: 5px 0px;">
+								<strong>(*) Datos obligatorios</strong>
+							</div>
+						</div>
+						
+					</div>
+				</div>
+			</div>
+			<div id="divConsultar" style="">
+				<div style="text-align: center; padding: 25px 0 10px 0;">
+					<b>Escriba el código mostrado</b>
+				</div>
+				<div style="height: 46px; margin: 0 auto; display: table;">
+					<div style="width: 100px; height: 36px; display: inline-table;">
+						<img id="captcha_image" alt="Código captcha" tabindex="14" title="Código captcha" style="width: 100%; height: 100%;" src="/cej/Captcha.jpg">
+					</div>
+					<div style="display: inline-table;">
+						<img alt="Refrescar captcha" tabindex="15" id="btnReload" class="btn-img" title="Refrescar captcha" src="/cej/img/Reload.png" style="width: 32px; height: 32px; margin: 0 4px;" onmouseover="this.style.cursor='pointer'">
+					</div>
+					<div style="display: inline-table;">
+						<img alt="Reproducir captcha" tabindex="16" id="btnRepro" class="btn-img" title="Reproducir captcha" src="/cej/img/Audio.png" style="width: 32px; height: 32px; margin: 0 4px;" onmouseover="this.style.cursor='pointer'">
+					</div>
+
+					<div style="display: inline-table;">
+						<input type="text" maxlength="4" tabindex="17" title="Ingresar código captcha" class="form-control" size="4" id="codigoCaptcha" value="" placeholder="" onmouseover="this.style.cursor='pointer'" onkeyup="this.value=this.value.toUpperCase(); javascript:saltoCajaTexto(event,this,4,'consultarExpedientes');" style="text-align: center; width: 100px; display: inline-table;">
+					</div>
+				</div>
+				
+				<div style="text-align: center;">
+					<span id="codCaptchaError" class="titulo_sin_resultados" style="display: none">Ingrese el Código correcto</span>
+					<span id="mensajeNoExisteExpedientes" class="titulo_sin_resultados" style="display: none">No existe expedientes con los datos ingresados....</span>
+				</div>
+				<div id="b_consultar" style="text-align: center; /*display: none;*/">
+					<button id="consultarExpedientes" tabindex="18" title="Consultar" type="submit" class="btn btn-red shadow btn-primary-pj" style="margin: 10px 0px 6px 0;">CONSULTAR</button>
+					<img id="cargando" style="display: none; width: 32px; height: 32px;" src="/cej/img/ajax-loader.gif">
+				</div>
+				<div style="" class="ctxt">
+					<strong> * La búsqueda se deberá realizar ingresando el número, año y especialidad del expediente tal como se registró inicialmente en el
+						sistema.</strong>
+				</div>
+				<div class="ctxt" id="deleteSound"></div>
+			</div>
+		</div>
+		<div id="dfooter">
+	<footer style="background-image: url(/cej/img/footer.jpg); background-repeat: repeat-x;">
+		<section class="container">
+			<div class="col-sm-12 txtfooter">
+				Av. Paseo de la República S/N Palacio de Justicia, Cercado, Lima - Perú<br> Copyright © - 2016 Todos los derechos reservados<br> Recomendado para Chrome, Mozilla Firefox,
+				IExplorer 9 o versiones superiores<br>
+			</div>
+		</section>
+	</footer>
+</div>
+<script src="/cej/js/jquery-idleTimeout.js"></script>
+<!-- <script src="/cej/js/jquery-3.3.1.slim.min.js"></script> -->
+<!-- <script src="/cej/js/popper.min.js"></script> -->
+<!-- <script src="/cej/js/bootstrap.bundle.min.js"></script> -->
+<script src="/cej/js/bootstrap.min.js"></script>
+<script>
+	if ( !$("#divCargando").length > 0 ) {
+	  var ptoReferencia = ~~((new Date().getTime())/1000);
+	  var version = "2.5.0";
+	 	var eject;
+	//  	var inicia = 0;
+	  function verTiempoRest(tiempo){
+	  	'use strict';
+	  	ptoReferencia = ~~((new Date().getTime())/1000);
+	//   	inicia = 1;
+			sessionTimeout = (parseInt(tiempo) == 0 ) ? (600 - 120) : parseInt(tiempo);
+			sessionTimeout1 = sessionTimeout;
+	// 		console.log('verTiempoRest() : ' + tiempo + ' - ' + sessionTimeout1);
+		};
+	  (function(){
+	  	verTiempoRest(0);
+	    var reloj = document.getElementById("lblHora");
+	    var tRestante = document.getElementById("lblSessionTime");
+	    var lblVersion = document.getElementById("lblVersion");
+	    lblVersion.textContent = ' Versión ' + version;
+	    var tiempo_espera_sin_confirmar = noconfirm1();
+	    var getHora = function(){
+				var d = new Date();
+				var fecha = (".0" + d.getDate()).slice(-2) + "/" + (".0"+(d.getMonth()+1)).slice(-2) + "/" + d.getFullYear()
+	   		reloj.textContent = "Fecha: " + fecha + " Hora: " + new Date().toTimeString().replace(/.*(\d{2}:\d{2}:\d{2}).*/, "$1")
+	    	sessionTimeout = ~~((new Date().getTime())/1000) - (ptoReferencia + sessionTimeout1);
+	// 			console.log('sessionTimeout : ' + sessionTimeout);
+	    	if(sessionTimeout < 0){
+	    		sessionTimeout = Math.abs(sessionTimeout);
+		   		var min = ~~(sessionTimeout/60);
+			    if (min > 0)
+			    	tRestante.textContent = 'Tiempo restante de sesión: ' + (min<10?"0":"") + min + "':" + ((sessionTimeout%60)<10?"0":"") + sessionTimeout%60 + '"'
+		     	else
+			    	tRestante.textContent = 'Tiempo restante de sesión: ' + sessionTimeout + '"'
+	    	}else{
+	    		var min = ~~(sessionTimeout/60)
+		    	if (min > 0)
+		    		tRestante.textContent = 'Sesión finalizó hace: ' + (min<10?"0":"") + min + "':" + ((sessionTimeout%60)<10?"0":"") + sessionTimeout%60 + '"'
+		     	else
+			    	tRestante.textContent = 'Sesión finalizó hace: ' + sessionTimeout + '"'
+		     	if (sessionTimeout > 0 ) {
+			     	if($(location).attr('pathname').match('busquedaform.html$')){
+			     		redirect();
+				     	}
+			     	else if (!$('.ui-widget-overlay').length > 0) {
+			     		logout_msj += "$('.ui-widget-overlay').length : " + $('.ui-widget-overlay').length + "\n\r";
+							logout();
+						}
+					}
+					if(tiempo_espera_sin_confirmar < sessionTimeout){
+						redirect();
+					}
+	    	}
+	//     	if (inicia==1){
+	//     		inicia=0;
+	//     		clearInterval(eject);
+	//     		eject = setInterval(getHora, 1000);
+	//       }else{
+	//       }
+	  	};
+	  	eject = setInterval(getHora, 1000);
+	  })();
+  }
+	/*
+	$(window).resize(function() {
+  	if ($("nav> .container").height() < 100) {
+    	document.getElementsByClassName("horaSessionTime")[0].style.marginTop="-42px";
+    }else{
+    	document.getElementsByClassName("horaSessionTime")[0].style.marginTop="-208px";
+    }
+  });
+  */
+</script>
+	</div>
+	<div id="popup1" class="overlay">
+		<div class="popup">
+			<div id="tituulo">
+				<h4>Se ha modificado los nombres y sedes de algunos juzgados</h4>
+			</div>
+			<span id="span02" class="closeP" onclick="popup01Cerrar()" onmouseover="this.style.cursor='pointer'"></span>
+			<div class="content">
+				<br> <br> <b> Si su juzgado es:<br> <br> -Juzgado Contencioso Administrativo de la sede Domingo Cueto<br> - Juzgado Laboral<br> - Juzgado de Familia<br>
+					<br> Por favor verificar el siguiente enlace: <a href="preguntasFrecuentes.html#cambioJuzgados"> CLICK AQUI</a></b>
+			</div>
+		</div>
+	</div>
+	<div id="popup2" class="overlay">
+		<div class="popup">
+			<div id="tituulo">
+				<h4>Cambios a partir de la versión 2.1.8</h4>
+			</div>
+			<span id="span02" class="closeP" onclick="popup02Cerrar()" onmouseover="this.style.cursor='pointer'"></span>
+			<div class="content">
+				<br> <br> <b>Se han eliminado los filtros:<br> <br> <br>
+					<div style="text-align: justify; margin-left: 18%; font-weight: bold; font-size: 18px;">
+						<strong>"Sede"<br>"Sala/Juzgado"
+						</strong>
+					</div> <br> <br>A partir de la versión 2.1.8<br></b>
+			</div>
+		</div>
+	</div>
+	
+	<script type="text/javascript">
+    var modal = document.getElementById('popup1');
+    var modal2 = document.getElementById('popup2');
+    window.onclick = function(event) {
+    	if (event.target == modal) {
+        modal.style.visibility = "hidden";
+   		}
+    	if (event.target == modal2) {
+    		modal2.style.visibility = "hidden";
+   		}
+		}
+		var popup01 = document.getElementById('popup01');
+		function tFrames() {
+			return window.parent.frames.length;
+		}
+		
+	</script>
+	<style>
+	#divBuscarT>h3{
+		font-size: 18px; 
+		padding: 16px 0px 0px 0px;
+	}
+	.shadow{
+		border:none;
+		box-shadow: 0 2px 4px -1px rgba(0,0,0,.2), 0 4px 5px 0 rgba(0,0,0,.14), 0 1px 10px 0 rgba(0,0,0,.12);
+	}
+	.panel-pj{
+		border: 1px solid #dedede;
+		background-color: #f5f5f5;
+		padding: 0px 0px 10px 0px !important;
+	}
+	.nav-busqueda{
+		border-bottom: 1px solid #9a1413 !important;
+		margin-bottom: 0px !important;
+	}
+	.btn-primary-pj{
+	    padding: 8px 32px;
+	    border-radius: 20px;
+	    background-color: #9a1413;
+	    color: white;
+	}
+	.btn-primary-pj:hover{
+		box-shadow: 0 6px 6px -3px rgba(0,0,0,.2), 0 10px 14px 1px rgba(0,0,0,.14), 0 4px 18px 3px rgba(0,0,0,.12);
+		background-color: #b11e1d;
+	}
+	.box{
+		/*padding: 19px;*/
+	    margin-top: 0px !important;
+	    /*background-color: #f5f5f5;*/
+	    /*border: 1px solid #dedede;*/
+	    border: none !important;
+	}
+	.boxexp{
+		margin: 0 auto;
+	    margin-top: 0px;
+	    /*padding: 5px 0;*/
+	    /*background-color: #f5f5f5;*/
+	    border: none !important;
+	} 
+	.lbl-parte{
+		font-size: 12px;
+		line-height: 12px;
+		color: blue;
+		font-style: italic;
+	}
+	</style>
+
+</body></html>
