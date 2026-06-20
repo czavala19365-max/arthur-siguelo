@@ -1036,20 +1036,21 @@ async function fillAndScrape(
         if (errorCodes.includes(ajaxText) || ajaxText.startsWith('Sin conexion') || ajaxText.startsWith('Sin servicio') || ajaxText.startsWith('No existen')) {
           const errorMap: Record<string, string> = {
             '1': 'parte no coincide con el expediente',
-            '2': 'error de conexión a la base de datos',
+            '2': 'datos del expediente incorrectos o no encontrados',
             '3': 'no se encontraron registros',
-            '5': 'error de conexión',
+            '5': 'datos del expediente incorrectos o no encontrados',
             '-C': 'captcha incorrecto',
             '-CM': 'problema con captcha',
             '-CV': 'captcha vacío',
             'parte_req': 'parte requerida',
             'DistJud_x': 'distrito judicial incorrecto',
           }
-          console.log('[CEJ] Tab 2 AJAX validation failed:', errorMap[ajaxText] || ajaxText)
-          if (ajaxText === '-C' || ajaxText === '-CM' || ajaxText === '-CV') {
-            continue
+          const err = new Error(`Tab2 AJAX failed: ${errorMap[ajaxText] || ajaxText}`)
+          const TERMINAL_CODES2 = new Set(['1', '2', '3', '5', 'PE', 'parte_req', 'DistJud_x'])
+          if (TERMINAL_CODES2.has(ajaxText)) {
+            (err as any).terminal = true
           }
-          throw new Error(`Tab2 AJAX failed: ${errorMap[ajaxText] || ajaxText}`)
+          throw err
         }
       }
 
@@ -1235,8 +1236,9 @@ async function fillAndScrape(
         if (errorCodes1.includes(tab1AjaxText) || tab1AjaxText.startsWith('Sin conexion') || tab1AjaxText.startsWith('Sin servicio') || tab1AjaxText.startsWith('No existen')) {
           const errorMap1: Record<string, string> = {
             '1': 'parte no coincide con el expediente',
-            '2': 'error de conexión a la base de datos',
+            '2': 'datos del expediente incorrectos o no encontrados',
             '3': 'no se encontraron registros',
+            '5': 'datos del expediente incorrectos o no encontrados',
             '-C': 'captcha incorrecto',
             '-CM': 'problema con captcha',
             '-CV': 'captcha vacío',
@@ -1246,7 +1248,12 @@ async function fillAndScrape(
           if (tab1AjaxText === '-C' || tab1AjaxText === '-CV' || tab1AjaxText === '-CM') {
             continue
           }
-          throw new Error(`Tab1 AJAX failed: ${errorMap1[tab1AjaxText] || tab1AjaxText}`)
+          const err = new Error(`Tab1 AJAX failed: ${errorMap1[tab1AjaxText] || tab1AjaxText}`)
+          const TERMINAL_CODES1 = new Set(['1', '2', '3', '5', 'PE', 'parte_req', 'DistJud_x'])
+          if (TERMINAL_CODES1.has(tab1AjaxText)) {
+            (err as any).terminal = true
+          }
+          throw err
         }
       } else {
         console.log('[CEJ] Tab 1 AJAX did not fire (client-side validation failed?)')
@@ -1260,8 +1267,9 @@ async function fillAndScrape(
         console.log('[CEJ] Tab 1 result — actuaciones:', result.actuaciones.length)
         return result
       }
-    } catch (e: unknown) {
+    }  catch (e: unknown) {
       console.log(`[CEJ] Tab 1 error (attempt ${capAttempt1}):`, e instanceof Error ? e.message : String(e))
+      if ((e as any)?.terminal) throw e
     }
   } // end for loop
 
@@ -1298,6 +1306,7 @@ async function tryDirectAccess(
       console.log('[CEJ] Search URL loaded without Radware — proceeding')
       const result = await fillAndScrape(page, numeroExpediente, { ...baseResult }, parte).catch((err: unknown) => {
         console.log('[CEJ] fillAndScrape error:', err instanceof Error ? err.message : String(err))
+        if ((err as any)?.terminal) throw err
         return null
       })
       await browser.close()
@@ -1340,6 +1349,7 @@ async function tryDirectAccess(
   } catch (err: unknown) {
     console.log('[CEJ] Direct access failed:', err instanceof Error ? err.message : String(err))
     if (browser) await browser.close().catch(() => { })
+    if ((err as any)?.terminal) throw err
     return null
   }
 }
@@ -1396,7 +1406,16 @@ async function _scrapeCEJ(numeroExpediente: string, maxRetries: number, parte: s
 
   // ── Step 1: try without Radware captcha ──────────────────────────────────
   console.log('[CEJ] Trying direct access (no Radware captcha)...')
-  const directResult = await tryDirectAccess(numeroExpediente, { ...baseResult }, parte)
+  let directResult: CejCaseData | null = null
+  try {
+    directResult = await tryDirectAccess(numeroExpediente, { ...baseResult }, parte)
+  } catch (err: unknown) {
+    if ((err as any)?.terminal) {
+      console.log('[CEJ] Direct access: terminal error, not retrying —', err instanceof Error ? err.message : String(err))
+      return { ...baseResult, error: err instanceof Error ? err.message : String(err) }
+    }
+    console.log('[CEJ] Direct access threw non-terminal error, treating as blocked:', err instanceof Error ? err.message : String(err))
+  }
   if (directResult) {
     console.log('[CEJ] Direct access succeeded!')
     return directResult
@@ -1497,12 +1516,17 @@ async function _scrapeCEJ(numeroExpediente: string, maxRetries: number, parte: s
 
       if (attempt < maxRetries) await new Promise(r => setTimeout(r, 6000 * attempt))
 
-    } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : String(error)
-      console.error(`[CEJ] hCaptcha attempt ${attempt} failed:`, msg)
-      if (browser) { await browser.close().catch(() => { }); browser = null }
-      if (attempt < maxRetries) await new Promise(r => setTimeout(r, 6000 * attempt))
-    }
+      } catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : String(error)
+        console.error(`[CEJ] hCaptcha attempt ${attempt} failed:`, msg)
+        if (browser) { await browser.close().catch(() => { }); browser = null }
+
+        if ((error as any)?.terminal) {
+          return { ...baseResult, error: msg }
+        }
+
+        if (attempt < maxRetries) await new Promise(r => setTimeout(r, 6000 * attempt))
+      }
   }
 
   return { ...baseResult, portalDown: true, error: 'Portal CEJ no disponible después de 3 intentos' }

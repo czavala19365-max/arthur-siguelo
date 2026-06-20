@@ -348,8 +348,8 @@ export default function JudicialDashboardPage() {
       let msg = 'Error al guardar el proceso.';
       try {
         const j = JSON.parse(text) as { error?: string; detail?: string };
-        if (j.detail) msg = `${msg} ${j.detail}`;
-        else if (j.error && j.error !== 'Error al crear proceso judicial') msg = j.error;
+        if (j.error && j.error !== 'Error al crear proceso judicial') msg = j.error;
+        else if (j.detail) msg = `${msg} ${j.detail}`
       } catch {
         if (text) msg = `${msg} (${text.slice(0, 120)})`;
       }
@@ -950,16 +950,51 @@ export default function JudicialDashboardPage() {
               ) : submitStatus ? (
                 <div
                   style={{
-                    padding: '16px',
-                    border: '1px solid var(--line)',
-                    background: 'var(--surface)',
-                    fontFamily: 'var(--font-body)',
-                    fontSize: '13px',
-                    color: 'var(--ink)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '12px',
                     marginTop: 8,
                   }}
                 >
-                  {submitStatus}
+                  <div
+                    style={{
+                      padding: '16px',
+                      border: '1px solid var(--line)',
+                      background: 'var(--surface)',
+                      fontFamily: 'var(--font-body)',
+                      fontSize: '13px',
+                      color: 'var(--ink)',
+                    }}
+                  >
+                    {submitStatus}
+                  </div>
+                  {submitStatus.includes('Error') || 
+                    submitStatus.includes('No se pudieron') || 
+                    submitStatus.includes('error') || 
+                    submitStatus.includes('No se encontraron') || 
+                    submitStatus.includes('datos incorrectos') 
+                    ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSubmitStatus('');
+                        setProgress(0);
+                      }}
+                      style={{
+                        width: '100%',
+                        background: 'var(--ink)',
+                        color: 'var(--paper)',
+                        border: 'none',
+                        borderRadius: 0,
+                        padding: '16px',
+                        fontFamily: 'var(--font-body)',
+                        fontSize: '14px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Reintentar →
+                    </button>
+                  ) : null}
                 </div>
               ) : (
                 <button

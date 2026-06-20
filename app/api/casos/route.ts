@@ -69,17 +69,22 @@ async function runInitialCejSync(caso: Caso, scrapeCEJ: ScrapeFn) {
     scrapeResult = await fetchCejFromScraperService(caso.numero_expediente, parte, scrapeCEJ)
   } catch (err) {
     console.error('[API] Initial CEJ poll error (background):', err)
-    await updateCaso(caso.id, { last_checked: new Date().toISOString() })
-    return
+    //await updateCaso(caso.id, { last_checked: new Date().toISOString() })
+    throw err
+  }
+
+  if (scrapeResult?.error && !scrapeResult.portalDown) {
+    //await updateCaso(caso.id, { last_checked: scrapeResult.scrapedAt })
+    throw new Error(scrapeResult.error)
   }
 
   if (!scrapeResult || scrapeResult.portalDown) {
-    await updateCaso(caso.id, { last_checked: scrapeResult?.scrapedAt ?? new Date().toISOString() })
+    //await updateCaso(caso.id, { last_checked: scrapeResult?.scrapedAt ?? new Date().toISOString() })
     return
   }
 
   if (scrapeResult.captchaDetected && !scrapeResult.captchaSolved) {
-    await updateCaso(caso.id, { last_checked: scrapeResult.scrapedAt })
+    //await updateCaso(caso.id, { last_checked: scrapeResult.scrapedAt })
     return
   }
 
@@ -290,11 +295,19 @@ export async function POST(request: Request) {
       await runInitialCejSync(caso, scrapeCEJ);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      if (/parte no coincide|no se encontraron|error de cone/i.test(msg)) {
+      /*if (/parte no coincide|no se encontraron|error de conexión a la base de datos|datos? (del expediente )?incorrectos?/i.test(msg)) {
         const db = await getAuthServerClient(); await db.from('casos').delete().eq('id', caso.id);
         return Response.json({ error: 'No se encontraron registros con los datos ingresados', detail: msg }, { status: 400 });
-      }
+      }*/
       console.error('[API] runInitialCejSync error:', err);
+
+      const db = await getAuthServerClient();
+      await db.from('casos').delete().eq('id', caso.id);
+
+      return Response.json(
+        { error: 'No se pudo verificar el expediente. Revise los datos ingresados e intente nuevamente.', detail: msg },
+        { status: 400 }
+      );
     }
 
     // Extraer fechas de PDFs y guardar como audiencias
