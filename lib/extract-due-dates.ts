@@ -60,54 +60,94 @@ export async function extractDueDatesFromPDF(
     console.log(`[Claude] 📄 Enviando ${textToAnalyze.length} caracteres a Claude...`);
 
     const message = await anthropic.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
+      model: 'claude-sonnet-4-6',
       max_tokens: 300,
       messages: [
         {
           role: 'user',
           content: `
 
-Eres un abogado peruano experto en expedientes judiciales.
+Eres un abogado litigante peruano especializado en expedientes judiciales.
 
-Analiza el documento y extrae únicamente fechas explícitamente escritas.
+TAREA:
 
-REGLAS IMPORTANTES:
+Debes identificar EXCLUSIVAMENTE actuaciones judiciales FUTURAS o PROGRAMADAS.
 
-- NO inventes fechas.
-- NO calcules fechas.
-- NO infieras fechas.
-- NO conviertas plazos en fechas.
-- SOLO devuelve fechas que aparezcan literalmente en el documento.
-- Si no existe una fecha explícita devuelve dueDate = null.
+SOLO son válidas:
 
-Busca especialmente:
+Audiencias
+Vista de causa
+Informe oral
+Diligencias programadas
+Actuaciones judiciales expresamente señaladas para una fecha futura
 
-- Audiencias
-- Resoluciones
-- Decretos
-- Autos
-- Sentencias
-- Requerimientos
-- Traslados
-- Vencimientos
-- Plazos
+NO son válidas:
 
-Devuelve SOLO JSON válido.
+Fecha de emisión de resoluciones
+Fecha de decretos
+Fecha de sentencias
+Fecha de autos
+Fecha de escritos
+Fecha de demandas
+Fecha de presentación de recursos
+Fecha de notificaciones
+Fechas históricas ya ocurridas
+
+REGLA CRÍTICA:
+
+Si la fecha corresponde únicamente a la emisión de una resolución, sentencia, decreto o auto, debes devolver dueDate = null.
+
+Si la actuación ya ocurrió al momento del documento, debes devolver dueDate = null.
+
+RESPONDE EXCLUSIVAMENTE CON JSON.
+
+NO escribas explicaciones.
+NO escribas texto antes del JSON.
+NO escribas texto después del JSON.
+NO uses markdown.
+NO uses bloques de código JSON.
+Formato válido:
 
 {
-  "dueDate":"2026-07-15",
-  "description":"Audiencia única",
-  "priority":"alta",
-  "confidence":95
+"dueDate":"2026-07-15",
+"description":"Vista de causa programada",
+"priority":"alta",
+"confidence":95
 }
 
-Si no encuentras una fecha:
+Si NO existe una actuación futura o programada:
 
 {
-  "dueDate":null,
-  "description":"Sin plazo identificable",
-  "priority":"baja",
-  "confidence":0
+"dueDate": null,
+"description":"Sin actuación programada",
+"priority":"baja",
+"confidence":0
+}
+
+EJEMPLO 1:
+
+"Resolución N° 5 de fecha 10 de marzo de 2026"
+
+Respuesta:
+
+{
+"dueDate": null,
+"description":"Sin actuación programada",
+"priority":"baja",
+"confidence":0
+}
+
+EJEMPLO 2:
+
+"Se señala informe oral para el día 17 de marzo de 2026 a las 15:00 horas"
+
+Respuesta:
+
+{
+"dueDate":"2026-03-17",
+"description":"Informe oral programado",
+"priority":"alta",
+"confidence":100
 }
 
 DOCUMENTO:
@@ -121,10 +161,16 @@ ${textToAnalyze}`,
     console.log(`[Claude] 📝 Respuesta: ${responseText.substring(0, 100)}...`);
 
     try {
-      const parsed = JSON.parse(responseText) as ExtractedDueDate;
-      console.log(`[Claude] ✅ Fecha extraída:`, parsed.dueDate, `| Confianza: ${parsed.confidence}%`);
-      return parsed;
-    } catch (parseErr) {
+        const match = responseText.match(/\{[\s\S]*\}/);
+
+        if (!match) {
+          throw new Error('No se encontró JSON en la respuesta');
+        }
+
+        const parsed = JSON.parse(match[0]) as ExtractedDueDate;
+
+        return parsed;
+      } catch (parseErr) {
       console.error('[Claude] ❌ JSON inválido. Raw:', responseText);
       return {
         dueDate: null,
@@ -172,17 +218,41 @@ export async function findNextDueDate(
   );
 
   const validDates = results.filter((r) => r.dueDate && r.confidence > 30);
+  
   console.log(`[PDF Extract] 📊 Resultados: ${results.length} total, ${validDates.length} con fecha válida`);
-
+  console.table(
+    validDates.map(v => ({
+      dueDate: v.dueDate,
+      confidence: v.confidence,
+      description: v.description?.substring(0, 60)
+    }))
+  );
+  
   if (validDates.length === 0) {
     console.warn('[PDF Extract] ⚠️ Ninguna fecha con confianza > 30%');
     return null;
   }
 
-  const closest = validDates.sort(
-    (a, b) => new Date(a.dueDate!).getTime() - new Date(b.dueDate!).getTime()
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const futureDates = validDates.filter(d => {
+    const due = new Date(d.dueDate!);
+    due.setHours(0, 0, 0, 0);
+    return due >= today;
+  });
+
+  if (futureDates.length === 0) {
+    console.warn('[PDF Extract] ⚠️ No hay fechas futuras');
+    return null;
+  }
+
+  const closest = futureDates.sort(
+    (a, b) =>
+      new Date(a.dueDate!).getTime() -
+      new Date(b.dueDate!).getTime()
   )[0];
 
   console.log(`[PDF Extract] ✅ Fecha más cercana: ${closest.dueDate}`);
-  return closest;
+  return closest; 
 }
