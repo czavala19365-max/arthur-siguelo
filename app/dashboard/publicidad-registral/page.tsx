@@ -1,134 +1,430 @@
+'use client'
+
+import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
+import type { SprlConnectionStatus, SprlServicio } from '@/lib/sprl/types'
+
+const PAGE_PADDING = '48px 64px'
+const PAGE_PADDING_MOBILE = '32px 20px'
+
+function GoldBullet() {
+  return (
+    <svg width="8" height="8" viewBox="0 0 8 8" fill="var(--accent)" style={{ flexShrink: 0, marginTop: 6 }}>
+      <rect width="8" height="8" />
+    </svg>
+  )
+}
+
+function ServiceIcon() {
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" strokeWidth="1.5">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <path d="M14 2v6h6" />
+      <path d="M16 13H8M16 17H8M10 9H8" />
+    </svg>
+  )
+}
+
+function estadoBadge(estado: 'pendiente' | 'activo' | 'error' | 'desconectado') {
+  const styles: Record<string, { bg: string; color: string; label: string }> = {
+    pendiente: { bg: 'rgba(201, 168, 76, 0.12)', color: '#9a7b2e', label: 'Pendiente de verificación' },
+    activo: { bg: 'rgba(39, 174, 96, 0.12)', color: '#1e8449', label: 'Activo' },
+    error: { bg: 'rgba(192, 57, 43, 0.12)', color: '#c0392b', label: 'Error' },
+    desconectado: { bg: 'var(--surface)', color: 'var(--muted)', label: 'Desconectado' },
+  }
+  const s = styles[estado] ?? styles.pendiente
+  return (
+    <span
+      style={{
+        fontFamily: 'var(--font-mono)',
+        fontSize: 10,
+        textTransform: 'uppercase',
+        letterSpacing: '0.1em',
+        padding: '4px 10px',
+        background: s.bg,
+        color: s.color,
+        border: `1px solid ${s.color}33`,
+      }}
+    >
+      {s.label}
+    </span>
+  )
+}
 
 export default function PublicidadRegistralPage() {
+  const [loading, setLoading] = useState(true)
+  const [status, setStatus] = useState<SprlConnectionStatus>({ connected: false })
+  const [servicios, setServicios] = useState<SprlServicio[]>([])
+  const [disconnecting, setDisconnecting] = useState(false)
+  const [toast, setToast] = useState<string | null>(null)
+
+  const loadData = useCallback(async () => {
+    setLoading(true)
+    try {
+      const [credRes, servRes] = await Promise.all([
+        fetch('/api/sprl/credentials'),
+        fetch('/api/sprl/servicios'),
+      ])
+      if (credRes.ok) {
+        setStatus((await credRes.json()) as SprlConnectionStatus)
+      }
+      if (servRes.ok) {
+        const data = await servRes.json()
+        setServicios(data.servicios ?? [])
+      }
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadData()
+  }, [loadData])
+
+  useEffect(() => {
+    if (!toast) return
+    const t = setTimeout(() => setToast(null), 3000)
+    return () => clearTimeout(t)
+  }, [toast])
+
+  async function handleDisconnect() {
+    setDisconnecting(true)
+    try {
+      const res = await fetch('/api/sprl/credentials', { method: 'DELETE' })
+      if (res.ok) {
+        setStatus({ connected: false })
+      }
+    } finally {
+      setDisconnecting(false)
+    }
+  }
+
+  function handleServiceClick(servicio: SprlServicio) {
+    if (!servicio.activo) return
+    setToast('Disponible en la próxima actualización')
+  }
+
+  const benefits = [
+    'Consulta vigencias de poder y copias literales desde SUNARP SPRL',
+    'Programa solicitudes recurrentes sin volver a ingresar credenciales',
+    'Historial centralizado de trámites registrales de tu estudio',
+  ]
+
   return (
-    <div style={{
-      padding: '48px 64px',
-      background: 'var(--paper)',
-      minHeight: '100vh',
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-    }}>
-      <div style={{
-        maxWidth: '560px',
-        width: '100%',
-        textAlign: 'center',
-      }}>
+    <>
+      <style>{`
+        .sprl-page { padding: ${PAGE_PADDING}; }
+        @media (max-width: 768px) {
+          .sprl-page { padding: ${PAGE_PADDING_MOBILE}; }
+        }
+        .sprl-service-card:hover { border-color: var(--accent) !important; }
+      `}</style>
 
-        {/* Ícono */}
-        <div style={{
-          width: '80px',
-          height: '80px',
-          margin: '0 auto 32px',
-          background: 'var(--surface)',
-          border: '1px solid var(--line)',
-          borderRadius: '4px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}>
-          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-            <path d="M14 2v6h6" />
-            <circle cx="12" cy="14" r="3" />
-            <path d="M12 11V9.5" />
-          </svg>
-        </div>
-
-        {/* Etiqueta */}
-        <div style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: '11px',
-          textTransform: 'uppercase',
-          letterSpacing: '0.15em',
-          color: 'var(--accent)',
-          marginBottom: '16px',
-        }}>
-          Módulo en desarrollo
-        </div>
-
-        {/* Título */}
-        <h1 style={{
-          fontFamily: 'var(--font-display)',
-          fontSize: 'clamp(26px, 4vw, 40px)',
+      <div
+        className="sprl-page"
+        style={{
+          background: 'var(--paper)',
+          minHeight: '100%',
           color: 'var(--ink)',
-          fontWeight: 700,
-          fontStyle: 'italic',
-          lineHeight: 1.15,
-          marginBottom: '20px',
-        }}>
-          Publicidad Registral
-        </h1>
-
-        {/* Separador */}
-        <div style={{
-          width: '48px',
-          height: '2px',
-          background: 'rgba(194,164,109,0.4)',
-          margin: '0 auto 24px',
-        }} />
-
-        {/* Texto */}
-        <p style={{
-          fontFamily: 'var(--font-body)',
-          fontSize: '15px',
-          color: 'var(--muted)',
-          lineHeight: 1.7,
-          marginBottom: '32px',
-        }}>
-          Estamos trabajando para traerte acceso a la Publicidad Registral de SUNARP.
-          Pronto podrás consultar vigencias de poder, copias literales y más.
-        </p>
-
-        {/* Badge construcción */}
-        <div style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '8px',
-          padding: '8px 18px',
-          background: 'var(--surface)',
-          border: '1px solid var(--line)',
-          marginBottom: '40px',
-          fontFamily: 'var(--font-mono)',
-          fontSize: '11px',
-          textTransform: 'uppercase',
-          letterSpacing: '0.1em',
-          color: 'var(--muted)',
-        }}>
-          <span style={{ fontSize: '14px' }}>🚧</span>
-          Arthur está trabajando en este módulo
-        </div>
-
-        {/* Botón */}
-        <div>
-          <Link
-            href="/dashboard"
+        }}
+      >
+        {toast && (
+          <div
             style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '11px 24px',
-              background: 'var(--ink)',
-              color: 'var(--paper)',
+              position: 'fixed',
+              bottom: 24,
+              right: 24,
+              zIndex: 100,
+              padding: '12px 20px',
+              background: 'var(--paper)',
+              border: '1px solid var(--accent)',
               fontFamily: 'var(--font-mono)',
-              fontSize: '12px',
+              fontSize: 11,
               textTransform: 'uppercase',
-              letterSpacing: '0.1em',
-              textDecoration: 'none',
-              borderRadius: '3px',
-              transition: 'opacity 0.15s',
+              letterSpacing: '0.06em',
+              color: 'var(--accent)',
             }}
           >
-            <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-              <path d="M19 12H5M12 5l-7 7 7 7" />
-            </svg>
-            Volver al Inicio
-          </Link>
-        </div>
+            {toast}
+          </div>
+        )}
 
+        {loading ? (
+          <p style={{ fontFamily: 'var(--font-body)', color: 'var(--muted)', fontSize: 14 }}>Cargando...</p>
+        ) : !status.connected ? (
+          <div style={{ maxWidth: 640 }}>
+            <div
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+                textTransform: 'uppercase',
+                letterSpacing: '0.15em',
+                color: 'var(--accent)',
+                marginBottom: 16,
+              }}
+            >
+              Publicidad Registral
+            </div>
+            <h1
+              style={{
+                fontFamily: 'var(--font-display)',
+                fontSize: 'clamp(28px, 4vw, 42px)',
+                fontWeight: 700,
+                fontStyle: 'italic',
+                lineHeight: 1.15,
+                margin: '0 0 20px',
+                color: 'var(--ink)',
+              }}
+            >
+              Conecta tu cuenta SUNARP
+            </h1>
+            <p
+              style={{
+                fontFamily: 'var(--font-body)',
+                fontSize: 15,
+                color: 'var(--muted)',
+                lineHeight: 1.7,
+                margin: '0 0 24px',
+              }}
+            >
+              Vincula tus credenciales de SPRL para consultar servicios registrales, vigencias de poder,
+              copias literales y más — todo desde Arthur, con credenciales cifradas y seguras.
+            </p>
+            <div
+              style={{
+                width: 48,
+                height: 2,
+                background: 'var(--accent)',
+                marginBottom: 32,
+                opacity: 0.6,
+              }}
+            />
+            <Link
+              href="/dashboard/publicidad-registral/conectar"
+              style={{
+                display: 'inline-block',
+                padding: '14px 28px',
+                background: 'var(--ink)',
+                color: 'var(--paper)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 12,
+                textTransform: 'uppercase',
+                letterSpacing: '0.1em',
+                textDecoration: 'none',
+                marginBottom: 40,
+              }}
+            >
+              Conectar cuenta SUNARP
+            </Link>
+            <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {benefits.map(b => (
+                <li key={b} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                  <GoldBullet />
+                  <span style={{ fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--muted)', lineHeight: 1.6 }}>
+                    {b}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : (
+          <div>
+            <div
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+                textTransform: 'uppercase',
+                letterSpacing: '0.15em',
+                color: 'var(--accent)',
+                marginBottom: 24,
+              }}
+            >
+              Publicidad Registral
+            </div>
+
+            <div
+              style={{
+                background: 'var(--paper)',
+                border: '1px solid var(--line)',
+                borderLeft: '3px solid var(--accent)',
+                padding: '24px 28px',
+                marginBottom: 40,
+                display: 'flex',
+                flexWrap: 'wrap',
+                justifyContent: 'space-between',
+                alignItems: 'flex-start',
+                gap: 20,
+              }}
+            >
+              <div>
+                <div
+                  style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 14,
+                    letterSpacing: '0.08em',
+                    color: 'var(--ink)',
+                    marginBottom: 10,
+                  }}
+                >
+                  {status.credential.display_username ?? '****SPRL'}
+                </div>
+                <div style={{ marginBottom: 12 }}>{estadoBadge(status.credential.estado)}</div>
+                {status.credential.saldo_disponible != null && (
+                  <div
+                    style={{
+                      fontFamily: 'var(--font-body)',
+                      fontSize: 16,
+                      color: 'var(--ink)',
+                      marginBottom: 6,
+                    }}
+                  >
+                    Saldo: S/ {status.credential.saldo_disponible.toFixed(2)}
+                  </div>
+                )}
+                {status.credential.ultimo_login && (
+                  <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--muted)' }}>
+                    Último login:{' '}
+                    {new Date(status.credential.ultimo_login).toLocaleString('es-PE')}
+                  </div>
+                )}
+                {status.credential.error_mensaje && (
+                  <div
+                    style={{
+                      marginTop: 10,
+                      fontSize: 13,
+                      color: '#c0392b',
+                      borderLeft: '2px solid #c0392b',
+                      paddingLeft: 12,
+                    }}
+                  >
+                    {status.credential.error_mensaje}
+                  </div>
+                )}
+              </div>
+              <button
+                type="button"
+                disabled={disconnecting}
+                onClick={() => void handleDisconnect()}
+                style={{
+                  padding: '10px 18px',
+                  background: 'transparent',
+                  border: '1px solid var(--line)',
+                  color: 'var(--muted)',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 11,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.08em',
+                  cursor: disconnecting ? 'not-allowed' : 'pointer',
+                }}
+                onMouseOver={e => {
+                  e.currentTarget.style.borderColor = '#c0392b88'
+                  e.currentTarget.style.color = '#c0392b'
+                }}
+                onMouseOut={e => {
+                  e.currentTarget.style.borderColor = 'var(--line)'
+                  e.currentTarget.style.color = 'var(--muted)'
+                }}
+              >
+                {disconnecting ? 'Desconectando...' : 'Desconectar'}
+              </button>
+            </div>
+
+            <h2
+              style={{
+                fontFamily: 'var(--font-display)',
+                fontSize: 22,
+                fontWeight: 600,
+                margin: '0 0 24px',
+                color: 'var(--ink)',
+              }}
+            >
+              Servicios disponibles
+            </h2>
+
+            {servicios.length === 0 ? (
+              <p style={{ color: 'var(--muted)', fontSize: 14 }}>No hay servicios en el catálogo.</p>
+            ) : (
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                  gap: 20,
+                }}
+              >
+                {servicios.map(s => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    disabled={!s.activo}
+                    className={s.activo ? 'sprl-service-card' : undefined}
+                    onClick={() => handleServiceClick(s)}
+                    style={{
+                      textAlign: 'left',
+                      background: 'var(--paper)',
+                      border: '1px solid var(--line)',
+                      padding: '24px',
+                      cursor: s.activo ? 'pointer' : 'default',
+                      opacity: s.activo ? 1 : 0.45,
+                      transition: 'border-color 0.15s',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+                      <ServiceIcon />
+                      <span
+                        style={{
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: 10,
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.1em',
+                          color: s.activo ? 'var(--accent)' : 'var(--muted)',
+                        }}
+                      >
+                        {s.activo ? 'Disponible' : 'Próximamente'}
+                      </span>
+                    </div>
+                    <div
+                      style={{
+                        fontFamily: 'var(--font-body)',
+                        fontSize: 16,
+                        fontWeight: 600,
+                        color: 'var(--ink)',
+                        marginBottom: 8,
+                      }}
+                    >
+                      {s.nombre}
+                    </div>
+                    {s.descripcion && (
+                      <p
+                        style={{
+                          fontFamily: 'var(--font-body)',
+                          fontSize: 13,
+                          color: 'var(--muted)',
+                          lineHeight: 1.55,
+                          margin: '0 0 12px',
+                        }}
+                      >
+                        {s.descripcion}
+                      </p>
+                    )}
+                    {s.costo_aproximado != null && (
+                      <div
+                        style={{
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: 11,
+                          color: 'var(--ink)',
+                          letterSpacing: '0.04em',
+                        }}
+                      >
+                        ~ S/ {s.costo_aproximado.toFixed(2)}
+                      </div>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
-    </div>
+    </>
   )
 }

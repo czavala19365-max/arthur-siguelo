@@ -14,7 +14,7 @@ const tools = [
     href: '/legal/actas',
     tag: 'Derecho societario — Perú',
     title: 'Actas JGA',
-    desc: 'Wizard para actas de Junta General de Accionistas en formato notarial peruano.',
+    desc: 'Motor profesional de actas JGA: 17 tipos de operación, precedentes, DOCX e IA.',
   },
   {
     href: '/legal/redline',

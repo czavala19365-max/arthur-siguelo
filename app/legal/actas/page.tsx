@@ -1,5 +1,5 @@
-import JgaWizard from '@/components/legal/actas/JgaWizard'
+import ActasJgaShell from '@/components/legal/actas/ActasJgaShell'
 
 export default function ActasPage() {
-  return <JgaWizard />
+  return <ActasJgaShell />
 }
