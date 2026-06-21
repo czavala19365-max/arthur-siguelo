@@ -25,11 +25,33 @@ function ServiceIcon() {
   )
 }
 
+function VerifySpinner() {
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      style={{ animation: 'sprl-spin 0.8s linear infinite' }}
+    >
+      <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+    </svg>
+  )
+}
+
+function cardBorderColor(estado: 'pendiente' | 'activo' | 'error' | 'desconectado') {
+  if (estado === 'activo') return '#27ae60'
+  if (estado === 'error') return '#c0392b'
+  return 'var(--accent)'
+}
+
 function estadoBadge(estado: 'pendiente' | 'activo' | 'error' | 'desconectado') {
   const styles: Record<string, { bg: string; color: string; label: string }> = {
     pendiente: { bg: 'rgba(201, 168, 76, 0.12)', color: '#9a7b2e', label: 'Pendiente de verificación' },
-    activo: { bg: 'rgba(39, 174, 96, 0.12)', color: '#1e8449', label: 'Activo' },
-    error: { bg: 'rgba(192, 57, 43, 0.12)', color: '#c0392b', label: 'Error' },
+    activo: { bg: 'rgba(39, 174, 96, 0.12)', color: '#27ae60', label: 'ACTIVO' },
+    error: { bg: 'rgba(192, 57, 43, 0.12)', color: '#c0392b', label: 'ERROR' },
     desconectado: { bg: 'var(--surface)', color: 'var(--muted)', label: 'Desconectado' },
   }
   const s = styles[estado] ?? styles.pendiente
@@ -56,6 +78,8 @@ export default function PublicidadRegistralPage() {
   const [status, setStatus] = useState<SprlConnectionStatus>({ connected: false })
   const [servicios, setServicios] = useState<SprlServicio[]>([])
   const [disconnecting, setDisconnecting] = useState(false)
+  const [verifying, setVerifying] = useState(false)
+  const [displayName, setDisplayName] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
 
   const loadData = useCallback(async () => {
@@ -93,9 +117,28 @@ export default function PublicidadRegistralPage() {
       const res = await fetch('/api/sprl/credentials', { method: 'DELETE' })
       if (res.ok) {
         setStatus({ connected: false })
+        setDisplayName(null)
       }
     } finally {
       setDisconnecting(false)
+    }
+  }
+
+  async function handleVerify() {
+    setVerifying(true)
+    try {
+      const res = await fetch('/api/sprl/credentials/verify', { method: 'POST' })
+      const data = await res.json()
+
+      if (res.ok && data.ok) {
+        if (data.displayName) setDisplayName(data.displayName)
+        await loadData()
+        setToast('Cuenta SPRL verificada correctamente')
+      } else {
+        await loadData()
+      }
+    } finally {
+      setVerifying(false)
     }
   }
 
@@ -118,6 +161,10 @@ export default function PublicidadRegistralPage() {
           .sprl-page { padding: ${PAGE_PADDING_MOBILE}; }
         }
         .sprl-service-card:hover { border-color: var(--accent) !important; }
+        @keyframes sprl-spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
       `}</style>
 
       <div
@@ -246,7 +293,7 @@ export default function PublicidadRegistralPage() {
               style={{
                 background: 'var(--paper)',
                 border: '1px solid var(--line)',
-                borderLeft: '3px solid var(--accent)',
+                borderLeft: `3px solid ${cardBorderColor(status.credential.estado)}`,
                 padding: '24px 28px',
                 marginBottom: 40,
                 display: 'flex',
@@ -259,26 +306,92 @@ export default function PublicidadRegistralPage() {
               <div>
                 <div
                   style={{
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: 14,
-                    letterSpacing: '0.08em',
-                    color: 'var(--ink)',
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    alignItems: 'center',
+                    gap: 12,
                     marginBottom: 10,
                   }}
                 >
-                  {status.credential.display_username ?? '****SPRL'}
+                  <span
+                    style={{
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 14,
+                      letterSpacing: '0.08em',
+                      color: 'var(--ink)',
+                    }}
+                  >
+                    {status.credential.display_username ?? '****SPRL'}
+                  </span>
+                  {(status.credential.estado === 'pendiente' || status.credential.estado === 'error') && (
+                    <button
+                      type="button"
+                      disabled={verifying}
+                      onClick={() => void handleVerify()}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        padding: '8px 14px',
+                        background: 'var(--ink)',
+                        color: 'var(--paper)',
+                        border: 'none',
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: 11,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.08em',
+                        cursor: verifying ? 'not-allowed' : 'pointer',
+                        opacity: verifying ? 0.75 : 1,
+                      }}
+                    >
+                      {verifying ? (
+                        <>
+                          <VerifySpinner />
+                          VERIFICANDO...
+                        </>
+                      ) : (
+                        'VERIFICAR CUENTA'
+                      )}
+                    </button>
+                  )}
                 </div>
+                {verifying && (
+                  <p
+                    style={{
+                      fontFamily: 'var(--font-body)',
+                      fontSize: 13,
+                      color: 'var(--muted)',
+                      margin: '0 0 12px',
+                    }}
+                  >
+                    Verificando conexión con SUNARP...
+                  </p>
+                )}
                 <div style={{ marginBottom: 12 }}>{estadoBadge(status.credential.estado)}</div>
+                {displayName && (
+                  <div
+                    style={{
+                      fontFamily: 'var(--font-display)',
+                      fontSize: 18,
+                      fontWeight: 600,
+                      color: 'var(--ink)',
+                      marginBottom: 8,
+                    }}
+                  >
+                    {displayName}
+                  </div>
+                )}
                 {status.credential.saldo_disponible != null && (
                   <div
                     style={{
-                      fontFamily: 'var(--font-body)',
-                      fontSize: 16,
+                      fontFamily: 'var(--font-display)',
+                      fontSize: status.credential.estado === 'activo' ? 28 : 16,
+                      fontWeight: status.credential.estado === 'activo' ? 700 : 400,
                       color: 'var(--ink)',
                       marginBottom: 6,
                     }}
                   >
-                    Saldo: S/ {status.credential.saldo_disponible.toFixed(2)}
+                    S/ {status.credential.saldo_disponible.toFixed(2)}
                   </div>
                 )}
                 {status.credential.ultimo_login && (
@@ -291,8 +404,9 @@ export default function PublicidadRegistralPage() {
                   <div
                     style={{
                       marginTop: 10,
+                      fontFamily: 'var(--font-body)',
                       fontSize: 13,
-                      color: '#c0392b',
+                      color: 'var(--muted)',
                       borderLeft: '2px solid #c0392b',
                       paddingLeft: 12,
                     }}
