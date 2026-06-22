@@ -61,33 +61,31 @@ async function fetchCejFromScraperService(numero: string, parte: string, scrapeC
   return data as CejCaseData
 }
 
-/** Sincroniza CEJ → DB (misma lógica que el POST antiguo, pero puede ejecutarse en segundo plano). */
-async function runInitialCejSync(caso: Caso, scrapeCEJ: ScrapeFn) {
-  let scrapeResult: Awaited<ReturnType<ScrapeFn>> | null = null
-  const parte = caso.parte_procesal?.trim() || caso.partes || ''
-  try {
-    scrapeResult = await fetchCejFromScraperService(caso.numero_expediente, parte, scrapeCEJ)
-  } catch (err) {
-    console.error('[API] Initial CEJ poll error (background):', err)
-    //await updateCaso(caso.id, { last_checked: new Date().toISOString() })
-    throw err
-  }
+/** VALIDACIÓN PURA: Solo scraping, sin guardar en BD. Retorna los datos o lanza error. */
+async function validateCejScrape(numero_expediente: string, parte_procesal: string, scrapeCEJ: ScrapeFn): Promise<CejCaseData> {
+  const parte = parte_procesal?.trim() || ''
+  if (!parte) throw new Error('Parte procesal requerida')
+
+  const scrapeResult = await fetchCejFromScraperService(numero_expediente, parte, scrapeCEJ)
 
   if (scrapeResult?.error && !scrapeResult.portalDown) {
-    //await updateCaso(caso.id, { last_checked: scrapeResult.scrapedAt })
     throw new Error(scrapeResult.error)
   }
 
   if (!scrapeResult || scrapeResult.portalDown) {
-    //await updateCaso(caso.id, { last_checked: scrapeResult?.scrapedAt ?? new Date().toISOString() })
-    return
+    const msg = scrapeResult?.error || 'Portal CEJ no disponible'
+    throw new Error(`CEJ portal no disponible: ${msg}`)
   }
 
   if (scrapeResult.captchaDetected && !scrapeResult.captchaSolved) {
-    //await updateCaso(caso.id, { last_checked: scrapeResult.scrapedAt })
-    return
+    throw new Error('No se pudo resolver el captcha de CEJ. Por favor, intenta nuevamente.')
   }
 
+  return scrapeResult
+}
+
+/** Guarda los datos del scraping en una caso ya existente. */
+async function persistCejScrapeToCaso(caso: Caso, scrapeResult: CejCaseData): Promise<void> {
   const actuaciones = Array.isArray(scrapeResult.actuaciones) ? scrapeResult.actuaciones : []
   const partesScrape = Array.isArray(scrapeResult.partes) ? scrapeResult.partes : []
 
@@ -138,14 +136,13 @@ async function runInitialCejSync(caso: Caso, scrapeCEJ: ScrapeFn) {
       })
       rows.push({ id: rowId, mov })
     } catch (movErr) {
-      console.error('[API] addMovimientoJudicial failed (background):', movErr)
+      console.error('[API] addMovimientoJudicial failed:', movErr)
     }
   }
 
-  console.log(`[API] CEJ sync: caso ${caso.id} — ${rows.length} filas guardadas; clasificando IA…`)
+  console.log(`[API] CEJ sync: caso ${caso.id} — ${rows.length} movimientos guardados`)
 
-  // Enviar alerta solo para el movimiento más reciente (si existe) luego de clasificarlo.
-  // Mantiene el comportamiento consistente con "Revisar ahora" (no spamear por cada fila).
+  // Clasificación IA y envío de alertas
   let mostRecentToAlert: { mov: (typeof movimientos)[0]; cls: { urgencia: 'alta' | 'normal' | 'info'; sugerencia: string } } | null = null
   for (const { id, mov } of rows) {
     const cls = await clasificarMovimientoCEJ(
@@ -192,11 +189,9 @@ async function runInitialCejSync(caso: Caso, scrapeCEJ: ScrapeFn) {
         }
       }
     } catch (e) {
-      console.error('[API] Initial alert send failed:', e)
+      console.error('[API] Alert send failed:', e)
     }
   }
-
-  console.log(`[API] CEJ sync finished for caso ${caso.id}: ${movimientos.length} movimientos persistidos`)
 }
 
 export async function GET(request: Request) {
@@ -241,15 +236,57 @@ export async function POST(request: Request) {
 
     const body = await request.json() as Record<string, unknown>
 
+    const numero_expediente = String(body.numero_expediente ?? '')
+    const parte_procesal = body.parte_procesal ? String(body.parte_procesal) : null
+
+    // ─────────────────────────────────────────────────────────────
+    // PASO 1: VALIDAR SCRAPING PRIMERO (sin crear el caso aún)
+    // ─────────────────────────────────────────────────────────────
+    const hasRailwayScraper = !!process.env.CEJ_SCRAPER_URL?.trim()
+
+    let scrapeCEJ: ScrapeFn
+    let scrapeResult: CejCaseData | null = null
+
+    if (hasRailwayScraper) {
+      scrapeCEJ = (async () => {
+        throw new Error('Railway scraper should handle this request')
+      }) as unknown as ScrapeFn
+    } else {
+      try {
+        const mod = await import('@/lib/cej-scraper')
+        scrapeCEJ = mod.scrapeCEJ
+      } catch (modErr) {
+        console.error('[API] POST /casos: no se pudo cargar cej-scraper:', modErr)
+        scrapeCEJ = (async () => {
+          throw new Error('Playwright no disponible en este entorno')
+        }) as unknown as ScrapeFn
+      }
+    }
+
+    // Intentar validación de scraping
+    try {
+      scrapeResult = await validateCejScrape(numero_expediente, parte_procesal || '', scrapeCEJ)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error('[API] CEJ validation failed:', msg)
+      return Response.json(
+        { error: 'No se pudo verificar el expediente. Revise los datos ingresados e intente nuevamente.', detail: msg },
+        { status: 400 }
+      )
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // PASO 2: Si validación OK → crear el caso
+    // ─────────────────────────────────────────────────────────────
     const pollHours = Number(body.polling_frequency_hours ?? 4)
     const caso = await createCaso({
       user_id: user.id,
-      numero_expediente: String(body.numero_expediente ?? ''),
+      numero_expediente,
       distrito_judicial: String(body.distrito_judicial ?? 'Lima'),
       organo_jurisdiccional: body.organo_jurisdiccional ? String(body.organo_jurisdiccional) : null,
       tipo_proceso: body.tipo_proceso ? String(body.tipo_proceso) : null,
       partes: body.parte ? String(body.parte) : null,
-      parte_procesal: body.parte_procesal ? String(body.parte_procesal) : null,
+      parte_procesal,
       cliente: body.cliente ? String(body.cliente) : null,
       alias: body.alias ? String(body.alias) : null,
       prioridad: (body.prioridad as 'alta' | 'media' | 'baja') || 'baja',
@@ -260,71 +297,32 @@ export async function POST(request: Request) {
       estado: 'activo',
     })
 
-    // If Railway scraper URL is configured, we don't need local Playwright at all.
-    // Only attempt to import the local scraper module when Railway is NOT available.
-    const hasRailwayScraper = !!process.env.CEJ_SCRAPER_URL?.trim()
-
-    let scrapeCEJ: ScrapeFn
-    if (hasRailwayScraper) {
-      // Railway handles scraping — create a placeholder that fetchCejFromScraperService will never call
-      scrapeCEJ = (async () => {
-        throw new Error('Railway scraper should handle this request')
-      }) as unknown as ScrapeFn
-    } else {
-      try {
-        const mod = await import('@/lib/cej-scraper')
-        scrapeCEJ = mod.scrapeCEJ
-      } catch (modErr) {
-        console.error('[API] POST /casos: no se pudo cargar el módulo CEJ (Playwright/stealth):', modErr)
-        await updateCaso(caso.id, { last_checked: new Date().toISOString() })
-        return Response.json(
-          {
-            ...caso,
-            success: true,
-            portalDown: true,
-            message:
-              'Caso guardado en la base de datos. La consulta automática al CEJ no está disponible en este entorno (revisa consola del servidor).',
-          },
-          { status: 201 },
-        )
-      }
-    }
-
-    // Esperamos al scrape para asegurar que Next retorne los datos con todo inicializado
+    // ─────────────────────────────────────────────────────────────
+    // PASO 3: Guardar datos del scraping en el caso creado
+    // ─────────────────────────────────────────────────────────────
     try {
-      await runInitialCejSync(caso, scrapeCEJ);
+      await persistCejScrapeToCaso(caso, scrapeResult)
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      /*if (/parte no coincide|no se encontraron|error de conexión a la base de datos|datos? (del expediente )?incorrectos?/i.test(msg)) {
-        const db = await getAuthServerClient(); await db.from('casos').delete().eq('id', caso.id);
-        return Response.json({ error: 'No se encontraron registros con los datos ingresados', detail: msg }, { status: 400 });
-      }*/
-      console.error('[API] runInitialCejSync error:', err);
-
-      const db = await getAuthServerClient();
-      await db.from('casos').delete().eq('id', caso.id);
-
-      return Response.json(
-        { error: 'No se pudo verificar el expediente. Revise los datos ingresados e intente nuevamente.', detail: msg },
-        { status: 400 }
-      );
+      console.error('[API] persistCejScrapeToCaso error:', err)
+      // No fallar si esto falla, solo loguear
     }
 
-    // Extraer fechas de PDFs y guardar como audiencias
+    // ─────────────────────────────────────────────────────────────
+    // PASO 4: Extraer audiencias y enviar notificaciones
+    // ─────────────────────────────────────────────────────────────
     try {
-      console.log('[API] 🎯 Iniciando extracción de audiencias de documentos...');
-      const movimientos = await getMovimientosByCaso(caso.id);
+      console.log('[API] 🎯 Iniciando extracción de audiencias de documentos...')
+      const movimientos = await getMovimientosByCaso(caso.id)
       if (movimientos.length > 0) {
-        const audienciasCreadas = await extraerYGuardarAudienciasDeMovimientos(caso.id, movimientos);
-        console.log(`[API] ✅ Se crearon ${audienciasCreadas} audiencias`);
+        const audienciasCreadas = await extraerYGuardarAudienciasDeMovimientos(caso.id, movimientos)
+        console.log(`[API] ✅ Se crearon ${audienciasCreadas} audiencias`)
       }
     } catch (err) {
-      console.error('[API] Error extrayendo audiencias:', err instanceof Error ? err.message : String(err));
-      // No fallar el POST si esto falla, solo loguear
+      console.error('[API] Error extrayendo audiencias:', err instanceof Error ? err.message : String(err))
     }
 
     if (caso.whatsapp_number && caso.whatsapp_number.trim() !== '') {
-      enviarSuscripcionWhatsApp(caso.whatsapp_number, caso.alias || caso.cliente || 'Sin alias', caso.numero_expediente).catch(e => console.error(e));
+      enviarSuscripcionWhatsApp(caso.whatsapp_number, caso.alias || caso.cliente || 'Sin alias', caso.numero_expediente).catch(e => console.error(e))
     }
 
     return Response.json(
@@ -345,6 +343,3 @@ export async function POST(request: Request) {
     )
   }
 }
-
-
-

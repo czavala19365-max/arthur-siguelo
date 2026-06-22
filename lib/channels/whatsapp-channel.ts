@@ -86,7 +86,8 @@ export async function enviarSuscripcionWhatsApp(
 ): Promise<boolean> {
   const accountSid = process.env.TWILIO_ACCOUNT_SID
   const authToken = process.env.TWILIO_AUTH_TOKEN
-  const from = process.env.TWILIO_WHATSAPP_FROM || 'whatsapp:+14155238886'
+  const from = process.env.TWILIO_WHATSAPP_FROM 
+  const templateSid = process.env.TWILIO_TEMPLATE_SID
 
   if (!accountSid || !authToken) {
     console.warn('[WhatsApp] Credenciales Twilio no configuradas')
