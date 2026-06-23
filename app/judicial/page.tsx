@@ -972,7 +972,8 @@ export default function JudicialDashboardPage() {
                     submitStatus.includes('No se pudieron') || 
                     submitStatus.includes('error') || 
                     submitStatus.includes('No se encontraron') || 
-                    submitStatus.includes('datos incorrectos') 
+                    submitStatus.includes('datos incorrectos') ||
+                    submitStatus.includes('No se pudo verificar')
                     ? (
                     <button
                       type="button"
