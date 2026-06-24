@@ -53,16 +53,21 @@ export async function enviarWhatsApp(
 ): Promise<boolean> {
   const accountSid = process.env.TWILIO_ACCOUNT_SID
   const authToken = process.env.TWILIO_AUTH_TOKEN
-  const from = process.env.TWILIO_WHATSAPP_FROM || 'whatsapp:+14155238886'
+  const from = process.env.TWILIO_WHATSAPP_FROM 
+  const contentSid = process.env.TWILIO_CONTENT_SID
 
   if (!accountSid || !authToken) {
     console.warn('[WhatsApp] Credenciales Twilio no configuradas')
     return false
   }
 
+  if (!contentSid) {
+    console.warn('[WhatsApp] Content SID no configurado')
+    return false
+  }
+
   try {
     const client = twilio(accountSid, authToken)
-    const body = formatWhatsAppMessage(movimiento)
     const e164 = normalizeWhatsAppE164(telefono)
     if (!e164) {
       console.warn('[WhatsApp] Numero invalido:', telefono)
@@ -70,7 +75,16 @@ export async function enviarWhatsApp(
     }
     const toNumber = `whatsapp:${e164}`
 
-    await client.messages.create({ from, to: toNumber, body })
+    await client.messages.create({
+      from,
+      to: toNumber,
+      contentSid: contentSid,
+      contentVariables: JSON.stringify({
+        2: movimiento.numeroExpediente,
+        3: movimiento.descripcion,
+        4: movimiento.sugerenciaIA,
+      }),
+    })
     console.log(`[WhatsApp] Mensaje enviado a ${e164}`)
     return true
   } catch (err) {
