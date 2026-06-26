@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getTituloById } from '@/lib/supabase'
 import { detalleTituloSunarp, obtenerEsquelaSunarp} from '@/lib/scraper'
+import { analizarEsquelasRegistrales } from '@/lib/registral-documento-extractor'
 
 /**
  * GET /api/siguelo/detalle-cronologia?id={tituloId}
@@ -29,7 +30,45 @@ export async function GET(request: NextRequest) {
       tipo_registro:     titulo.tipo_registro,
       area_registral:    titulo.area_registral,
     })
-    return NextResponse.json({ entries })
+
+    const esquelaResponse = await obtenerEsquelaSunarp({
+      oficina_registral: titulo.oficina_registral,
+      anio_titulo: titulo.anio_titulo,
+      numero_titulo: titulo.numero_titulo,
+      area_registral: titulo.area_registral,
+    })
+
+    const esquelas = esquelaResponse.lstEsquela ?? esquelaResponse
+
+
+    const entriesConPdf = entries.map((mov) => {
+      if (mov.desEstado === 'OBSERVADO' && mov.etapa === 'SECCION REGISTRAL') {
+        const esquelaMatch = esquelas.find((e: any) => e?.esquela?.length > 100)
+        const pdf = esquelaMatch?.esquela ?? null
+
+        return {
+          ...mov,
+          pdfBase64: pdf,
+          tienePdf: !!pdf,
+        }
+      }
+
+      return mov
+    })
+    // Filtrar solo los que tienen PDF
+    const entriesConPdfValido = entriesConPdf.filter((e) => 'pdfBase64' in e)
+
+    // Analizar solo los que tienen PDF
+    const entriesAnalizados = await analizarEsquelasRegistrales(entriesConPdfValido)
+
+    // Combinar: analizados + sin PDF
+    const entriesFinal = entriesConPdf.map((entry) => 
+      entriesAnalizados.find((a) => a.secuencia === entry.secuencia) ?? entry
+    )
+
+    return NextResponse.json({ 
+      entries: entriesFinal
+})
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Error al obtener cronología.'
     return NextResponse.json({ error: msg }, { status: 422 })

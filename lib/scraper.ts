@@ -589,7 +589,7 @@ export async function obtenerEsquelaSunarp(params: {
   oficina_registral: string
   anio_titulo: number
   numero_titulo: string
-  area_registral: string
+  area_registral: string | null
 }) {
   const key = params.oficina_registral.toUpperCase().trim()
   const oficina = OFICINAS[key]
