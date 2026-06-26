@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getTituloById } from '@/lib/supabase'
-import { detalleTituloSunarp } from '@/lib/scraper'
+import { detalleTituloSunarp, obtenerEsquelaSunarp} from '@/lib/scraper'
 
 /**
  * GET /api/siguelo/detalle-cronologia?id={tituloId}
