@@ -40,16 +40,20 @@ export async function GET(request: NextRequest) {
 
     const esquelas = esquelaResponse.lstEsquela ?? esquelaResponse
 
-
+    let esquelaIndex = 0
     const entriesConPdf = entries.map((mov) => {
-      if (mov.desEstado === 'OBSERVADO' && mov.etapa === 'SECCION REGISTRAL') {
-        const esquelaMatch = esquelas.find((e: any) => e?.esquela?.length > 100)
-        const pdf = esquelaMatch?.esquela ?? null
+      if (
+        mov.desEstado === 'OBSERVADO' &&
+        mov.etapa === 'SECCION REGISTRAL'
+      ) {
+        const pdfBase64 = esquelas[esquelaIndex]?.esquela ?? null
+
+        esquelaIndex++
 
         return {
           ...mov,
-          pdfBase64: pdf,
-          tienePdf: !!pdf,
+          pdfBase64,
+          tienePdf: Boolean(pdfBase64),
         }
       }
 
@@ -59,11 +63,12 @@ export async function GET(request: NextRequest) {
     const entriesConPdfValido = entriesConPdf.filter((e) => 'pdfBase64' in e)
 
     // Analizar solo los que tienen PDF
-    const entriesAnalizados = await analizarEsquelasRegistrales(entriesConPdfValido)
+    //const entriesAnalizados = await analizarEsquelasRegistrales(entriesConPdfValido)
 
     // Combinar: analizados + sin PDF
     const entriesFinal = entriesConPdf.map((entry) => 
-      entriesAnalizados.find((a) => a.secuencia === entry.secuencia) ?? entry
+      //entriesAnalizados.find((a) => a.secuencia === entry.secuencia) ?? entry
+      entry
     )
 
     return NextResponse.json({ 

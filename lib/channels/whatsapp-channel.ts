@@ -54,7 +54,7 @@ export async function enviarWhatsApp(
   const accountSid = process.env.TWILIO_ACCOUNT_SID
   const authToken = process.env.TWILIO_AUTH_TOKEN
   const from = process.env.TWILIO_WHATSAPP_FROM 
-  const contentSid = process.env.TWILIO_CONTENT_SID
+  const contentSid = process.env.TWILIO_TEMPLATE_SID
 
   if (!accountSid || !authToken) {
     console.warn('[WhatsApp] Credenciales Twilio no configuradas')
@@ -62,7 +62,7 @@ export async function enviarWhatsApp(
   }
 
   if (!contentSid) {
-    console.warn('[WhatsApp] Content SID no configurado')
+    console.warn('[WhatsApp] Template SID no configurado')
     return false
   }
 
