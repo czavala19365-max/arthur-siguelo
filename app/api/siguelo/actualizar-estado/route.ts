@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getTitulos, actualizarEstadoTitulo, registrarCambioEstado, getUltimoEstado } from '@/lib/supabase'
-import { consultarTitulo, detalleTituloSunarp } from '@/lib/scraper'
-import { extraerYGuardarPlazosDeEsquela } from '@/lib/registral-documento-extractor'
+import { consultarTitulo, detalleTituloSunarp, descargarEsquela } from '@/lib/scraper'
+import { analizarEsquelasRegistrales } from '@/lib/registral-documento-extractor'
 import { enviarAlertaEmail, enviarAlertaWhatsApp } from '@/lib/alertas'
 import { normalizarEstado } from '@/lib/estados'
 import type { CronResumen, CronDetalleTitulo } from '@/types'
@@ -86,13 +86,20 @@ export async function POST() {
         if (estadoNorm === 'OBSERVADO' && titulo.area_registral && !(titulo as any).esquelas_procesadas) {
           // Si el estado es OBSERVADO, intentamos descargar y extraer fechas de la esquela
           try {
-            await extraerYGuardarPlazosDeEsquela(
-              titulo.id,
-              titulo.oficina_registral,
-              titulo.anio_titulo,
-              titulo.numero_titulo,
-              resultado.areaRegistral ?? titulo.area_registral
-            )
+            const pdfBase64Array = await descargarEsquela({
+              oficina_registral: titulo.oficina_registral,
+              anio_titulo: titulo.anio_titulo,
+              numero_titulo: titulo.numero_titulo,
+              area_registral: resultado.areaRegistral ?? titulo.area_registral,
+              estado: resultado.estado
+            })
+
+            const esquelasConPdf = pdfBase64Array.map(pdfBase64 => ({
+              id: titulo.id,
+              pdfBase64
+            }))
+
+            await analizarEsquelasRegistrales(esquelasConPdf)
           } catch (err) {
             console.error(`[actualizar-estado] Error esquela ${titulo.numero_titulo}:`, err)
           }
