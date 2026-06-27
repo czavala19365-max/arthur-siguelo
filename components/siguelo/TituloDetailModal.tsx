@@ -134,6 +134,21 @@ export default function TituloDetailModal({
     transition: 'color 0.15s, border-color 0.15s',
   })
 
+  const abrirPdf = (base64: string) => {
+  const pdfWindow = window.open()
+
+  if (!pdfWindow) return
+
+  pdfWindow.document.write(`
+    <iframe
+      width="100%"
+      height="100%"
+      style="border:none"
+      src="data:application/pdf;base64,${base64}">
+    </iframe>
+  `)
+}
+
   return (
     <>
       <style>{`
@@ -522,6 +537,21 @@ export default function TituloDetailModal({
 
               {cronologia !== null && cronologia.length > 0 && (
                 <div style={{ overflowX: 'auto' }}>
+                  {/*<div>
+                    <button 
+                      style={{
+                        marginBottom: '12px',
+                        padding: '6px 14px',
+                        border: '1px solid var(--line)',
+                        background: 'var(--paper)',
+                        fontFamily: 'var(--font-mono)', fontSize: '10px',
+                        textTransform: 'uppercase', letterSpacing: '0.08em',
+                        color: 'var(--ink)', cursor: 'pointer',
+                      }}
+                    >
+                      EXTRAER FECHAS A AGENDAR
+                    </button>
+                  </div> */}
                   <table
                     className="det-cron-table"
                     style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid var(--line)' }}
@@ -537,10 +567,11 @@ export default function TituloDetailModal({
                         <th style={{ fontWeight: 500 }}>Etapa</th>
                         <th style={{ fontWeight: 500 }}>Detalle</th>
                         <th style={{ fontWeight: 500, whiteSpace: 'nowrap' }}>Fecha</th>
-                        <th style={{ fontWeight: 500, width: '80px' }}></th>
+                        <th style={{ fontWeight: 500, width: '80px' }}>Ver</th>
                       </tr>
                     </thead>
                     <tbody>
+                      
                       {cronologia.map((entry, i) => {
                         const etapaS = getEtapaStyle(entry.etapa)
                         const responsable = (entry.responsable ?? '').trim()
@@ -592,27 +623,18 @@ export default function TituloDetailModal({
                               {entry.fecha ?? '—'}
                             </td>
                             <td>
-                              {isEsquela && (
-                                <a
-                                  href={`/api/descargar-esquela?id=${titulo.id}&tipoEsquela=${entry.tipoEsquela2 ?? ''}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  title={`Descargar ${entry.documento2}`}
+                              {entry.tienePdf && entry.pdfBase64 && (
+                                <button
+                                  onClick={() => abrirPdf(entry.pdfBase64!)}
                                   style={{
-                                    display: 'inline-flex', alignItems: 'center', gap: '4px',
-                                    padding: '3px 8px',
-                                    background: 'var(--ink)', color: 'var(--paper)',
-                                    fontFamily: 'var(--font-mono)', fontSize: '9px',
-                                    textTransform: 'uppercase', letterSpacing: '0.06em',
-                                    textDecoration: 'none', borderRadius: '2px',
+                                    marginTop: 6,
+                                    padding: '4px 8px',
+                                    fontSize: '11px',
+                                    cursor: 'pointer'
                                   }}
                                 >
-                                  <svg width="10" height="10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                                      d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
-                                  </svg>
-                                  PDF
-                                </a>
+                                  📄 Ver esquela
+                                </button>
                               )}
                             </td>
                           </tr>

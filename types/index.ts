@@ -23,6 +23,8 @@ export type DetalleCronologiaEntry = {
   responsable: string
   documento2: string
   tipoEsquela2: string
+  pdfBase64?: string | null
+  tienePdf?: boolean
 }
 
 export type Titulo = {

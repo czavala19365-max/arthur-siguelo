@@ -5,12 +5,13 @@ import Link from 'next/link';
 import CalendarButtons from '@/components/CalendarButtons';
 
 interface Plazo {
-  id: number;
-  tramite_id: number;
+  id: number | string;
+  tramite_id: number | string;
   descripcion: string;
   fecha_vencimiento: string;
   tipo: string | null;
   alias?: string;
+  isSunarp?: boolean;
 }
 
 function daysUntil(dateStr: string): number {
@@ -66,10 +67,14 @@ export default function AgendaPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/tramites')
-      .then(r => r.json())
-      .then(async (tramites: { id: number; alias: string }[]) => {
+    async function fetchData() {
+      try {
         const allPlazos: Plazo[] = [];
+
+        // Cargar SQLite (Judicial)
+        const resTramites = await fetch('/api/tramites');
+        const tramites = await resTramites.json() as { id: number; alias: string }[];
+
         for (const t of tramites) {
           const res = await fetch(`/api/tramites/${t.id}`);
           const data = await res.json() as { plazos: Plazo[] };
@@ -77,11 +82,26 @@ export default function AgendaPage() {
             allPlazos.push({ ...p, alias: t.alias });
           }
         }
+
+        // Cargar Supabase (SUNARP)
+        const resSunarp = await fetch('/api/siguelo/plazos');
+        const sunarpData = await resSunarp.json() as { plazos: Plazo[] };
+        if (sunarpData.plazos) {
+          for (const p of sunarpData.plazos) {
+            allPlazos.push({ ...p, isSunarp: true });
+          }
+        }
+
         allPlazos.sort((a, b) => new Date(a.fecha_vencimiento).getTime() - new Date(b.fecha_vencimiento).getTime());
         setPlazos(allPlazos);
-      })
-      .catch(console.error)
-      .finally(() => setLoading(false));
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchData();
   }, []);
 
   if (loading) {
@@ -149,8 +169,8 @@ export default function AgendaPage() {
                     const days = daysUntil(plazo.fecha_vencimiento);
                     return (
                       <Link
-                        key={plazo.id}
-                        href={`/dashboard/tramites/${plazo.tramite_id}`}
+                        key={`${plazo.isSunarp ? 's-' : 'j-'}${plazo.id}`}
+                        href={plazo.isSunarp ? `/dashboard/siguelo` : `/dashboard/tramites/${plazo.tramite_id}`}
                         style={{
                           background: 'var(--surface)',
                           border: '1px solid var(--line)',
