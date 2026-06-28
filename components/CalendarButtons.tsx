@@ -6,12 +6,24 @@ interface CalendarButtonsProps {
   description?: string;
 }
 
+function parseISODateLocal(date: string): Date {
+  const [year, month, day] = date.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
 function toGoogleCalendarUrl(title: string, date: string, description: string): string {
-  const d = new Date(date);
-  const fmt = (dt: Date) =>
-    dt.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
-  const start = fmt(d);
-  const end = fmt(new Date(d.getTime() + 60 * 60 * 1000));
+  const [year, month, day] = date.split('-');
+
+  const start = `${year}${month}${day}`;
+
+  const endDate = new Date(Number(year), Number(month) - 1, Number(day));
+  endDate.setDate(endDate.getDate() + 1);
+
+  const end =
+    `${endDate.getFullYear()}` +
+    `${String(endDate.getMonth() + 1).padStart(2, '0')}` +
+    `${String(endDate.getDate()).padStart(2, '0')}`;
+
   const params = new URLSearchParams({
     action: 'TEMPLATE',
     text: title,
@@ -22,7 +34,7 @@ function toGoogleCalendarUrl(title: string, date: string, description: string): 
 }
 
 function toOutlookUrl(title: string, date: string, description: string): string {
-  const d = new Date(date);
+  const d = parseISODateLocal(date);
   const end = new Date(d.getTime() + 60 * 60 * 1000);
   const params = new URLSearchParams({
     subject: title,
