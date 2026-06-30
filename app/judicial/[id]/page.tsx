@@ -439,7 +439,7 @@ export default function JudicialCaseDetail({ params }: { params: Promise<{ id: s
       )}
 
       <button onClick={() => void handleReviewNow()} disabled={!!demoStep} style={{ marginTop: '24px', width: '100%', background: 'var(--ink)', color: 'var(--paper)', border: 'none', padding: '20px', fontFamily: 'var(--font-display)', fontStyle: 'italic', fontSize: '20px', cursor: demoStep ? 'not-allowed' : 'pointer' }}>
-        {demoStep || 'Simular revisión CEJ en tiempo real →'}
+        {demoStep || 'Actualizar caso ahora'}
       </button>
     </div>
   );
