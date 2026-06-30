@@ -207,6 +207,6 @@ async function runJudicialLoop() {
     } catch (err) {
       console.error('[Scheduler Judicial] Loop error:', err)
     }
-    await sleep(5 * 60 * 1000)
+    await sleep(60 * 60 * 1000)
   }
 }

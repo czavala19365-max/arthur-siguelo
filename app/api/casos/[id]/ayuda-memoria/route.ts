@@ -157,7 +157,7 @@ async function buildDocx(params: {
       )
       if (sumilla) paragraphs.push(pLine(`   Descripción: ${sumilla}`))
       if (folio) paragraphs.push(pLine(`   Folio: ${folio}`))
-      if (m.tiene_documento === 1) {
+      if (m.tiene_documento === true) {
         paragraphs.push(pLine(`   Documento adjunto: ${m.documento_url ? 'Sí' : 'No disponible'}`))
       }
       paragraphs.push(new Paragraph({ text: '' }))
@@ -232,7 +232,7 @@ function buildXlsx(params: {
     m.acto || '',
     m.sumilla || '',
     m.folio || '',
-    m.tiene_documento === 1 ? (m.documento_url ? 'Sí' : 'No disponible') : 'No',
+    m.tiene_documento === true ? (m.documento_url ? 'Sí' : 'No disponible') : 'No',
     m.urgencia || '',
   ])
   const wsMovs = XLSX.utils.aoa_to_sheet([header, ...rows])

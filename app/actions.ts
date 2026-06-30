@@ -58,7 +58,7 @@ export async function agregarTitulo(
 
 export async function agregarYConsultarTitulo(
   formData: FormData
-): Promise<{ error?: string; success?: boolean; estado?: string; detalle?: string }> {
+): Promise<{ error?: string; success?: boolean; estado?: string; detalle?: string; fecha_presentacion?: string; fecha_vencimiento?: string; lugar_presentacion?: string }> {
   const oficina_registral = formData.get('oficina_registral') as string
   const anio_titulo = Number(formData.get('anio_titulo'))
   const numero_titulo = formData.get('numero_titulo') as string
@@ -132,7 +132,14 @@ export async function agregarYConsultarTitulo(
     }
 
     revalidatePath('/dashboard/siguelo')
-    return { success: true, estado: resultado.estado, detalle: resultado.detalle ?? undefined }
+    return { 
+      success: true, 
+      estado: resultado.estado, 
+      detalle: resultado.detalle ?? undefined,
+      fecha_presentacion: resultado.fechaHoraPresentacion || undefined,
+      fecha_vencimiento: resultado.fechaVencimiento || undefined,
+      lugar_presentacion: resultado.lugarPresentacion || undefined, 
+    }
   } catch {
     // El título ya fue guardado; devolvemos éxito parcial
     revalidatePath('/dashboard/siguelo')

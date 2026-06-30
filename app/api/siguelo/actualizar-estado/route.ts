@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getTitulos, actualizarEstadoTitulo, registrarCambioEstado, getUltimoEstado } from '@/lib/supabase'
-import { consultarTitulo, detalleTituloSunarp } from '@/lib/scraper'
+import { consultarTitulo, detalleTituloSunarp, descargarEsquela } from '@/lib/scraper'
+import { analizarEsquelasRegistrales } from '@/lib/registral-documento-extractor'
 import { enviarAlertaEmail, enviarAlertaWhatsApp } from '@/lib/alertas'
 import { normalizarEstado } from '@/lib/estados'
 import type { CronResumen, CronDetalleTitulo } from '@/types'
@@ -23,25 +24,25 @@ export async function POST() {
     }
 
     const resumen: CronResumen = {
-      total:      titulos.length,
-      exitosos:   0,
+      total: titulos.length,
+      exitosos: 0,
       conCambios: 0,
-      errores:    0,
-      detalle:    [],
+      errores: 0,
+      detalle: [],
     }
 
     for (const titulo of titulos) {
       const item: CronDetalleTitulo = {
-        id:                titulo.id,
-        numero_titulo:     titulo.numero_titulo,
+        id: titulo.id,
+        numero_titulo: titulo.numero_titulo,
         oficina_registral: titulo.oficina_registral,
       }
 
       try {
         const resultado = await consultarTitulo({
           oficina_registral: titulo.oficina_registral,
-          anio_titulo:       titulo.anio_titulo,
-          numero_titulo:     titulo.numero_titulo,
+          anio_titulo: titulo.anio_titulo,
+          numero_titulo: titulo.numero_titulo,
         })
 
         item.estado = resultado.estado
@@ -52,16 +53,16 @@ export async function POST() {
 
         if (hayCambio) {
           await registrarCambioEstado({
-            titulo_id:       titulo.id,
+            titulo_id: titulo.id,
             estado_anterior: estadoAnterior!,
-            estado_nuevo:    resultado.estado,
+            estado_nuevo: resultado.estado,
           })
 
           const datosAlerta = {
             titulo,
             estadoAnterior: estadoAnterior!,
-            estadoNuevo:    resultado.estado,
-            detectadoEn:    new Date().toISOString(),
+            estadoNuevo: resultado.estado,
+            detectadoEn: new Date().toISOString(),
           }
 
           await Promise.allSettled([
@@ -82,15 +83,35 @@ export async function POST() {
         const estadoNorm = normalizarEstado(resultado.estado)
 
         let esReingreso: boolean | undefined = undefined
+        if (estadoNorm === 'OBSERVADO' && titulo.area_registral && !(titulo as any).esquelas_procesadas) {
+          // Si el estado es OBSERVADO, intentamos descargar y extraer fechas de la esquela
+          try {
+            const pdfBase64Array = await descargarEsquela({
+              oficina_registral: titulo.oficina_registral,
+              anio_titulo: titulo.anio_titulo,
+              numero_titulo: titulo.numero_titulo,
+              area_registral: resultado.areaRegistral ?? titulo.area_registral,
+              estado: resultado.estado
+            })
 
+            const esquelasConPdf = pdfBase64Array.map(pdfBase64 => ({
+              id: titulo.id,
+              pdfBase64
+            }))
+
+            await analizarEsquelasRegistrales(esquelasConPdf)
+          } catch (err) {
+            console.error(`[actualizar-estado] Error esquela ${titulo.numero_titulo}:`, err)
+          }
+        }
         if (estadoNorm === 'EN CALIFICACION' && (hayCambio || !titulo.fecha_ingreso_calificacion || titulo.es_reingreso == null)) {
           try {
             const cronologia = await detalleTituloSunarp({
               oficina_registral: titulo.oficina_registral,
-              anio_titulo:       titulo.anio_titulo,
-              numero_titulo:     titulo.numero_titulo,
-              tipo_registro:     titulo.tipo_registro,
-              area_registral:    titulo.area_registral,
+              anio_titulo: titulo.anio_titulo,
+              numero_titulo: titulo.numero_titulo,
+              tipo_registro: titulo.tipo_registro,
+              area_registral: titulo.area_registral,
             })
 
             const normStr = (s: string) =>
@@ -116,18 +137,18 @@ export async function POST() {
         }
 
         await actualizarEstadoTitulo(titulo.id, resultado.estado, resultado.areaRegistral, resultado.numeroPartida, {
-          fecha_presentacion:       resultado.fechaHoraPresentacion,
-          fecha_vencimiento:        resultado.fechaVencimiento,
-          lugar_presentacion:       resultado.lugarPresentacion,
-          nombre_presentante:       resultado.nombrePresentante,
-          tipo_registro:            resultado.tipoRegistro,
-          monto_devolucion:         resultado.montoDevo,
-          indi_prorroga:            resultado.indiPror,
-          indi_suspension:          resultado.indiSusp,
-          pagos:                    resultado.lstPagos,
-          actos:                    resultado.lstActos,
+          fecha_presentacion: resultado.fechaHoraPresentacion,
+          fecha_vencimiento: resultado.fechaVencimiento,
+          lugar_presentacion: resultado.lugarPresentacion,
+          nombre_presentante: resultado.nombrePresentante,
+          tipo_registro: resultado.tipoRegistro,
+          monto_devolucion: resultado.montoDevo,
+          indi_prorroga: resultado.indiPror,
+          indi_suspension: resultado.indiSusp,
+          pagos: resultado.lstPagos,
+          actos: resultado.lstActos,
           fecha_ingreso_calificacion: fechaIngresoCalif,
-          es_reingreso:               esReingreso,
+          es_reingreso: esReingreso,
         })
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Error desconocido'

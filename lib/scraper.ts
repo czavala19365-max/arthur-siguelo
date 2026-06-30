@@ -582,3 +582,50 @@ export async function detalleTituloSunarp(params: {
 
   return (data.lstDetalleTitulo as DetalleCronologiaEntry[]) ?? []
 }
+
+const ESQUELA_DESCARGAR_API ='https://api-gateway.sunarp.gob.pe:9443/sunarp/siguelo/siguelo-esquela/listarEsquela'
+
+export async function obtenerEsquelaSunarp(params: {
+  oficina_registral: string
+  anio_titulo: number
+  numero_titulo: string
+  area_registral: string | null
+}) {
+  const key = params.oficina_registral.toUpperCase().trim()
+  const oficina = OFICINAS[key]
+  if (!oficina) throw new Error(`Oficina no reconocida: "${params.oficina_registral}"`)
+
+  const payload = {
+    codigoZona: oficina.zona,
+    codigoOficina: oficina.oficina,
+    anioTitulo: String(params.anio_titulo),
+    numeroTitulo: params.numero_titulo.padStart(8, '0'),
+    idAreaRegistro: params.area_registral, // <- aquí va tu 22000
+    idioma: 'es',
+    ip: '0.0.0.0',
+    status: 'A',
+    tipoConsulta: 'E',
+    tipoEsquela: 'O',
+    userApp: 'extranet',
+    userCrea: 'Siguelo',
+  }
+
+  const response = await fetch(ESQUELA_DESCARGAR_API, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-IBM-Client-Id': IBM_CLIENT_ID,
+      Origin: 'https://siguelo.sunarp.gob.pe',
+      Referer: 'https://siguelo.sunarp.gob.pe/',
+    },
+    body: JSON.stringify(payload),
+  })
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`)
+  }
+
+  const data = await response.json()
+
+  return data
+}
