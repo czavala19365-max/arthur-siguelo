@@ -292,11 +292,14 @@ export default function AgendaPage() {
             {/* Agenda items */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               {modalTitulo.fechas.map(f => {
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
                 if (f.tipo === 'presentacion') {
                   console.log("Fecha original:", f.fecha);
                   const fechaBase = parsePeruvianDate(f.fecha);
                   const fechaAgenda = addBusinessDays(fechaBase, 8);
                   const isoAgenda = toISODate(fechaAgenda);
+                  const isPast = fechaAgenda < today;
                   const desc = `Título: ${modalTitulo.numero_titulo}\nCliente: ${modalTitulo.nombre_cliente}\nFecha de presentación: ${f.fecha}\nSeguimiento al 7° día hábil`;
                   const tituloEvento = `SUNARP — Reclamo por demora (día 8) — T° ${modalTitulo.numero_titulo} (${modalTitulo.oficina_registral})`;
                   return (
@@ -311,10 +314,10 @@ export default function AgendaPage() {
                         Alerta de presentación: {formatDateLong(fechaAgenda)}
                       </div>
                       <CalendarButtons
-                      
                         title={tituloEvento}
                         date={isoAgenda}
                         description={desc}
+                        disabled={isPast}
                       />
                     </div>
                   );
@@ -322,6 +325,7 @@ export default function AgendaPage() {
                 if (f.tipo === 'vencimiento') {
                   const fechaVenc = parsePeruvianDate(f.fecha);
                   const isoVenc = toISODate(fechaVenc);
+                  const isPast = fechaVenc < today;
                   const desc = `Título: ${modalTitulo.numero_titulo}\nCliente: ${modalTitulo.nombre_cliente}\nEstado: ${modalTitulo.ultimo_estado ?? ''}\nFecha de vencimiento`;
                   const tituloEvento = `SUNARP — Vencimiento de plazo — T° ${modalTitulo.numero_titulo}`;
                   return (
@@ -336,6 +340,7 @@ export default function AgendaPage() {
                         title={tituloEvento}
                         date={isoVenc}
                         description={desc}
+                        disabled={isPast}
                       />
                     </div>
                   );
