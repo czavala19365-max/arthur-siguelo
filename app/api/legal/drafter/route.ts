@@ -1,13 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createLegalMessage } from '@/lib/legal/anthropic'
-import { parseAttachmentsServer, flattenAttachmentBlocks, type AttachmentInput } from '@/lib/legal/file-attachments'
-import { DRAFTER_SYSTEM, buildDrafterUserPrompt } from '@/lib/legal/drafter/prompts'
+import { requireAuthUser } from '@/lib/judicial-caso-access'
+import type { AttachmentInput } from '@/lib/legal/file-attachments'
+import { generarYGuardarDocumento, type GeneratedDocument } from '@/lib/legal/drafter/generation-service'
+import { getDocumentSchema } from '@/lib/legal/drafter/schema/registry'
 import type { DocumentTypeId } from '@/lib/legal/drafter/form-schemas'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
 
 export async function POST(req: NextRequest) {
+  const auth = await requireAuthUser()
+  if ('response' in auth) return auth.response
+
   try {
     if (!process.env.ANTHROPIC_API_KEY) {
       return NextResponse.json({ error: 'ANTHROPIC_API_KEY no configurada' }, { status: 500 })
@@ -20,28 +24,32 @@ export async function POST(req: NextRequest) {
       attachments?: AttachmentInput[]
     }
 
-    const prompt = buildDrafterUserPrompt({
+    const fields = body.fields || {}
+
+    const primary = await generarYGuardarDocumento({
+      userId: auth.user.id,
       documentType: body.documentType,
       jurisdiction: body.jurisdiction,
-      fields: body.fields || {},
+      fields,
+      attachments: body.attachments,
     })
 
-    const content: Array<{ type: 'text'; text: string } | import('@/lib/legal/anthropic').DocumentBlock> = [
-      { type: 'text', text: prompt },
-    ]
+    const schema = getDocumentSchema(body.documentType)
+    const applicableAccessories = (schema.accessoryDocuments ?? []).filter(rule => rule.condition(fields))
 
-    if (body.attachments?.length) {
-      const parsed = await parseAttachmentsServer(body.attachments)
-      content.push(...flattenAttachmentBlocks(parsed))
-    }
+    const accessories: GeneratedDocument[] = await Promise.all(
+      applicableAccessories.map(rule =>
+        generarYGuardarDocumento({
+          userId: auth.user.id,
+          documentType: rule.id as DocumentTypeId,
+          jurisdiction: body.jurisdiction,
+          fields: rule.deriveFields(fields),
+          documentoPadreId: primary.documentId,
+        }),
+      ),
+    )
 
-    const document = await createLegalMessage({
-      system: DRAFTER_SYSTEM,
-      userContent: content,
-      maxTokens: 4000,
-    })
-
-    return NextResponse.json({ document })
+    return NextResponse.json({ documents: [primary, ...accessories] })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     return NextResponse.json({ error: msg }, { status: 500 })
