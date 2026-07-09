@@ -201,7 +201,7 @@ async function solveImageCaptchaFromDom(page: Page, baseResult: { captchaDetecte
   .png()
   .toBuffer()
 
-  const captchaPath = path.join(
+  /*const captchaPath = path.join(
     process.cwd(),
     'captchas',
     `captcha-${Date.now()}.png`
@@ -210,7 +210,7 @@ async function solveImageCaptchaFromDom(page: Page, baseResult: { captchaDetecte
   fs.writeFileSync(captchaPath, processedBuffer)
 
   console.log('[CEJ] Captcha guardado en:', captchaPath)
-  console.log('[CEJ] Captcha guardado')
+  console.log('[CEJ] Captcha guardado')*/
 
   if (!processedBuffer.length || processedBuffer.length < 200) return ''
 

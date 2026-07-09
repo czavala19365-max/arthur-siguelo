@@ -23,7 +23,7 @@ async function fetchCejFromScraperService(numero: string, parte: string, scrapeC
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ numero, parte }),
-    signal: AbortSignal.timeout(180_000),
+    signal: AbortSignal.timeout(420000),
   })
 
   let data: unknown = {}
