@@ -23,7 +23,7 @@ async function fetchCejFromScraperService(numero: string, parte: string, scrapeC
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ numero, parte }),
-    signal: AbortSignal.timeout(420000),
+    signal: AbortSignal.timeout(180_000),
   })
 
   let data: unknown = {}
@@ -269,10 +269,7 @@ export async function POST(request: Request) {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       console.error('[API] CEJ validation failed:', msg)
-      return Response.json(
-        { error: 'No se pudo verificar el expediente. Revise los datos ingresados e intente nuevamente.', detail: msg },
-        { status: 400 }
-      )
+      scrapeResult = null
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -301,7 +298,10 @@ export async function POST(request: Request) {
     // PASO 3: Guardar datos del scraping en el caso creado
     // ─────────────────────────────────────────────────────────────
     try {
-      await persistCejScrapeToCaso(caso, scrapeResult)
+      if (scrapeResult) {
+        await persistCejScrapeToCaso(caso, scrapeResult)
+
+      }
     } catch (err) {
       console.error('[API] persistCejScrapeToCaso error:', err)
       // No fallar si esto falla, solo loguear
