@@ -28,9 +28,8 @@ async function getCejBrowser(): Promise<Browser> {
 
   const isVercelProd =
     process.env.VERCEL === '1' && process.env.NODE_ENV !== 'development'
-  const forceBrowserless = process.env.CEJ_USE_BROWSERLESS === '1'
 
-  if (isVercelProd || forceBrowserless) {
+  if (isVercelProd) {
     const token = process.env.BROWSERLESS_TOKEN
     if (!token) {
       throw new Error('BROWSERLESS_TOKEN no configurado en variables de entorno de Vercel')
