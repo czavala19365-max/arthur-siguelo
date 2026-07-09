@@ -10,6 +10,7 @@ import { enviarAlertaJudicialConIA } from '@/lib/judicial-alerts'
 import { extraerYGuardarAudienciasDeMovimientos } from '@/lib/judicial-documento-extractor'
 
 export const runtime = 'nodejs'
+export const maxDuration = 60
 
 type ScrapeFn = (typeof import('@/lib/cej-scraper'))['scrapeCEJ']
 type CejCaseData = import('@/lib/cej-scraper').CejCaseData
