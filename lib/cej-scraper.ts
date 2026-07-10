@@ -23,6 +23,27 @@ function applyCejStealthOnce() {
 const CEJ_SEARCH_URL = 'https://cej.pj.gob.pe/cej/forms/busquedaform.html'
 const CEJ_DETAIL_URL = 'https://cej.pj.gob.pe/cej/forms/detalleform.html'
 
+/*async function getCejBrowser(): Promise<Browser> {
+  applyCejStealthOnce()
+
+  const isVercelProd =
+    process.env.VERCEL === '1' && process.env.NODE_ENV !== 'development'
+
+  if (isVercelProd) {
+    const token = process.env.BROWSERLESS_TOKEN
+    if (!token) {
+      throw new Error('BROWSERLESS_TOKEN no configurado en variables de entorno de Vercel')
+    }
+    console.log('[CEJ] Conectando a Browserless (producción)')
+    return (await chromium.connect(
+      `wss://production-sfo.browserless.io/chromium/playwright?token=${token}`
+    )) as unknown as Browser
+  }
+
+  console.log('[CEJ] Lanzando Chromium local')
+  return (await chromium.launch(cejChromiumLaunchOptions())) as unknown as Browser
+}*/
+
 // ── CAPTCHA SOLVING (image captcha) ─────────────────────────────────────────
 
 export interface CaptchaSolver {
@@ -1286,6 +1307,7 @@ async function tryDirectAccess(
   try {
     applyCejStealthOnce()
     browser = await chromium.launch(cejChromiumLaunchOptions()) as unknown as Browser
+    //browser = await getCejBrowser()
 
     const context = await browser.newContext({
       userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -1376,7 +1398,7 @@ export async function scrapeCEJ(numeroExpediente: string, parte: string): Promis
 async function _scrapeCEJ(numeroExpediente: string, maxRetries: number, parte: string): Promise<CejCaseData> {
   // Serverless (Vercel producción/preview): sin Playwright. En `next dev` NODE_ENV=development → no se bloquea
   // aunque tengas VERCEL=1 por error en .env. Para forzar scrape con `next start` local: CEJ_FORCE_PLAYWRIGHT=1
-  const vercelServerless =
+  /*const vercelServerless =
     process.env.VERCEL === '1' &&
     process.env.NODE_ENV !== 'development' &&
     process.env.CEJ_FORCE_PLAYWRIGHT !== '1'
@@ -1390,7 +1412,7 @@ async function _scrapeCEJ(numeroExpediente: string, maxRetries: number, parte: s
       scrapedAt: new Date().toISOString(),
       error: 'El scraping en tiempo real requiere el servidor local. Ejecuta npm run dev para usar esta función.',
     }
-  }
+  }*/
 
   const baseResult: CejCaseData = {
     numeroExpediente,
@@ -1431,6 +1453,7 @@ async function _scrapeCEJ(numeroExpediente: string, maxRetries: number, parte: s
 
       applyCejStealthOnce()
       browser = await chromium.launch(cejChromiumLaunchOptions()) as unknown as Browser
+      //browser = await getCejBrowser()
 
       const context = await browser.newContext({
         userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
