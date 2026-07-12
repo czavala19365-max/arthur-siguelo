@@ -23,7 +23,7 @@ function applyCejStealthOnce() {
 const CEJ_SEARCH_URL = 'https://cej.pj.gob.pe/cej/forms/busquedaform.html'
 const CEJ_DETAIL_URL = 'https://cej.pj.gob.pe/cej/forms/detalleform.html'
 
-async function getCejBrowser(): Promise<Browser> {
+/*async function getCejBrowser(): Promise<Browser> {
   applyCejStealthOnce()
 
   const isVercelProd =
@@ -42,7 +42,7 @@ async function getCejBrowser(): Promise<Browser> {
 
   console.log('[CEJ] Lanzando Chromium local')
   return (await chromium.launch(cejChromiumLaunchOptions())) as unknown as Browser
-}
+}*/
 
 // ── CAPTCHA SOLVING (image captcha) ─────────────────────────────────────────
 
@@ -1305,7 +1305,9 @@ async function tryDirectAccess(
 ): Promise<CejCaseData | null> {
   let browser: Browser | null = null
   try {
-    browser = await getCejBrowser()
+    applyCejStealthOnce()
+    browser = await chromium.launch(cejChromiumLaunchOptions()) as unknown as Browser
+    //browser = await getCejBrowser()
 
     const context = await browser.newContext({
       userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -1449,7 +1451,9 @@ async function _scrapeCEJ(numeroExpediente: string, maxRetries: number, parte: s
     try {
       console.log(`[CEJ] hCaptcha attempt ${attempt}/${maxRetries} — ${numeroExpediente}`)
 
-      browser = await getCejBrowser()
+      applyCejStealthOnce()
+      browser = await chromium.launch(cejChromiumLaunchOptions()) as unknown as Browser
+      //browser = await getCejBrowser()
 
       const context = await browser.newContext({
         userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
