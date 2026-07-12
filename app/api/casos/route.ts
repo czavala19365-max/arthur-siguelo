@@ -18,6 +18,14 @@ async function fetchCejFromScraperService(numero: string, parte: string, scrapeC
   const scraperUrl = process.env.CEJ_SCRAPER_URL?.trim()
   if (!scraperUrl) return scrapeCEJ(numero, parte)
 
+    console.log("===== FETCH CEJ =====");
+    console.log("URL:", scraperUrl);
+
+    const inicio = Date.now();
+
+
+    
+
   const url = `${scraperUrl.replace(/\/$/, '')}/scrape`
   const res = await fetch(url, {
     method: 'POST',
@@ -25,6 +33,9 @@ async function fetchCejFromScraperService(numero: string, parte: string, scrapeC
     body: JSON.stringify({ numero, parte }),
     signal: AbortSignal.timeout(180_000),
   })
+
+    console.log("Tiempo fetch:", Date.now() - inicio);
+    console.log("Status:", res.status);
 
   let data: unknown = {}
   try {
@@ -63,6 +74,7 @@ async function fetchCejFromScraperService(numero: string, parte: string, scrapeC
 
 /** VALIDACIÓN PURA: Solo scraping, sin guardar en BD. Retorna los datos o lanza error. */
 async function validateCejScrape(numero_expediente: string, parte_procesal: string, scrapeCEJ: ScrapeFn): Promise<CejCaseData> {
+  console.log("Antes del fetch");
   const parte = parte_procesal?.trim() || ''
   if (!parte) throw new Error('Parte procesal requerida')
 
@@ -269,7 +281,10 @@ export async function POST(request: Request) {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       console.error('[API] CEJ validation failed:', msg)
-      scrapeResult = null
+      return Response.json(
+        { error: 'No se pudo verificar el expediente. Revise los datos ingresados e intente nuevamente.', detail: msg },
+        { status: 400 }
+      )
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -298,10 +313,7 @@ export async function POST(request: Request) {
     // PASO 3: Guardar datos del scraping en el caso creado
     // ─────────────────────────────────────────────────────────────
     try {
-      if (scrapeResult) {
-        await persistCejScrapeToCaso(caso, scrapeResult)
-
-      }
+      await persistCejScrapeToCaso(caso, scrapeResult)
     } catch (err) {
       console.error('[API] persistCejScrapeToCaso error:', err)
       // No fallar si esto falla, solo loguear

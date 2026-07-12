@@ -11,6 +11,7 @@ app.get('/health', (_req, res) => {
 })
 
 app.post('/scrape', async (req, res) => {
+  console.log("🚀 Llegó una petición desde Vercel");
   try {
     const { numero, parte } = req.body || {}
     if (numero == null || String(numero).trim() === '') {
