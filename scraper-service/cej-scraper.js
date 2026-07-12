@@ -9,15 +9,8 @@ const puppeteer_extra_plugin_stealth_1 = __importDefault(require("puppeteer-extr
 const _2captcha_ts_1 = require("2captcha-ts");
 const crypto_1 = __importDefault(require("crypto"));
 const fs_1 = __importDefault(require("fs"));
+const sharp_1 = __importDefault(require("sharp"));
 const supabase_storage_1 = require("./supabase-storage");
-function parseProxy(proxyUrl) {
-    const url = new URL(proxyUrl);
-    return {
-        server: url.protocol + '//' + url.hostname + ':' + url.port,
-        username: decodeURIComponent(url.username),
-        password: decodeURIComponent(url.password),
-    };
-}
 /** Aplicar stealth solo al abrir el navegador (evita fallos al importar el módulo en Next/API). */
 let cejStealthApplied = false;
 function applyCejStealthOnce() {
@@ -91,8 +84,10 @@ class CapSolverImageSolver {
                 task: {
                     type: 'ImageToTextTask',
                     module: 'common',
-                    websiteURL: CEJ_SEARCH_URL,
                     body: imageBase64,
+                    case: true,
+                    minLength: 4,
+                    maxLength: 4,
                 },
             }),
         }).then(r => r.json());
@@ -129,22 +124,21 @@ class CapSolverImageWithTwoCaptchaFallback {
     async solve(imageBase64) {
         const capKey = process.env.CAPSOLVER_API_KEY?.trim();
         const twoKey = process.env.TWOCAPTCHA_API_KEY?.trim();
-        // Prefer 2captcha (human solvers) first; CapSolver only as fallback.
-        if (twoKey) {
+        if (capKey) {
             try {
-                return await new TwoCaptchaImageSolver(twoKey).solve(imageBase64);
+                return await new CapSolverImageSolver(capKey).solve(imageBase64);
             }
             catch (e) {
                 const msg = e instanceof Error ? e.message : String(e);
-                console.warn('[CEJ] 2captcha image captcha failed:', msg);
-                if (!capKey)
+                console.warn('[CEJ] CapSolver image captcha failed:', msg);
+                if (!twoKey)
                     throw e;
-                console.log('[CEJ] Image captcha: falling back to CapSolver');
-                return await new CapSolverImageSolver(capKey).solve(imageBase64);
+                console.log('[CEJ] Image captcha: falling back to 2captcha');
+                return await new TwoCaptchaImageSolver(twoKey).solve(imageBase64);
             }
         }
-        if (capKey)
-            return await new CapSolverImageSolver(capKey).solve(imageBase64);
+        if (twoKey)
+            return await new TwoCaptchaImageSolver(twoKey).solve(imageBase64);
         throw new Error('No CAPTCHA provider configured. Set CAPSOLVER_API_KEY (CEJ) or TWOCAPTCHA_API_KEY as fallback.');
     }
 }
@@ -185,13 +179,29 @@ async function solveImageCaptchaFromDom(page, baseResult) {
     }, { timeout: 10000 }).catch(() => { });
     await imgEl.scrollIntoViewIfNeeded().catch(() => { });
     await page.waitForTimeout(250);
-    // Screenshot PNG (lossless) → base64 for the solver.
     const imgBuffer = await imgEl.screenshot({ type: 'png' }).catch(() => Buffer.alloc(0));
-    if (!imgBuffer.length || imgBuffer.length < 200)
+    const processedBuffer = await (0, sharp_1.default)(imgBuffer)
+        .resize({ width: 400 })
+        .grayscale()
+        .normalize()
+        .sharpen()
+        .png()
+        .toBuffer();
+    /*const captchaPath = path.join(
+      process.cwd(),
+      'captchas',
+      `captcha-${Date.now()}.png`
+    )
+  
+    fs.writeFileSync(captchaPath, processedBuffer)
+  
+    console.log('[CEJ] Captcha guardado en:', captchaPath)
+    console.log('[CEJ] Captcha guardado')*/
+    if (!processedBuffer.length || processedBuffer.length < 200)
         return '';
-    const b64 = imgBuffer.toString('base64');
     const solver = getImageCaptchaSolver();
-    const code = await solver.solve(b64);
+    const code = await solver.solve(processedBuffer.toString('base64'));
+    console.log('[CEJ-TEST] Captcha solved:', code);
     baseResult.captchaSolved = !!code;
     return code;
 }
@@ -267,30 +277,12 @@ async function hasPerfdriveChallengeIframe(page) {
     }).catch(() => false);
 }
 function makeBrowserArgs() {
-    const existing = [
+    return [
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
         '--disable-blink-features=AutomationControlled',
     ];
-    const requiredForRailway = [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--no-first-run',
-        '--no-zygote',
-        '--single-process',
-    ];
-    const seen = new Set();
-    const out = [];
-    for (const a of [...existing, ...requiredForRailway]) {
-        if (seen.has(a))
-            continue;
-        seen.add(a);
-        out.push(a);
-    }
-    return out;
 }
 /** CEJ_DEBUG=1 o true → navegador visible + DevTools (equivalente práctico a debug: true, headless: false). */
 function isCejBrowserDebug() {
@@ -300,10 +292,9 @@ function isCejBrowserDebug() {
 function cejChromiumLaunchOptions() {
     const debug = isCejBrowserDebug();
     return {
-        headless: true,
+        headless: !debug,
         devtools: debug,
         executablePath: process.env.CHROME_EXECUTABLE_PATH || undefined,
-        proxy: process.env.PROXY_URL ? parseProxy(process.env.PROXY_URL) : undefined,
         args: makeBrowserArgs(),
     };
 }
@@ -807,20 +798,13 @@ async function fillAndScrape(page, numeroExpediente, baseResult, parte) {
             throw new Error('parte requerida');
         // CEJ last box (instancia/juzgado) expects 2 digits (e.g. 01, 03, 06). Do NOT strip leading zeros.
         const courtNum = String(orgCod || '').padStart(2, '0').slice(-2);
-        for (let capAttempt = 1; capAttempt <= 6; capAttempt++) {
+        for (let capAttempt = 1; capAttempt <= 3; capAttempt++) {
             // Ensure Tab 1 visible for captcha
             await page.click('a[href="#tabs-1"], a:has-text("Por filtros"), #tabs-1').catch(() => { });
             await page.waitForTimeout(350);
-            if (capAttempt > 1) {
-                console.log(`[CEJ] Refreshing image captcha before retry (Tab2 capAttempt ${capAttempt})`);
+            if (capAttempt > 1)
                 await refreshImageCaptcha(page).catch(() => { });
-            }
-            const captchaCodeRaw = await solveImageCaptchaFromDom(page, baseResult).catch(() => '');
-            const captchaCode = String(captchaCodeRaw || '').trim();
-            if (captchaCode.length > 0 && captchaCode.length < 3) {
-                console.log('[CEJ] Captcha too short, retrying');
-                continue;
-            }
+            const captchaCode = await solveImageCaptchaFromDom(page, baseResult).catch(() => '');
             // Switch to Tab 2
             await page.click('a[href="#tabs-2"], a:has-text("Por Código"), #tabs-2').catch(() => { });
             await page.waitForTimeout(800);
@@ -859,184 +843,54 @@ async function fillAndScrape(page, numeroExpediente, baseResult, parte) {
                     parteEl.dispatchEvent(new Event('change', { bubbles: true }));
                 }
             }, parte));
-            const cejDebugDiag = process.env.CEJ_DEBUG === 'true';
-            // ── Tab 2: AJAX discovery + simulated POST (do not depend on CEJ click/JS) ──
-            const discovery = await page.evaluate(() => {
-                const btn = document.querySelector('#consultarExpedientes') ||
-                    document.querySelector('button#consultarExpedientes, button[type="submit"], input[type="submit"]');
-                const onclick = btn?.getAttribute('onclick') || '';
-                const form = document.querySelector('#busquedaPorCodigo') || btn?.closest('form') || document.querySelector('form');
-                const action = form?.getAttribute('action') || '';
-                const globals = [
-                    'consultarExpedientes',
-                    'buscarExpediente',
-                    'submitForm',
-                    'validarCaptcha',
-                    'busquedaPorCodigo',
-                ];
-                const presentGlobals = globals.filter((k) => typeof window[k] === 'function');
-                return {
-                    action,
-                    onclick,
-                    presentGlobals,
-                    formId: form?.id || '',
-                    formName: form?.getAttribute('name') || '',
-                };
-            }).catch(() => ({ action: '', onclick: '', presentGlobals: [], formId: '', formName: '' }));
-            console.log('[CEJ][AJAX-DISCOVERY]', discovery);
-            const tab2Simulated = await page.evaluate(async ({ captchaValue }) => {
-                // Recoger TODOS los valores de input del form de Tab 2
-                const form = document.querySelector('#busquedaPorCodigo') ||
-                    document.querySelector('form');
-                if (!form) {
-                    return { ok: false, reason: 'form-not-found' };
-                }
-                const params = new URLSearchParams();
-                // Campos conocidos del Tab 2 (IDs/names observados en CEJ)
-                const fieldIds = [
-                    'cod_expediente', 'cod_anio', 'cod_incidente',
-                    'cod_distprov', 'cod_organo', 'cod_especialidad',
-                    'cod_instancia', 'codigoCaptcha', 'parte',
-                ];
-                // Nombres alternativos para robustez
-                const altIds = [
-                    'codExpediente', 'codAnio', 'codIncidente',
-                    'codDistparam', 'codOrgJuwordam', 'codEspecialidad',
-                    'codInstancia', 'codExp', 'codAnio', 'codDistrito',
-                    'nroExpediente', 'anioExpediente', 'codigoDistrito',
-                    'codigoOrgano', 'codigoEspecialidad', 'codigoInstancia',
-                ];
-                const tryAppend = (idLike) => {
-                    const el = document.getElementById(idLike) ||
-                        document.querySelector(`[name="${idLike}"]`) ||
-                        document.querySelector(`input[id*="${idLike}" i]`) ||
-                        document.querySelector(`select[id*="${idLike}" i]`) ||
-                        document.querySelector(`textarea[id*="${idLike}" i]`);
-                    if (!el)
-                        return;
-                    const name = (el.getAttribute('name') || idLike).trim();
-                    const tag = el.tagName;
-                    if (tag === 'INPUT') {
-                        const type = (el.getAttribute('type') || 'text').toLowerCase();
-                        if (type === 'submit' || type === 'button' || type === 'image' || type === 'file')
-                            return;
-                        if ((type === 'checkbox' || type === 'radio') && !el.checked)
-                            return;
+            const ajaxRespPromise = page.waitForResponse(resp => resp.url().includes('ValidarFiltrosCodigo'), { timeout: 35000 }).catch(() => null);
+            const navPromise = page.waitForNavigation({ waitUntil: 'load', timeout: 45000 }).catch(() => null);
+            await page.click('#consultarExpedientes').catch(async () => {
+                // Fallback: call the CEJ JS function so their AJAX validation runs.
+                await page.evaluate((code) => {
+                    const win = window;
+                    const fn = win['consultarExpedientes'];
+                    // Ensure captcha is present for the submit path too
+                    const form = document.getElementById('busquedaPorCodigo');
+                    if (form && !form.querySelector('input[name="codigoCaptcha"]')) {
+                        const hidden = document.createElement('input');
+                        hidden.type = 'hidden';
+                        hidden.name = 'codigoCaptcha';
+                        hidden.value = code;
+                        form.appendChild(hidden);
                     }
-                    const v = String(el.value || '').trim();
-                    if (!v)
-                        return;
-                    params.append(name, v);
-                };
-                for (const id of [...fieldIds, ...altIds])
-                    tryAppend(id);
-                // Recoger TODOS los inputs/select/textarea del form (incluye hidden tokens si existieran)
-                const els = Array.from(form.querySelectorAll('input, select, textarea'));
-                for (const el of els) {
-                    const name = (el.getAttribute('name') || '').trim();
-                    if (!name)
-                        continue;
-                    const tag = el.tagName;
-                    if (tag === 'INPUT') {
-                        const type = (el.getAttribute('type') || 'text').toLowerCase();
-                        if (type === 'submit' || type === 'button' || type === 'image' || type === 'file')
-                            continue;
-                        if ((type === 'checkbox' || type === 'radio') && !el.checked)
-                            continue;
-                    }
-                    const v = String(el.value || '');
-                    // URLSearchParams allows duplicates; but we prefer last-wins for key fields
-                    if (v != null)
-                        params.set(name, v);
-                }
-                const cap = String(captchaValue || '').trim();
-                if (cap)
-                    params.set('codigoCaptcha', cap);
-                const action = (form.getAttribute('action') || '').trim() || '/cej/forms/busquedacodform.html';
-                const url = action.startsWith('http') ? action : (new URL(action, window.location.href)).toString();
-                const r = await fetch(url, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: params.toString(),
-                    credentials: 'include',
-                });
-                const text = await r.text();
-                const ok = text.includes('pnlSeguimiento') ||
-                    text.includes('listadoExpedientes') ||
-                    text.toLowerCase().includes('actuacion') ||
-                    text.toLowerCase().includes('actuación') ||
-                    text.toLowerCase().includes('resultado de la búsqueda');
-                if (ok) {
-                    document.open();
-                    document.write(text);
-                    document.close();
-                }
-                return {
-                    ok,
-                    status: r.status,
-                    url,
-                    bodyLen: params.toString().length,
-                    responseSnippet: text.slice(0, 220),
-                    replacedDom: ok,
-                };
-            }, { captchaValue: captchaCode });
-            console.log('[CEJ][TAB2] Simulated POST result:', {
-                ok: tab2Simulated?.ok,
-                status: tab2Simulated?.status,
-                url: tab2Simulated?.url,
-                replacedDom: tab2Simulated?.replacedDom,
+                    if (typeof fn === 'function')
+                        fn();
+                    else
+                        form?.submit();
+                }, captchaCode);
             });
-            if (cejDebugDiag && tab2Simulated?.responseSnippet) {
-                console.log('[CEJ][TAB2][DIAG] Simulated response snippet:', String(tab2Simulated.responseSnippet).replace(/\s+/g, ' ').slice(0, 220));
-            }
-            // If simulation didn't yield results, fall back to the legacy click (best-effort) to preserve behavior.
-            if (!tab2Simulated || !tab2Simulated.ok) {
-                const ajaxRespPromise = page.waitForResponse(resp => resp.url().includes('ValidarFiltrosCodigo'), { timeout: 35000 }).catch(() => null);
-                const navPromise = page.waitForNavigation({ waitUntil: 'load', timeout: 45000 }).catch(() => null);
-                await page.click('#consultarExpedientes').catch(async () => {
-                    await page.evaluate((code) => {
-                        const win = window;
-                        const fn = win['consultarExpedientes'];
-                        const form = document.getElementById('busquedaPorCodigo');
-                        if (form && !form.querySelector('input[name="codigoCaptcha"]')) {
-                            const hidden = document.createElement('input');
-                            hidden.type = 'hidden';
-                            hidden.name = 'codigoCaptcha';
-                            hidden.value = code;
-                            form.appendChild(hidden);
-                        }
-                        if (typeof fn === 'function')
-                            fn();
-                        else
-                            form?.submit();
-                    }, captchaCode);
-                });
-                const ajaxResp = await ajaxRespPromise;
-                if (ajaxResp) {
-                    const ajaxText = (await ajaxResp.text().catch(() => '')).trim();
-                    const errorCodes = ['1', '2', '3', '4', '5', '-C', '-CM', '-CV', 'PE', 'parte_req', 'index', 'DistJud_x', 'Error...'];
-                    if (errorCodes.includes(ajaxText) || ajaxText.startsWith('Sin conexion') || ajaxText.startsWith('Sin servicio') || ajaxText.startsWith('No existen')) {
-                        const errorMap = {
-                            '1': 'parte no coincide con el expediente',
-                            '2': 'error de conexión a la base de datos',
-                            '3': 'no se encontraron registros',
-                            '5': 'error de conexión',
-                            '-C': 'captcha incorrecto',
-                            '-CM': 'problema con captcha',
-                            '-CV': 'captcha vacío',
-                            'parte_req': 'parte requerida',
-                            'DistJud_x': 'distrito judicial incorrecto',
-                        };
-                        console.log('[CEJ] Tab 2 AJAX validation failed:', errorMap[ajaxText] || ajaxText);
-                        if (ajaxText === '-C' || ajaxText === '-CM' || ajaxText === '-CV') {
-                            continue;
-                        }
-                        throw new Error(`Tab2 AJAX failed: ${errorMap[ajaxText] || ajaxText}`);
+            const ajaxResp = await ajaxRespPromise;
+            if (ajaxResp) {
+                const ajaxText = (await ajaxResp.text().catch(() => '')).trim();
+                const errorCodes = ['1', '2', '3', '4', '5', '-C', '-CM', '-CV', 'PE', 'parte_req', 'index', 'DistJud_x', 'Error...'];
+                if (errorCodes.includes(ajaxText) || ajaxText.startsWith('Sin conexion') || ajaxText.startsWith('Sin servicio') || ajaxText.startsWith('No existen')) {
+                    const errorMap = {
+                        '1': 'parte no coincide con el expediente',
+                        '2': 'datos del expediente incorrectos o no encontrados',
+                        '3': 'no se encontraron registros',
+                        '5': 'datos del expediente incorrectos o no encontrados',
+                        '-C': 'captcha incorrecto',
+                        '-CM': 'problema con captcha',
+                        '-CV': 'captcha vacío',
+                        'parte_req': 'parte requerida',
+                        'DistJud_x': 'distrito judicial incorrecto',
+                    };
+                    const err = new Error(`Tab2 AJAX failed: ${errorMap[ajaxText] || ajaxText}`);
+                    const TERMINAL_CODES2 = new Set(['1', '2', '3', '5', 'PE', 'parte_req', 'DistJud_x']);
+                    if (TERMINAL_CODES2.has(ajaxText)) {
+                        err.terminal = true;
                     }
+                    throw err;
                 }
-                await navPromise;
-                console.log('[CEJ] Tab2 navigated to:', page.url());
             }
+            await navPromise;
+            console.log('[CEJ] Tab2 navigated to:', page.url());
             const result = await scrapeResultsPage(page, { ...baseResult }, numeroExpediente);
             if (result && (result.actuaciones.length > 0 || result.error)) {
                 console.log('[CEJ] Tab 2 succeeded — actuaciones:', result.actuaciones.length);
@@ -1050,421 +904,208 @@ async function fillAndScrape(page, numeroExpediente, baseResult, parte) {
     }
     // ── Strategy 2: Tab 1 "Por filtros" ─────────────────────────────────────
     console.log('[CEJ] Trying Tab 1 (Por filtros)...');
-    try {
-        // Navigate back to search page to try Tab 1
-        await page.goto(CEJ_SEARCH_URL, { waitUntil: 'load', timeout: 30000, ignoreHTTPSErrors: true });
-        await page.waitForTimeout(2000);
-        await page.click('a[href="#tabs-1"], a:has-text("Por filtros")').catch(() => { });
-        await page.waitForTimeout(500);
-        const DIST_NAME = {
-            '1801': 'LIMA', '0701': 'CALLAO', '1802': 'LIMA ESTE', '1803': 'LIMA NORTE',
-            '1804': 'LIMA SUR', '1805': 'VENTANILLA', '0201': 'AMAZONAS', '0301': 'ANCASH',
-            '0401': 'APURIMAC', '0501': 'AREQUIPA', '0601': 'CAJAMARCA', '0802': 'CUSCO',
-            '1001': 'HUANCAVELICA', '1101': 'HUANUCO', '1201': 'ICA', '1301': 'JUNIN',
-            '1401': 'LA LIBERTAD', '1501': 'LAMBAYEQUE', '1601': 'LORETO',
-            '1701': 'MADRE DE DIOS', '1901': 'MOQUEGUA', '2001': 'PASCO',
-            '2101': 'PIURA', '2102': 'SULLANA', '2201': 'PUNO',
-            '2301': 'SAN MARTIN', '2401': 'TACNA', '2501': 'TUMBES', '2601': 'UCAYALI',
-        };
-        const INST_NAME = {
-            'JR': 'ESPECIALIZADO', 'JP': 'PAZ LETRADO', 'MX': 'MIXTO',
-            'SA': 'SALA SUPERIOR', 'ST': 'SALA SUPERIOR', 'SC': 'SALA SUPERIOR',
-            'SP': 'SALA SUPERIOR', 'SL': 'SALA SUPERIOR', 'CS': 'SALA SUPREMA',
-        };
-        const ESP_NAME = {
-            'CI': 'CIVIL', 'PE': 'PENAL', 'LA': 'LABORAL', 'FA': 'FAMILIA',
-            'CO': 'COMERCIAL', 'CA': 'CONSTITUCIONAL', 'AD': 'CONTENCIOSO',
-            'CT': 'CONTENCIOSO', 'NI': 'NIÑO', 'LC': 'LIQUIDACION',
-        };
-        const distName = DIST_NAME[dist] || null;
-        if (dist) {
-            await page.evaluate((args) => {
-                const sel = document.querySelector('#distritoJudicial');
-                if (!sel)
-                    return;
-                const opt = args.name
-                    ? Array.from(sel.options).find(o => o.text.trim().toUpperCase().includes(args.name.toUpperCase()))
-                    : Array.from(sel.options).find(o => o.text.includes(args.code));
-                if (opt) {
-                    sel.value = opt.value;
-                    sel.dispatchEvent(new Event('change', { bubbles: true }));
-                }
-            }, { name: distName, code: dist }).catch(() => { });
-            await page.waitForFunction(() => {
-                const sel = document.querySelector('#organoJurisdiccional');
-                return sel && sel.options.length > 1;
-            }, { timeout: 8000 }).catch(() => { });
+    for (let capAttempt1 = 1; capAttempt1 <= 3; capAttempt1++) {
+        try {
+            // Navigate back to search page to try Tab 1
+            await page.goto(CEJ_SEARCH_URL, { waitUntil: 'load', timeout: 30000 });
+            await page.waitForTimeout(2000);
+            await page.click('a[href="#tabs-1"], a:has-text("Por filtros")').catch(() => { });
             await page.waitForTimeout(500);
-        }
-        if (instCod) {
-            const instText = INST_NAME[instCod.toUpperCase()] || null;
-            await page.evaluate((keyword) => {
-                const sel = document.querySelector('#organoJurisdiccional');
-                if (!sel || sel.options.length < 2)
-                    return;
-                const opt = keyword
-                    ? Array.from(sel.options).find(o => o.text.toUpperCase().includes(keyword.toUpperCase()))
-                    : sel.options[1];
-                if (opt) {
-                    sel.value = opt.value;
-                    sel.dispatchEvent(new Event('change', { bubbles: true }));
-                }
-            }, instText).catch(() => { });
-            await page.waitForFunction(() => {
-                const sel = document.querySelector('#especialidad');
-                return sel && sel.options.length > 1;
-            }, { timeout: 8000 }).catch(() => { });
-            await page.waitForTimeout(300);
-        }
-        if (espCod) {
-            const espText = ESP_NAME[espCod.toUpperCase()] || null;
-            await page.evaluate((keyword) => {
-                const sel = document.querySelector('#especialidad');
-                if (!sel || sel.options.length < 2)
-                    return;
-                const opt = keyword
-                    ? Array.from(sel.options).find(o => o.text.toUpperCase().includes(keyword.toUpperCase()))
-                    : sel.options[1];
-                if (opt) {
-                    sel.value = opt.value;
-                    sel.dispatchEvent(new Event('change', { bubbles: true }));
-                }
-            }, espText).catch(() => { });
-            await page.waitForTimeout(300);
-        }
-        if (anio) {
-            await page.evaluate((y) => {
-                const sel = document.querySelector('#anio');
-                if (!sel)
-                    return;
-                const opt = Array.from(sel.options).find(o => o.value === y || o.text === y);
-                if (opt) {
-                    sel.value = opt.value;
-                    sel.dispatchEvent(new Event('change', { bubbles: true }));
-                }
-            }, anio).catch(() => { });
-            await page.waitForTimeout(200);
-        }
-        // Tab 1 #numeroExpediente expects just the number (e.g. "33088"), not the full format string
-        const numInput = await page.$('#numeroExpediente');
-        if (numInput) {
-            await numInput.click();
-            await numInput.fill(nroExp);
-        }
-        console.log('[CEJ] Tab1 form filled: dist=%s inst=%s esp=%s anio=%s nroExp=%s', dist, instCod, espCod, anio, nroExp);
-        await page.waitForTimeout(600);
-        // Solve image captcha for Tab 1
-        const captchaImgEl = await page.$('#captcha_image, img[id="captcha_image"]');
-        if (captchaImgEl) {
-            baseResult.captchaDetected = true;
-            console.log('[CEJ] Tab1 image captcha detected — solving...');
-            try {
+            const DIST_NAME = {
+                '1801': 'LIMA', '0701': 'CALLAO', '1802': 'LIMA ESTE', '1803': 'LIMA NORTE',
+                '1804': 'LIMA SUR', '1805': 'VENTANILLA', '0201': 'AMAZONAS', '0301': 'ANCASH',
+                '0401': 'APURIMAC', '0501': 'AREQUIPA', '0601': 'CAJAMARCA', '0802': 'CUSCO',
+                '1001': 'HUANCAVELICA', '1101': 'HUANUCO', '1201': 'ICA', '1301': 'JUNIN',
+                '1401': 'LA LIBERTAD', '1501': 'LAMBAYEQUE', '1601': 'LORETO',
+                '1701': 'MADRE DE DIOS', '1901': 'MOQUEGUA', '2001': 'PASCO',
+                '2101': 'PIURA', '2102': 'SULLANA', '2201': 'PUNO',
+                '2301': 'SAN MARTIN', '2401': 'TACNA', '2501': 'TUMBES', '2601': 'UCAYALI',
+            };
+            const INST_NAME = {
+                'JR': 'ESPECIALIZADO', 'JP': 'PAZ LETRADO', 'MX': 'MIXTO',
+                'SA': 'SALA SUPERIOR', 'ST': 'SALA SUPERIOR', 'SC': 'SALA SUPERIOR',
+                'SP': 'SALA SUPERIOR', 'SL': 'SALA SUPERIOR', 'CS': 'SALA SUPREMA',
+            };
+            const ESP_NAME = {
+                'CI': 'CIVIL', 'PE': 'PENAL', 'LA': 'LABORAL', 'FA': 'FAMILIA',
+                'CO': 'COMERCIAL', 'CA': 'CONSTITUCIONAL', 'AD': 'CONTENCIOSO',
+                'CT': 'CONTENCIOSO', 'NI': 'NIÑO', 'LC': 'LIQUIDACION',
+            };
+            const distName = DIST_NAME[dist] || null;
+            if (dist) {
+                await page.evaluate((args) => {
+                    const sel = document.querySelector('#distritoJudicial');
+                    if (!sel)
+                        return;
+                    const opt = args.name
+                        ? Array.from(sel.options).find(o => o.text.trim().toUpperCase().includes(args.name.toUpperCase()))
+                        : Array.from(sel.options).find(o => o.text.includes(args.code));
+                    if (opt) {
+                        sel.value = opt.value;
+                        sel.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+                }, { name: distName, code: dist }).catch(() => { });
+                await page.waitForFunction(() => {
+                    const sel = document.querySelector('#organoJurisdiccional');
+                    return sel && sel.options.length > 1;
+                }, { timeout: 8000 }).catch(() => { });
+                await page.waitForTimeout(500);
+            }
+            if (instCod) {
+                const instText = INST_NAME[instCod.toUpperCase()] || null;
+                await page.evaluate((keyword) => {
+                    const sel = document.querySelector('#organoJurisdiccional');
+                    if (!sel || sel.options.length < 2)
+                        return;
+                    const opt = keyword
+                        ? Array.from(sel.options).find(o => o.text.toUpperCase().includes(keyword.toUpperCase()))
+                        : sel.options[1];
+                    if (opt) {
+                        sel.value = opt.value;
+                        sel.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+                }, instText).catch(() => { });
+                await page.waitForFunction(() => {
+                    const sel = document.querySelector('#especialidad');
+                    return sel && sel.options.length > 1;
+                }, { timeout: 8000 }).catch(() => { });
+                await page.waitForTimeout(300);
+            }
+            if (espCod) {
+                const espText = ESP_NAME[espCod.toUpperCase()] || null;
+                await page.evaluate((keyword) => {
+                    const sel = document.querySelector('#especialidad');
+                    if (!sel || sel.options.length < 2)
+                        return;
+                    const opt = keyword
+                        ? Array.from(sel.options).find(o => o.text.toUpperCase().includes(keyword.toUpperCase()))
+                        : sel.options[1];
+                    if (opt) {
+                        sel.value = opt.value;
+                        sel.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+                }, espText).catch(() => { });
+                await page.waitForTimeout(300);
+            }
+            if (anio) {
+                await page.evaluate((y) => {
+                    const sel = document.querySelector('#anio');
+                    if (!sel)
+                        return;
+                    const opt = Array.from(sel.options).find(o => o.value === y || o.text === y);
+                    if (opt) {
+                        sel.value = opt.value;
+                        sel.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+                }, anio).catch(() => { });
+                await page.waitForTimeout(200);
+            }
+            // Tab 1 #numeroExpediente expects just the number (e.g. "33088"), not the full format string
+            const numInput = await page.$('#numeroExpediente');
+            if (numInput) {
+                await numInput.click();
+                await numInput.fill(nroExp);
+            }
+            console.log('[CEJ] Tab1 form filled: dist=%s inst=%s esp=%s anio=%s nroExp=%s', dist, instCod, espCod, anio, nroExp);
+            await page.waitForTimeout(600);
+            // Solve image captcha for Tab 1
+            console.log('[CEJ] Tab1 image captcha solving (attempt %s)...', capAttempt1);
+            if (capAttempt1 > 1) {
+                await refreshImageCaptcha(page).catch(() => { });
+            }
+            const captchaCode1 = await solveImageCaptchaFromDom(page, baseResult).catch(() => '');
+            if (captchaCode1) {
                 const captchaInput = await page.$('#codigoCaptcha, input[name*="captcha"], input[id*="captcha"]');
                 if (captchaInput) {
-                    for (let capAttempt = 1; capAttempt <= 6; capAttempt++) {
-                        if (capAttempt > 1) {
-                            console.log(`[CEJ] Refreshing image captcha before retry (Tab1 capAttempt ${capAttempt})`);
-                            await refreshImageCaptcha(page).catch(() => { });
-                            await page.waitForTimeout(250);
-                        }
-                        const codeRaw = await solveImageCaptchaFromDom(page, baseResult).catch(() => '');
-                        const code = String(codeRaw || '').trim();
-                        if (code.length > 0 && code.length < 3) {
-                            console.log('[CEJ] Captcha too short, retrying');
-                            continue;
-                        }
-                        if (code) {
-                            await captchaInput.fill(code);
-                            baseResult.captchaSolved = true;
-                            console.log('[CEJ] Tab1 captcha filled:', code);
-                            break;
-                        }
+                    await captchaInput.fill(captchaCode1);
+                    console.log('[CEJ] Tab1 captcha filled:', captchaCode1);
+                }
+            }
+            // Fill parte using page.fill() for reliable value setting
+            if (parte) {
+                await page.fill('input[placeholder*="APELLIDO"], input[name="parte"], #parte', parte).catch(() => page.evaluate((p) => {
+                    const parteEl = document.getElementById('parte');
+                    if (parteEl) {
+                        parteEl.value = p;
+                        if (!parteEl.name)
+                            parteEl.name = 'parte';
+                        parteEl.dispatchEvent(new Event('input', { bubbles: true }));
+                        parteEl.dispatchEvent(new Event('change', { bubbles: true }));
                     }
-                }
+                }, parte));
             }
-            catch (e) {
-                console.error('[CEJ] Tab1 captcha error:', e instanceof Error ? e.message : String(e));
-            }
-        }
-        // Fill parte using page.fill() for reliable value setting
-        if (parte) {
-            await page.fill('input[placeholder*="APELLIDO"], input[name="parte"], #parte', parte).catch(() => page.evaluate((p) => {
-                const parteEl = document.getElementById('parte');
-                if (parteEl) {
-                    parteEl.value = p;
-                    if (!parteEl.name)
-                        parteEl.name = 'parte';
-                    parteEl.dispatchEvent(new Event('input', { bubbles: true }));
-                    parteEl.dispatchEvent(new Event('change', { bubbles: true }));
-                }
-            }, parte));
-        }
-        // Verify parte in DOM before Tab 1 click
-        const tab1ParteInDom = await page.evaluate(() => {
-            const el = document.getElementById('parte');
-            return el?.value || '(empty)';
-        }).catch(() => '(error)');
-        console.log('[CEJ] parte in DOM before Tab1 click:', tab1ParteInDom);
-        const cejDebugDiag = process.env.CEJ_DEBUG === 'true';
-        const beforeUrlTab1Submit = page.url();
-        const tab1CaptchaValue = await page.evaluate(() => {
-            const candidates = [
-                document.querySelector('#codigoCaptcha'),
-                document.querySelector('input[name="codigoCaptcha"]'),
-                document.querySelector('input[id*="captcha" i]'),
-                document.querySelector('input[name*="captcha" i]'),
-            ].filter(Boolean);
-            for (const el of candidates) {
-                if (el && 'value' in el) {
-                    const v = String(el.value || '').trim();
-                    if (v)
-                        return v;
-                }
-            }
-            return '';
-        }).catch(() => '');
-        if (cejDebugDiag) {
-            const before = await page.evaluate(() => {
-                const btn = document.querySelector('#consultarExpedientes') ||
-                    document.querySelector('button#consultarExpedientes, button[type="submit"], input[type="submit"]');
-                const form = (document.querySelector('form#busquedaFiltros') ||
-                    (btn ? btn.closest('form') : null) ||
-                    document.querySelector('form'));
-                const formId = form?.id || '';
-                const action = form?.getAttribute('action') || '';
-                const captchaEl = document.querySelector('#codigoCaptcha') || document.querySelector('input[name="codigoCaptcha"]');
-                const captchaInForm = !!(form && captchaEl && form.contains(captchaEl));
-                const hiddenNames = form ? Array.from(form.querySelectorAll('input[type="hidden"]')).map(i => i.name || i.id || '').filter(Boolean) : [];
-                return { formId, action, captchaInForm, hiddenCount: hiddenNames.length, hiddenNames: hiddenNames.slice(0, 25) };
-            }).catch(() => ({ formId: '', action: '', captchaInForm: false, hiddenCount: 0, hiddenNames: [] }));
-            console.log('[CEJ][TAB1][DIAG] pre-submit url:', beforeUrlTab1Submit);
-            console.log('[CEJ][TAB1][DIAG] captchaValueResolved:', tab1CaptchaValue || '(empty)');
-            console.log('[CEJ][TAB1][DIAG] form:', { id: before.formId || '(none)', action: before.action || '(empty)', captchaInForm: before.captchaInForm, hiddenCount: before.hiddenCount });
-            console.log('[CEJ][TAB1][DIAG] hidden names (sample):', before.hiddenNames);
-        }
-        // Intercept Tab 1 AJAX (ValidarFiltros.htm) to fail fast on errors (if it fires)
-        const tab1AjaxReqPromise = page.waitForRequest(req => req.url().includes('ValidarFiltros') && !req.url().includes('ValidarFiltrosCodigo'), { timeout: 30000 }).catch(() => null);
-        const tab1AjaxRespPromise = page.waitForResponse(resp => resp.url().includes('ValidarFiltros') && !resp.url().includes('ValidarFiltrosCodigo'), { timeout: 30000 }).catch(() => null);
-        const navPromise1 = page.waitForNavigation({ waitUntil: 'load', timeout: 45000 }).catch(() => null);
-        // ── Tab 1 submit replacement (3 strategies) ───────────────────────────
-        console.log('[CEJ][TAB1] Submit Strategy 1 — inject captcha into form + submit via JS...');
-        const strat1Result = await page.evaluate(async ({ captchaValue }) => {
-            const debug = (window && (window['CEJ_DEBUG'] === true || window['__CEJ_DEBUG'] === true)) ? true : false;
-            const log = (...args) => { try { if (debug)
-                console.log('[CEJ][TAB1][S1]', ...args); } catch { } };
-            const btn = document.querySelector('#consultarExpedientes') ||
-                document.querySelector('button#consultarExpedientes, button[type="submit"], input[type="submit"]');
-            const form = document.querySelector('form#busquedaFiltros') || (btn ? btn.closest('form') : null) || document.querySelector('form');
-            if (!form)
-                return { ok: false, reason: 'form-not-found' };
-            const pickCaptchaInputs = () => {
-                const out = new Set();
-                const selectors = [
-                    '#codigoCaptcha',
-                    '#captcha',
-                    'input[name="codigoCaptcha"]',
-                    'input[id*="captcha" i]',
-                    'input[name*="captcha" i]',
-                ];
-                for (const sel of selectors) {
-                    document.querySelectorAll(sel).forEach((el) => {
-                        if (el && el.tagName === 'INPUT')
-                            out.add(el);
-                    });
-                }
-                return Array.from(out);
-            };
-            const candidates = pickCaptchaInputs();
-            const injected = [];
-            for (const el of candidates) {
-                const name = el.getAttribute('name') || el.id || '';
-                const value = String((('value' in el) ? el.value : '') || '').trim() || String(captchaValue || '').trim();
-                if (!name || !value)
-                    continue;
-                if (!form.contains(el)) {
-                    const hidden = document.createElement('input');
-                    hidden.type = 'hidden';
-                    hidden.name = name;
-                    hidden.value = value;
-                    hidden.setAttribute('data-cej-injected', 'true');
-                    form.appendChild(hidden);
-                    injected.push({ name, value: value.slice(0, 30) });
-                    log('injected hidden', name, value.slice(0, 30));
-                }
-            }
-            // Ensure codigoCaptcha exists in form even if original input is missing/outside
-            const resolvedCaptcha = String(captchaValue || '').trim();
-            if (resolvedCaptcha && !form.querySelector('input[name="codigoCaptcha"]')) {
-                const h = document.createElement('input');
-                h.type = 'hidden';
-                h.name = 'codigoCaptcha';
-                h.value = resolvedCaptcha;
-                h.setAttribute('data-cej-injected', 'true');
-                form.appendChild(h);
-                injected.push({ name: 'codigoCaptcha', value: resolvedCaptcha.slice(0, 30) });
-                log('forced inject codigoCaptcha', resolvedCaptcha.slice(0, 30));
-            }
-            const win = window;
-            const tryFns = ['consultarExpedientes', 'buscarExpediente', 'submitForm'];
-            for (const fnName of tryFns) {
-                const fn = win && win[fnName];
-                if (typeof fn === 'function') {
-                    try {
-                        fn();
-                        return { ok: true, injected, submitMethod: `window.${fnName}()` };
-                    }
-                    catch (e) {
-                        return { ok: false, injected, reason: `window.${fnName} threw`, message: e instanceof Error ? e.message : String(e) };
-                    }
-                }
-            }
-            try {
-                form.submit();
-                return { ok: true, injected, submitMethod: 'form.submit()' };
-            }
-            catch (e) {
-                return { ok: false, injected, reason: 'form.submit threw', message: e instanceof Error ? e.message : String(e) };
-            }
-        }, { captchaValue: tab1CaptchaValue });
-        if (cejDebugDiag) {
-            await page.evaluate(() => { window['__CEJ_DEBUG'] = true; window['CEJ_DEBUG'] = true; }).catch(() => { });
-        }
-        console.log('[CEJ][TAB1] Strategy 1 result:', strat1Result);
-        // Wait up to 8s for navigation OR results to appear (Tab 1 may stay on same URL)
-        const strat1Nav = await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 8000 }).then(() => true).catch(() => false);
-        const strat1HasResults = await page.waitForFunction(() => {
-            const body = (document.body?.textContent || '').toLowerCase();
-            const hasPanel = !!document.querySelector('[id^="pnlSeguimiento"], .cpnlSeguimiento, #listadoExpedientes, #listaExpedientes, #divResultados, .expediente');
-            const hasWords = body.includes('pnlseguimiento') || body.includes('actuacion') || body.includes('actuación');
-            return hasPanel || hasWords;
-        }, { timeout: 8000 }).then(() => true).catch(() => false);
-        if (cejDebugDiag) {
-            console.log('[CEJ][TAB1][DIAG] Strategy 1 navigated:', strat1Nav, 'hasResults:', strat1HasResults, 'urlNow:', page.url());
-        }
-        let strategySucceeded = strat1Nav || strat1HasResults || page.url() !== beforeUrlTab1Submit;
-        if (!strategySucceeded) {
-            console.log('[CEJ][TAB1] Strategy 2 — fetch() direct POST simulating CEJ AJAX...');
-            const strat2 = await page.evaluate(async ({ captchaValue, fallbackAction }) => {
-                const btn = document.querySelector('#consultarExpedientes') ||
-                    document.querySelector('button#consultarExpedientes, button[type="submit"], input[type="submit"]');
-                const form = document.querySelector('form#busquedaFiltros') || (btn ? btn.closest('form') : null) || document.querySelector('form');
-                if (!form)
-                    return { ok: false, reason: 'form-not-found' };
-                const action = (form.getAttribute('action') || '').trim() || fallbackAction;
-                const url = action.startsWith('http') ? action : (new URL(action, window.location.href)).toString();
-                const params = new URLSearchParams();
-                const els = Array.from(form.querySelectorAll('input, select, textarea'));
-                for (const el of els) {
-                    const tag = el.tagName;
-                    const name = (el.getAttribute('name') || '').trim();
-                    if (!name)
-                        continue;
-                    if (tag === 'INPUT') {
-                        const type = (el.getAttribute('type') || 'text').toLowerCase();
-                        if (type === 'submit' || type === 'button' || type === 'image' || type === 'file')
-                            continue;
-                        if ((type === 'checkbox' || type === 'radio') && !el.checked)
-                            continue;
-                        params.append(name, String(el.value || ''));
-                    }
-                    else if (tag === 'SELECT' || tag === 'TEXTAREA') {
-                        params.append(name, String(el.value || ''));
-                    }
-                }
-                const cap = String(captchaValue || '').trim();
-                if (cap) {
-                    params.set('codigoCaptcha', cap);
-                }
-                const r = await fetch(url, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: params.toString(),
-                    credentials: 'include',
-                });
-                const text = await r.text();
-                const ok = text.includes('pnlSeguimiento') || text.toLowerCase().includes('actuacion') || text.toLowerCase().includes('actuación');
-                if (ok) {
-                    // Replace current DOM so the scraper can continue normally
-                    document.open();
-                    document.write(text);
-                    document.close();
-                }
-                return {
-                    ok,
-                    status: r.status,
-                    url,
-                    responseSnippet: text.slice(0, 220),
-                    replacedDom: ok,
-                };
-            }, { captchaValue: tab1CaptchaValue, fallbackAction: '/cej/forms/busquedaform.html' });
-            console.log('[CEJ][TAB1] Strategy 2 result:', { ok: strat2?.ok, status: strat2?.status, url: strat2?.url, replacedDom: strat2?.replacedDom });
-            if (cejDebugDiag && strat2 && strat2.responseSnippet) {
-                console.log('[CEJ][TAB1][DIAG] Strategy 2 response snippet:', String(strat2.responseSnippet).replace(/\s+/g, ' ').slice(0, 220));
-            }
-            strategySucceeded = !!(strat2 && strat2.ok);
-        }
-        if (!strategySucceeded) {
-            console.log('[CEJ][TAB1] Strategy 3 — waitForRequest() to detect real POST endpoint...');
-            const postReqPromise = page.waitForRequest(req => req.method() === 'POST', { timeout: 5000 }).catch(() => null);
+            // Verify parte in DOM before Tab 1 click
+            const tab1ParteInDom = await page.evaluate(() => {
+                const el = document.getElementById('parte');
+                return el?.value || '(empty)';
+            }).catch(() => '(error)');
+            console.log('[CEJ] parte in DOM before Tab1 click:', tab1ParteInDom);
+            // Intercept Tab 1 AJAX (ValidarFiltros.htm) to fail fast on errors
+            const tab1AjaxReqPromise = page.waitForRequest(req => req.url().includes('ValidarFiltros') && !req.url().includes('ValidarFiltrosCodigo'), { timeout: 30000 }).catch(() => null);
+            const tab1AjaxRespPromise = page.waitForResponse(resp => resp.url().includes('ValidarFiltros') && !resp.url().includes('ValidarFiltrosCodigo'), { timeout: 30000 }).catch(() => null);
+            const navPromise1 = page.waitForNavigation({ waitUntil: 'load', timeout: 45000 }).catch(() => null);
             await page.click('#consultarExpedientes').catch(async () => {
                 await page.evaluate(() => {
-                    const btn = document.querySelector('#consultarExpedientes') ||
-                        document.querySelector('button#consultarExpedientes, button[type="submit"], input[type="submit"]');
-                    btn?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-                }).catch(() => { });
+                    const win = window;
+                    const fn = win['consultarExpedientes'];
+                    if (typeof fn === 'function')
+                        fn();
+                    else
+                        document.getElementById('busquedaFiltros')?.submit();
+                });
             });
-            const postReq = await postReqPromise;
-            if (postReq) {
-                const postUrl = postReq.url();
-                const postBody = postReq.postData() || '';
-                console.log('[CEJ][TAB1] Strategy 3 captured POST:', postUrl);
-                if (cejDebugDiag) {
-                    console.log('[CEJ][TAB1][DIAG] Strategy 3 POST body:', postBody);
+            // Log Tab 1 AJAX request body
+            const tab1AjaxReq = await tab1AjaxReqPromise;
+            if (tab1AjaxReq) {
+                console.log('[CEJ] ValidarFiltros request body:', (tab1AjaxReq.postData() || '(none)').substring(0, 300));
+            }
+            // Check Tab 1 AJAX response
+            const tab1AjaxResp = await tab1AjaxRespPromise;
+            if (tab1AjaxResp) {
+                const tab1AjaxBody = await tab1AjaxResp.body().catch(() => Buffer.alloc(0));
+                const tab1AjaxText = tab1AjaxBody.toString('utf-8').trim();
+                console.log('[CEJ] ValidarFiltros response:', tab1AjaxText.substring(0, 200));
+                const errorCodes1 = ['1', '2', '3', '4', '5', '-C', '-CM', '-CV', 'PE', 'parte_req', 'index', 'DistJud_x', 'Error...'];
+                if (errorCodes1.includes(tab1AjaxText) || tab1AjaxText.startsWith('Sin conexion') || tab1AjaxText.startsWith('Sin servicio') || tab1AjaxText.startsWith('No existen')) {
+                    const errorMap1 = {
+                        '1': 'parte no coincide con el expediente',
+                        '2': 'datos del expediente incorrectos o no encontrados',
+                        '3': 'no se encontraron registros',
+                        '5': 'datos del expediente incorrectos o no encontrados',
+                        '-C': 'captcha incorrecto',
+                        '-CM': 'problema con captcha',
+                        '-CV': 'captcha vacío',
+                        'parte_req': 'parte requerida',
+                    };
+                    console.log('[CEJ] Tab 1 AJAX validation failed:', errorMap1[tab1AjaxText] || tab1AjaxText);
+                    if (tab1AjaxText === '-C' || tab1AjaxText === '-CV' || tab1AjaxText === '-CM') {
+                        continue;
+                    }
+                    const err = new Error(`Tab1 AJAX failed: ${errorMap1[tab1AjaxText] || tab1AjaxText}`);
+                    const TERMINAL_CODES1 = new Set(['1', '2', '3', '5', 'PE', 'parte_req', 'DistJud_x']);
+                    if (TERMINAL_CODES1.has(tab1AjaxText)) {
+                        err.terminal = true;
+                    }
+                    throw err;
                 }
             }
             else {
-                console.log('[CEJ][TAB1] Strategy 3 did not capture any POST');
+                console.log('[CEJ] Tab 1 AJAX did not fire (client-side validation failed?)');
+            }
+            await navPromise1;
+            console.log('[CEJ] Tab1 navigated to:', page.url());
+            const result = await scrapeResultsPage(page, { ...baseResult }, numeroExpediente, true);
+            if (result) {
+                console.log('[CEJ] Tab 1 result — actuaciones:', result.actuaciones.length);
+                return result;
             }
         }
-        // Log Tab 1 AJAX request body (if any)
-        const tab1AjaxReq = await tab1AjaxReqPromise;
-        if (tab1AjaxReq && cejDebugDiag) {
-            console.log('[CEJ][TAB1][DIAG] ValidarFiltros request body:', (tab1AjaxReq.postData() || '(none)').substring(0, 500));
+        catch (e) {
+            console.log(`[CEJ] Tab 1 error (attempt ${capAttempt1}):`, e instanceof Error ? e.message : String(e));
+            if (e?.terminal)
+                throw e;
         }
-        // Check Tab 1 AJAX response (if any)
-        const tab1AjaxResp = await tab1AjaxRespPromise;
-        if (tab1AjaxResp) {
-            const tab1AjaxBody = await tab1AjaxResp.body().catch(() => Buffer.alloc(0));
-            const tab1AjaxText = tab1AjaxBody.toString('utf-8').trim();
-            console.log('[CEJ][TAB1] ValidarFiltros response:', tab1AjaxText.substring(0, 200));
-            const errorCodes1 = ['1', '2', '3', '4', '5', '-C', '-CM', '-CV', 'PE', 'parte_req', 'index', 'DistJud_x', 'Error...'];
-            if (errorCodes1.includes(tab1AjaxText) || tab1AjaxText.startsWith('Sin conexion') || tab1AjaxText.startsWith('Sin servicio') || tab1AjaxText.startsWith('No existen')) {
-                const errorMap1 = {
-                    '1': 'parte no coincide con el expediente',
-                    '2': 'error de conexión a la base de datos',
-                    '3': 'no se encontraron registros',
-                    '-C': 'captcha incorrecto',
-                    '-CV': 'captcha vacío',
-                    'parte_req': 'parte requerida',
-                };
-                console.log('[CEJ][TAB1] AJAX validation failed:', errorMap1[tab1AjaxText] || tab1AjaxText);
-                throw new Error(`Tab1 AJAX failed: ${errorMap1[tab1AjaxText] || tab1AjaxText}`);
-            }
-        }
-        else if (cejDebugDiag) {
-            console.log('[CEJ][TAB1][DIAG] ValidarFiltros did not fire (likely client-side validation blocked)');
-        }
-        await navPromise1;
-        console.log('[CEJ] Tab1 navigated to:', page.url());
-        const result = await scrapeResultsPage(page, { ...baseResult }, numeroExpediente, true);
-        if (result) {
-            console.log('[CEJ] Tab 1 result — actuaciones:', result.actuaciones.length);
-            return result;
-        }
-    }
-    catch (e) {
-        console.log('[CEJ] Tab 1 error:', e instanceof Error ? e.message : String(e));
-    }
+    } // end for loop
     return null;
 }
 // Attempt to reach CEJ without solving hCaptcha (direct access).
@@ -1473,15 +1114,15 @@ async function tryDirectAccess(numeroExpediente, baseResult, parte) {
     try {
         applyCejStealthOnce();
         browser = await playwright_extra_1.chromium.launch(cejChromiumLaunchOptions());
+        //browser = await getCejBrowser()
         const context = await browser.newContext({
             userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             viewport: { width: 1280, height: 800 },
             locale: 'es-PE',
-            ignoreHTTPSErrors: true,
         });
         console.log(`[CEJ] Direct access attempt: ${CEJ_SEARCH_URL}`);
         const page = await context.newPage();
-        await page.goto(CEJ_SEARCH_URL, { waitUntil: 'load', timeout: 30000, ignoreHTTPSErrors: true });
+        await page.goto(CEJ_SEARCH_URL, { waitUntil: 'load', timeout: 30000 });
         await page.waitForTimeout(3000);
         let currentUrl = page.url();
         let title = await page.title();
@@ -1490,13 +1131,15 @@ async function tryDirectAccess(numeroExpediente, baseResult, parte) {
             console.log('[CEJ] Search URL loaded without Radware — proceeding');
             const result = await fillAndScrape(page, numeroExpediente, { ...baseResult }, parte).catch((err) => {
                 console.log('[CEJ] fillAndScrape error:', err instanceof Error ? err.message : String(err));
+                if (err?.terminal)
+                    throw err;
                 return null;
             });
             await browser.close();
             return result;
         }
         console.log('[CEJ] Search URL blocked — trying detail URL for session warm-up');
-        await page.goto(CEJ_DETAIL_URL, { waitUntil: 'load', timeout: 30000, ignoreHTTPSErrors: true });
+        await page.goto(CEJ_DETAIL_URL, { waitUntil: 'load', timeout: 30000 });
         await page.waitForTimeout(3000);
         currentUrl = page.url();
         title = await page.title();
@@ -1507,7 +1150,7 @@ async function tryDirectAccess(numeroExpediente, baseResult, parte) {
             return null;
         }
         console.log('[CEJ] Detail URL passed — retrying search URL with established session');
-        await page.goto(CEJ_SEARCH_URL, { waitUntil: 'load', timeout: 30000, ignoreHTTPSErrors: true });
+        await page.goto(CEJ_SEARCH_URL, { waitUntil: 'load', timeout: 30000 });
         await page.waitForTimeout(3000);
         currentUrl = page.url();
         title = await page.title();
@@ -1527,20 +1170,15 @@ async function tryDirectAccess(numeroExpediente, baseResult, parte) {
         console.log('[CEJ] Direct access failed:', err instanceof Error ? err.message : String(err));
         if (browser)
             await browser.close().catch(() => { });
+        if (err?.terminal)
+            throw err;
         return null;
     }
 }
 async function scrapeCEJ(numeroExpediente, parte) {
     try {
-        const MAX_RETRIES = process.env.NODE_ENV === 'test' ? 1 : 6;
-        const first = await _scrapeCEJ(numeroExpediente, MAX_RETRIES, parte);
-        if (process.env.NODE_ENV !== 'test' && first?.portalDown) {
-            console.log('[CEJ] Full retry with fresh browser session');
-            await new Promise(r => setTimeout(r, 15000));
-            const second = await _scrapeCEJ(numeroExpediente, MAX_RETRIES, parte);
-            return second;
-        }
-        return first;
+        const MAX_RETRIES = process.env.NODE_ENV === 'test' ? 1 : 3;
+        return await _scrapeCEJ(numeroExpediente, MAX_RETRIES, parte);
     }
     catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -1557,6 +1195,23 @@ async function scrapeCEJ(numeroExpediente, parte) {
     }
 }
 async function _scrapeCEJ(numeroExpediente, maxRetries, parte) {
+    // Serverless (Vercel producción/preview): sin Playwright. En `next dev` NODE_ENV=development → no se bloquea
+    // aunque tengas VERCEL=1 por error en .env. Para forzar scrape con `next start` local: CEJ_FORCE_PLAYWRIGHT=1
+    /*const vercelServerless =
+      process.env.VERCEL === '1' &&
+      process.env.NODE_ENV !== 'development' &&
+      process.env.CEJ_FORCE_PLAYWRIGHT !== '1'
+    if (vercelServerless) {
+      return {
+        numeroExpediente,
+        organoJurisdiccional: '', distritoJudicial: '', juez: '',
+        especialidad: '', proceso: '', etapa: '', estadoProceso: '',
+        partes: [], actuaciones: [], totalActuaciones: 0, hash: '',
+        portalDown: true, captchaDetected: false, captchaSolved: false,
+        scrapedAt: new Date().toISOString(),
+        error: 'El scraping en tiempo real requiere el servidor local. Ejecuta npm run dev para usar esta función.',
+      }
+    }*/
     const baseResult = {
         numeroExpediente,
         organoJurisdiccional: '', distritoJudicial: '', juez: '',
@@ -1569,7 +1224,17 @@ async function _scrapeCEJ(numeroExpediente, maxRetries, parte) {
     const solver = TWOCAPTCHA_KEY ? new _2captcha_ts_1.Solver(TWOCAPTCHA_KEY) : null;
     // ── Step 1: try without Radware captcha ──────────────────────────────────
     console.log('[CEJ] Trying direct access (no Radware captcha)...');
-    const directResult = await tryDirectAccess(numeroExpediente, { ...baseResult }, parte);
+    let directResult = null;
+    try {
+        directResult = await tryDirectAccess(numeroExpediente, { ...baseResult }, parte);
+    }
+    catch (err) {
+        if (err?.terminal) {
+            console.log('[CEJ] Direct access: terminal error, not retrying —', err instanceof Error ? err.message : String(err));
+            return { ...baseResult, error: err instanceof Error ? err.message : String(err) };
+        }
+        console.log('[CEJ] Direct access threw non-terminal error, treating as blocked:', err instanceof Error ? err.message : String(err));
+    }
     if (directResult) {
         console.log('[CEJ] Direct access succeeded!');
         return directResult;
@@ -1582,15 +1247,15 @@ async function _scrapeCEJ(numeroExpediente, maxRetries, parte) {
             console.log(`[CEJ] hCaptcha attempt ${attempt}/${maxRetries} — ${numeroExpediente}`);
             applyCejStealthOnce();
             browser = await playwright_extra_1.chromium.launch(cejChromiumLaunchOptions());
+            //browser = await getCejBrowser()
             const context = await browser.newContext({
                 userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 viewport: { width: 1280, height: 800 },
                 locale: 'es-PE',
-                ignoreHTTPSErrors: true,
             });
             const page = await context.newPage();
             console.log('[CEJ] Navigating to portal...');
-            await page.goto(CEJ_SEARCH_URL, { waitUntil: 'load', timeout: 30000, ignoreHTTPSErrors: true });
+            await page.goto(CEJ_SEARCH_URL, { waitUntil: 'load', timeout: 30000 });
             if (await hasPerfdriveChallengeIframe(page)) {
                 console.log('[CEJ] Radware Bot Manager detected (perfdrive iframe) — solving hCaptcha...');
                 baseResult.captchaDetected = true;
@@ -1675,9 +1340,12 @@ async function _scrapeCEJ(numeroExpediente, maxRetries, parte) {
                 await browser.close().catch(() => { });
                 browser = null;
             }
+            if (error?.terminal) {
+                return { ...baseResult, error: msg };
+            }
             if (attempt < maxRetries)
                 await new Promise(r => setTimeout(r, 6000 * attempt));
         }
     }
-    return { ...baseResult, portalDown: true, error: `Portal CEJ no disponible después de ${maxRetries} intentos` };
+    return { ...baseResult, portalDown: true, error: 'Portal CEJ no disponible después de 3 intentos' };
 }
