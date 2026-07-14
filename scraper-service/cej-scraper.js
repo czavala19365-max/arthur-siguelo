@@ -11,6 +11,13 @@ const crypto_1 = __importDefault(require("crypto"));
 const fs_1 = __importDefault(require("fs"));
 const sharp_1 = __importDefault(require("sharp"));
 const supabase_storage_1 = require("./supabase-storage");
+const e = require("express");
+const dotenv = require('dotenv');
+
+require('dotenv').config({
+  path: '.env.local'
+})
+
 /** Aplicar stealth solo al abrir el navegador (evita fallos al importar el módulo en Next/API). */
 let cejStealthApplied = false;
 function applyCejStealthOnce() {
@@ -122,26 +129,48 @@ class CapSolverImageSolver {
 /** CEJ image captcha: CapSolver first; 2captcha only if CapSolver fails or if only TWOCAPTCHA is set. */
 class CapSolverImageWithTwoCaptchaFallback {
     async solve(imageBase64) {
+        console.log("A")
         const capKey = process.env.CAPSOLVER_API_KEY?.trim();
         const twoKey = process.env.TWOCAPTCHA_API_KEY?.trim();
+        console.log("B", !!capKey, !!twoKey);
         if (capKey) {
+            console.log("C")
             try {
-                return await new CapSolverImageSolver(capKey).solve(imageBase64);
+                console.log("D")
+                const result = await new CapSolverImageSolver(capKey).solve(imageBase64);
+                console.log("E", result);
+                return result;
             }
             catch (e) {
+                console.log("F")
                 const msg = e instanceof Error ? e.message : String(e);
                 console.warn('[CEJ] CapSolver image captcha failed:', msg);
                 if (!twoKey)
                     throw e;
+                console.log("G")
                 console.log('[CEJ] Image captcha: falling back to 2captcha');
-                return await new TwoCaptchaImageSolver(twoKey).solve(imageBase64);
+                const result = await new TwoCaptchaImageSolver(twoKey).solve(imageBase64);
+                console.log("H", result);
+                return result;
             }
         }
-        if (twoKey)
-            return await new TwoCaptchaImageSolver(twoKey).solve(imageBase64);
+        consolelog("I")
+        if (twoKey){
+          const result = await new TwoCaptchaImageSolver(twoKey).solve(imageBase64);
+          console.log("J", result);
+          return result;
+        }
+        console.log("K")
         throw new Error('No CAPTCHA provider configured. Set CAPSOLVER_API_KEY (CEJ) or TWOCAPTCHA_API_KEY as fallback.');
     }
 }
+
+console.log("cwd =", process.cwd());
+console.log("__dirname =", __dirname);
+console.log("node =", process.execPath);
+console.log("capsolver =", process.env.CAPSOLVER_API_KEY);
+console.log("two =", process.env.TWOCAPTCHA_API_KEY);
+
 function getImageCaptchaSolver() {
     const capKey = process.env.CAPSOLVER_API_KEY?.trim();
     const twoKey = process.env.TWOCAPTCHA_API_KEY?.trim();
@@ -169,7 +198,10 @@ async function refreshImageCaptcha(page) {
     await page.waitForTimeout(300);
 }
 async function solveImageCaptchaFromDom(page, baseResult) {
+    console.log("ESTOY EN EL JS", __filename);
+    console.log("1")
     const imgEl = await page.$('#captcha_image, img[id=\"captcha_image\"]');
+    console.log("2", !!imgEl)
     if (!imgEl)
         return '';
     baseResult.captchaDetected = true;
@@ -177,9 +209,11 @@ async function solveImageCaptchaFromDom(page, baseResult) {
         const img = document.getElementById('captcha_image');
         return !!(img?.complete && (img?.naturalWidth ?? 0) > 10);
     }, { timeout: 10000 }).catch(() => { });
+    console.log("3")
     await imgEl.scrollIntoViewIfNeeded().catch(() => { });
     await page.waitForTimeout(250);
     const imgBuffer = await imgEl.screenshot({ type: 'png' }).catch(() => Buffer.alloc(0));
+    console.log("4", imgBuffer.length)
     const processedBuffer = await (0, sharp_1.default)(imgBuffer)
         .resize({ width: 400 })
         .grayscale()
@@ -197,9 +231,11 @@ async function solveImageCaptchaFromDom(page, baseResult) {
   
     console.log('[CEJ] Captcha guardado en:', captchaPath)
     console.log('[CEJ] Captcha guardado')*/
+    console.log("5", processedBuffer.length)
     if (!processedBuffer.length || processedBuffer.length < 200)
         return '';
     const solver = getImageCaptchaSolver();
+    console.log("6", solver)
     const code = await solver.solve(processedBuffer.toString('base64'));
     console.log('[CEJ-TEST] Captcha solved:', code);
     baseResult.captchaSolved = !!code;
@@ -804,7 +840,10 @@ async function fillAndScrape(page, numeroExpediente, baseResult, parte) {
             await page.waitForTimeout(350);
             if (capAttempt > 1)
                 await refreshImageCaptcha(page).catch(() => { });
-            const captchaCode = await solveImageCaptchaFromDom(page, baseResult).catch(() => '');
+            const captchaCode = await solveImageCaptchaFromDom(page, baseResult).catch(e => {
+              console.error("error solving captcha", e)
+              return ""
+            });
             // Switch to Tab 2
             await page.click('a[href="#tabs-2"], a:has-text("Por Código"), #tabs-2').catch(() => { });
             await page.waitForTimeout(800);
@@ -1013,7 +1052,10 @@ async function fillAndScrape(page, numeroExpediente, baseResult, parte) {
             if (capAttempt1 > 1) {
                 await refreshImageCaptcha(page).catch(() => { });
             }
-            const captchaCode1 = await solveImageCaptchaFromDom(page, baseResult).catch(() => '');
+            const captchaCode1 = await solveImageCaptchaFromDom(page, baseResult).catch(e => {
+              console.error("error solving captcha", e)
+              return ""
+            });
             if (captchaCode1) {
                 const captchaInput = await page.$('#codigoCaptcha, input[name*="captcha"], input[id*="captcha"]');
                 if (captchaInput) {

@@ -7,11 +7,14 @@
   },
   "scripts": {
     "start": "node index.js",
-    "build": "echo 'no build needed'"
+    "build": "echo 'no build needed'",
+    "test:scrape": "node test-scrape.js",
+    "test:local-cej": "node test-local-cej.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.104.1",
     "2captcha-ts": "^2.4.1",
+    "dotenv": "^17.4.2",
     "express": "^4.18.2",
     "playwright": "1.40.1",
     "playwright-extra": "^4.3.6",
