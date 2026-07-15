@@ -315,9 +315,23 @@ async function hasPerfdriveChallengeIframe(page) {
 function makeBrowserArgs() {
     return [
         '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-blink-features=AutomationControlled',
+    '--disable-setuid-sandbox',
+    '--disable-dev-shm-usage',
+
+    '--disable-blink-features=AutomationControlled',
+
+    '--disable-infobars',
+
+    '--disable-features=IsolateOrigins,site-per-process',
+    '--disable-site-isolation-trials',
+
+    '--window-size=1366,768',
+
+    '--lang=es-PE',
+
+    '--start-maximized',
+
+    '--ignore-certificate-errors',
     ];
 }
 /** CEJ_DEBUG=1 o true → navegador visible + DevTools (equivalente práctico a debug: true, headless: false). */
@@ -946,7 +960,7 @@ async function fillAndScrape(page, numeroExpediente, baseResult, parte) {
     for (let capAttempt1 = 1; capAttempt1 <= 3; capAttempt1++) {
         try {
             // Navigate back to search page to try Tab 1
-            await page.goto(CEJ_SEARCH_URL, { waitUntil: 'load', timeout: 30000 });
+            await page.goto(CEJ_SEARCH_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
             await page.waitForTimeout(2000);
             await page.click('a[href="#tabs-1"], a:has-text("Por filtros")').catch(() => { });
             await page.waitForTimeout(500);
@@ -1158,13 +1172,41 @@ async function tryDirectAccess(numeroExpediente, baseResult, parte) {
         browser = await playwright_extra_1.chromium.launch(cejChromiumLaunchOptions());
         //browser = await getCejBrowser()
         const context = await browser.newContext({
-            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            viewport: { width: 1280, height: 800 },
-            locale: 'es-PE',
+            userAgent:
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+
+  viewport: {
+    width: 1366,
+    height: 768,
+  },
+
+  screen: {
+    width: 1366,
+    height: 768,
+  },
+
+  locale: "es-PE",
+  timezoneId: "America/Lima",
+
+  colorScheme: "light",
+
+  deviceScaleFactor: 1,
+
+  hasTouch: false,
+
+  isMobile: false,
+
+  javaScriptEnabled: true,
+
+  permissions: ["geolocation"],
+
+  geolocation: {
+    latitude: -12.0464,
+    longitude: -77.0428,},
         });
         console.log(`[CEJ] Direct access attempt: ${CEJ_SEARCH_URL}`);
         const page = await context.newPage();
-        await page.goto(CEJ_SEARCH_URL, { waitUntil: 'load', timeout: 30000 });
+        await page.goto(CEJ_SEARCH_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
         await page.waitForTimeout(3000);
         let currentUrl = page.url();
         let title = await page.title();
@@ -1192,7 +1234,7 @@ async function tryDirectAccess(numeroExpediente, baseResult, parte) {
             return null;
         }
         console.log('[CEJ] Detail URL passed — retrying search URL with established session');
-        await page.goto(CEJ_SEARCH_URL, { waitUntil: 'load', timeout: 30000 });
+        await page.goto(CEJ_SEARCH_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
         await page.waitForTimeout(3000);
         currentUrl = page.url();
         title = await page.title();
@@ -1291,13 +1333,44 @@ async function _scrapeCEJ(numeroExpediente, maxRetries, parte) {
             browser = await playwright_extra_1.chromium.launch(cejChromiumLaunchOptions());
             //browser = await getCejBrowser()
             const context = await browser.newContext({
-                userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                viewport: { width: 1280, height: 800 },
-                locale: 'es-PE',
+                userAgent:
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+
+  viewport: {
+    width: 1366,
+    height: 768,
+  },
+
+  screen: {
+    width: 1366,
+    height: 768,
+  },
+
+  locale: "es-PE",
+  timezoneId: "America/Lima",
+
+  colorScheme: "light",
+
+  deviceScaleFactor: 1,
+
+  hasTouch: false,
+
+  isMobile: false,
+
+  javaScriptEnabled: true,
+
+  permissions: ["geolocation"],
+
+  geolocation: {
+    latitude: -12.0464,
+    longitude: -77.0428,
+  },
+  
             });
+            
             const page = await context.newPage();
             console.log('[CEJ] Navigating to portal...');
-            await page.goto(CEJ_SEARCH_URL, { waitUntil: 'load', timeout: 30000 });
+            await page.goto(CEJ_SEARCH_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
             if (await hasPerfdriveChallengeIframe(page)) {
                 console.log('[CEJ] Radware Bot Manager detected (perfdrive iframe) — solving hCaptcha...');
                 baseResult.captchaDetected = true;
