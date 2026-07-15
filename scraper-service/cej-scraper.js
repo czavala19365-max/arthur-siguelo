@@ -4,7 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.scrapeCEJ = scrapeCEJ;
-const playwright_extra_1 = require("playwright-extra");
+const { chromium } = require("playwright-extra");
 const puppeteer_extra_plugin_stealth_1 = __importDefault(require("puppeteer-extra-plugin-stealth"));
 const _2captcha_ts_1 = require("2captcha-ts");
 const crypto_1 = __importDefault(require("crypto"));
@@ -25,7 +25,7 @@ function applyCejStealthOnce() {
         return;
     cejStealthApplied = true;
     try {
-        playwright_extra_1.chromium.use((0, puppeteer_extra_plugin_stealth_1.default)());
+        chromium.use((0, puppeteer_extra_plugin_stealth_1.default)());
     }
     catch (e) {
         console.warn('[CEJ] Stealth plugin no aplicado:', e instanceof Error ? e.message : String(e));
