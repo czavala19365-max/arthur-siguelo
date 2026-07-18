@@ -34,7 +34,7 @@ function applyCejStealthOnce() {
 const CEJ_SEARCH_URL = 'https://cej.pj.gob.pe/cej/forms/busquedaform.html';
 const CEJ_DETAIL_URL = 'https://cej.pj.gob.pe/cej/forms/detalleform.html';
 
-async function getCejBrowser(){
+/*async function getCejBrowser(){
   applyCejStealthOnce()
 
   const isVercelProd =
@@ -47,14 +47,18 @@ async function getCejBrowser(){
       throw new Error('BROWSERLESS_TOKEN no configurado en variables de entorno de Vercel')
     }
     console.log('[CEJ] Conectando a Browserless (producción)')
-    return (await chromium.connect(
-      `wss://production-sfo.browserless.io/chromium/playwright?token=${token}`
-    ))
+
+    const browser = await chromium.connectOverCDP(
+      `wss://production-sfo.browserless.io?token=${token}`
+    );
+
+    console.log('[CEJ] Browserless conectado');
+    return browser;
   }
 
   console.log('[CEJ] Lanzando Chromium local')
   return (await chromium.launch(cejChromiumLaunchOptions()))
-}
+}*/
 
 class TwoCaptchaImageSolver {
     apiKey;
@@ -1191,9 +1195,9 @@ async function fillAndScrape(page, numeroExpediente, baseResult, parte) {
 async function tryDirectAccess(numeroExpediente, baseResult, parte) {
     let browser = null;
     try {
-        //applyCejStealthOnce();
-        //browser = await playwright_extra_1.chromium.launch(cejChromiumLaunchOptions());
-        browser = await getCejBrowser()
+        applyCejStealthOnce();
+        browser = await chromium.launch(cejChromiumLaunchOptions());
+        //browser = await getCejBrowser()
         const context = await browser.newContext({
             userAgent:
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
@@ -1352,9 +1356,9 @@ async function _scrapeCEJ(numeroExpediente, maxRetries, parte) {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
             console.log(`[CEJ] hCaptcha attempt ${attempt}/${maxRetries} — ${numeroExpediente}`);
-            //applyCejStealthOnce();
-            //browser = await playwright_extra_1.chromium.launch(cejChromiumLaunchOptions());
-            browser = await getCejBrowser()
+            applyCejStealthOnce();
+            browser = await chromium.launch(cejChromiumLaunchOptions());
+            //browser = await getCejBrowser()
             const context = await browser.newContext({
                 userAgent:
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
