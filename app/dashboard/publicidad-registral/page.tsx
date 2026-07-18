@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import type { SprlConnectionStatus, SprlServicio } from '@/lib/sprl/types'
 
@@ -74,6 +75,7 @@ function estadoBadge(estado: 'pendiente' | 'activo' | 'error' | 'desconectado') 
 }
 
 export default function PublicidadRegistralPage() {
+  const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [status, setStatus] = useState<SprlConnectionStatus>({ connected: false })
   const [servicios, setServicios] = useState<SprlServicio[]>([])
@@ -144,7 +146,7 @@ export default function PublicidadRegistralPage() {
 
   function handleServiceClick(servicio: SprlServicio) {
     if (!servicio.activo) return
-    setToast('Disponible en la próxima actualización')
+    router.push(`/dashboard/publicidad-registral/${servicio.codigo}`)
   }
 
   const benefits = [
@@ -469,7 +471,6 @@ export default function PublicidadRegistralPage() {
                   <button
                     key={s.id}
                     type="button"
-                    disabled={!s.activo}
                     className={s.activo ? 'sprl-service-card' : undefined}
                     onClick={() => handleServiceClick(s)}
                     style={{
@@ -477,8 +478,8 @@ export default function PublicidadRegistralPage() {
                       background: 'var(--paper)',
                       border: '1px solid var(--line)',
                       padding: '24px',
-                      cursor: s.activo ? 'pointer' : 'default',
-                      opacity: s.activo ? 1 : 0.45,
+                      cursor: 'pointer',
+                      opacity: s.activo ? 1 : 0.6,
                       transition: 'border-color 0.15s',
                     }}
                   >
