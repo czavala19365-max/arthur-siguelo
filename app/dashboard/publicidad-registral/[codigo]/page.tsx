@@ -457,11 +457,229 @@ function VigenciaPoderPage() {
   )
 }
 
+/*----- Copia Literal Page -----*/
+function CopiaLiteralPage() {
+  const [codArea, setCodArea] = useState('')
+  const [items, setItems] = useState<CatalogCertificado[]>([])
+  const [selectedCertificadoId, setSelectedCertificadoId] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!codArea) {
+      setItems([])
+      setSelectedCertificadoId('')
+      setError(null)
+      return
+    }
+
+    const controller = new AbortController()
+
+    async function loadCatalog() {
+      setLoading(true)
+      setError(null)
+      try {
+        const res = await fetch('/api/sprl/catalogo/publicidad-certificados', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ codArea, tipoCert: 'A' }),
+          signal: controller.signal,
+        })
+
+        const data = (await res.json()) as CatalogResponse
+
+        if (!res.ok || !data.success) {
+          throw new Error(data.response?.mensaje ?? 'No se pudo cargar el catálogo de certificados')
+        }
+
+        setItems(data.data ?? [])
+        setSelectedCertificadoId('')
+      } catch (err) {
+        if (controller.signal.aborted) return
+        setItems([])
+        setSelectedCertificadoId('')
+        setError(err instanceof Error ? err.message : 'Error al cargar el catálogo')
+      } finally {
+        if (!controller.signal.aborted) setLoading(false)
+      }
+    }
+
+    void loadCatalog()
+
+    return () => controller.abort()
+  }, [codArea])
+
+  const selectedCatalog = items.find(item => String(item.certificadoID) === selectedCertificadoId) ?? null
+
+  return (
+    <>
+      <style>{`
+        .sprl-copia-page {
+          padding: 22px;
+          background: #efefef;
+          min-height: 100%;
+          color: var(--ink);
+        }
+        @media (max-width: 768px) {
+          .sprl-copia-page { padding: 14px; }
+          .sprl-copia-shell { padding: 18px 14px 20px !important; }
+          .sprl-copia-form { grid-template-columns: 1fr !important; }
+        }
+        .sprl-copia-shell { background: #fff; border: 1px solid #d9d9d9; padding: 28px 22px 30px; }
+        .sprl-copia-title { font-family: var(--font-body); font-size: 21px; font-weight: 700; margin: 0 0 20px; }
+        .sprl-copia-form { display: grid; grid-template-columns: 1fr auto; column-gap: 22px; row-gap: 16px; align-items: start; }
+        .sprl-copia-select {
+          width: 100%;
+          appearance: none;
+          background: #fff;
+          border: 1px solid #d9d9d9;
+          padding: 12px 44px 12px 14px;
+          font-family: var(--font-body);
+          font-size: 14px;
+          color: var(--ink);
+          outline: none;
+        }
+        .sprl-copia-btn { background: #95c11f; color: #fff; border: none; padding: 12px 24px; min-width: 250px; font-family: var(--font-body); font-size: 14px; cursor: pointer; }
+        .sprl-copia-btn:disabled { opacity: 0.65; cursor: not-allowed; }
+      `}</style>
+
+      <div className="sprl-copia-page">
+        <div className="sprl-copia-shell">
+          <Link
+            href="/dashboard/publicidad-registral"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              fontFamily: 'var(--font-body)',
+              fontSize: 12,
+              color: 'var(--muted)',
+              textDecoration: 'none',
+              marginBottom: 18,
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M19 12H5M12 19l-7-7 7-7" />
+            </svg>
+            Volver
+          </Link>
+
+          <h1 className="sprl-copia-title">Copia literal de partida</h1>
+
+          <div className="sprl-copia-form">
+            <div style={{ display: 'grid', gap: 14 }}>
+              <FieldRow label="Registro Jurídico *:">
+                <div style={{ position: 'relative' }}>
+                  <select
+                    value={codArea}
+                    onChange={e => setCodArea(e.target.value)}
+                    className="sprl-copia-select"
+                  >
+                    {registryOptions.map(option => (
+                      <option key={option.value || 'placeholder'} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="#b8b8b8"
+                    strokeWidth="2"
+                    style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}
+                  >
+                    <path d="M6 9l6 6 6-6" />
+                  </svg>
+                </div>
+              </FieldRow>
+
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 10, marginLeft: 172, fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--ink)' }}>
+                <input type="checkbox" style={{ width: 16, height: 16, accentColor: '#95c11f' }} />
+                <span>El Documento será presentado en el extranjero o se autenticará la firma</span>
+              </label>
+
+              <FieldRow label="Tipo de Servicio:">
+                <div style={{ position: 'relative' }}>
+                  <select
+                    value={selectedCertificadoId}
+                    onChange={e => setSelectedCertificadoId(e.target.value)}
+                    disabled={!codArea || loading || items.length === 0}
+                    className="sprl-copia-select"
+                  >
+                    <option value="">
+                      {loading
+                        ? 'Cargando opciones...'
+                        : codArea
+                          ? 'Seleccione Tipo de Certificado'
+                          : 'Seleccione tipo de Registro Jurídico'}
+                    </option>
+                    {items.map(item => (
+                      <option key={item.certificadoID} value={String(item.certificadoID)}>
+                        {item.nombreCertificado}
+                      </option>
+                    ))}
+                  </select>
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="#b8b8b8"
+                    strokeWidth="2"
+                    style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}
+                  >
+                    <path d="M6 9l6 6 6-6" />
+                  </svg>
+                </div>
+              </FieldRow>
+            </div>
+
+            <button type="button" className="sprl-copia-btn" disabled={!selectedCatalog}>
+              Solicitar
+            </button>
+          </div>
+
+          {selectedCatalog && (
+            <div style={{ marginTop: 10, fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--muted)' }}>
+              Seleccionado: {selectedCatalog.nombreCertificado} · Grupo: {selectedCatalog.desGrupoLibroArea}
+            </div>
+          )}
+
+          {error && (
+            <div style={{ marginTop: 18 }}>
+              <WarningBox title="No se pudo cargar el catálogo" bullets={[error]} compact />
+            </div>
+          )}
+
+          <div style={{ marginTop: 22 }}>
+            <WarningBox
+              title="Nota:"
+              bullets={[
+                'El certificado literal de la partida con firma electrónica se emite en un plazo máximo de tres (03) días hábiles, el cual es enviado a su cuenta del Servicio de Publicidad Registral en Línea (SPRL), y al correo electrónico consignado al momento de la suscripción de dicho servicio.',
+                'El certificado con firma electrónica tiene el mismo valor y eficacia jurídica que el certificado con firma manuscrita, su contenido podrá ser verificado y visualizado a través de nuestro portal institucional.',
+                'El certificado con firma electrónica a través del SPRL es válido para su uso dentro del territorio nacional. Si desea un certificado para uso en el extranjero, adicionalmente deberá de solicitar la autenticación de firma ante el funcionario autorizado por Sunarp para tal efecto conforme al procedimiento establecido por el Ministerio de Relaciones Exteriores.',
+              ]}
+            />
+
+            <div style={{ marginTop: 16, background: '#fff9e8', border: '1px solid #f2c569', padding: '10px 14px', fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--ink)' }}>
+              <span style={{ color: '#f5b32b', fontWeight: 700, marginRight: 10 }}>i</span>
+              Si su Nro. de partida empieza con la letra P: debe seleccionar el servicio Certificado Literal Automatizado de Partida (PI-SARP) en el Registro de Propiedad Inmueble.
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  )
+}
+
 export default function PublicidadRegistralServicioPage() {
   const params = useParams<{ codigo?: string }>()
   const codigo = getServiceCode(typeof params?.codigo === 'string' ? params.codigo : undefined)
   if (codigo === 'vigencia_poder') return <VigenciaPoderPage />
-  const config = codigo ? serviceOptionsByCode[codigo] : null
+  if (codigo === 'copia_literal') return <CopiaLiteralPage />
+  const config: ServicePageConfig | null = codigo ? serviceOptionsByCode[codigo as ServiceCode] : null
 
   return (
     <>
