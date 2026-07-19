@@ -371,7 +371,15 @@ function cejChromiumLaunchOptions() {
     return {
         headless: !debug,
         devtools: debug,
+
+        proxy: {
+            server: `http://${process.env.PROXY_HOST}:${process.env.PROXY_PORT}`,
+            username: process.env.PROXY_USERNAME,
+            password: process.env.PROXY_PASSWORD,
+        },
+
         executablePath: process.env.CHROME_EXECUTABLE_PATH || undefined,
+
         args: makeBrowserArgs(),
     };
 }
