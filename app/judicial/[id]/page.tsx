@@ -16,7 +16,7 @@ interface Movimiento {
   sumilla: string | null;
   urgencia: 'alta' | 'normal' | 'info';
   ai_sugerencia: string | null;
-  tiene_documento: number;
+  tiene_documento: boolean;
   documento_url: string | null;
 }
 
@@ -357,11 +357,11 @@ export default function JudicialCaseDetail({ params }: { params: Promise<{ id: s
                   <span style={{ display: 'inline-block', marginTop: '6px', border: `1px solid ${colorUrgencia(m.urgencia)}`, color: colorUrgencia(m.urgencia), padding: '3px 8px', fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase' }}>{m.acto || 'Movimiento'}</span>
                   <p style={{ fontFamily: 'var(--font-body)', fontSize: '14px', marginTop: '8px' }}>{m.sumilla}</p>
                   {m.ai_sugerencia && <p style={{ fontFamily: 'var(--font-body)', fontSize: '13px', color: 'var(--accent-navy)', fontStyle: 'italic' }}>Arthur-IA: {m.ai_sugerencia}</p>}
-                  {m.tiene_documento === 1 && m.documento_url ? (
+                  {m.tiene_documento === true && m.documento_url ? (
                     <a href={getCloudinaryDownloadUrl(m.documento_url)} target="_blank" rel="noopener noreferrer" onClick={e => void downloadCloudinaryJudicialDoc(e, m.documento_url!)} style={{ display: 'inline-block', marginTop: '6px', border: '1px solid var(--accent-navy)', color: 'var(--accent-navy)', padding: '4px 10px', fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', textDecoration: 'none', cursor: 'pointer' }}>
                       Ver documento
                     </a>
-                  ) : m.tiene_documento === 1 ? (
+                  ) : m.tiene_documento === false ? (
                     <span style={{ display: 'inline-block', marginTop: '6px', fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--muted)' }}>Documento no disponible</span>
                   ) : null}
                 </div>
