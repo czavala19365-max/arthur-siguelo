@@ -6,9 +6,9 @@ import { legalStyles } from '@/lib/legal/styles'
 const tools = [
   {
     href: '/legal/drafter',
-    tag: 'Contratos internacionales',
-    title: 'Redactor internacional',
-    desc: 'Genera contratos de préstamo, compraventa de acciones, memorándos y cartas legales con IA.',
+    tag: 'Contratos — Perú',
+    title: 'Redactor de contratos',
+    desc: 'Genera contratos peruanos (mutuo, compraventa, garantías, arrendamiento, poderes, fideicomiso y más) con IA y formato de firma.',
   },
   {
     href: '/legal/actas',

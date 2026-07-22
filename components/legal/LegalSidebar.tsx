@@ -7,7 +7,7 @@ import { getAuthClient } from '@/lib/supabase-auth-client'
 
 const links = [
   { href: '/legal', label: 'Inicio' },
-  { href: '/legal/drafter', label: 'Redactor internacional' },
+  { href: '/legal/drafter', label: 'Redactor de contratos' },
   { href: '/legal/actas', label: 'Actas JGA' },
   { href: '/legal/redline', label: 'Comparador redline' },
   { href: '/legal/checklist', label: 'Checklist de cierre' },

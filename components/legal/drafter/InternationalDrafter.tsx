@@ -10,7 +10,7 @@ import EditWithAIPanel from '@/components/legal/shared/EditWithAIPanel'
 import FileUpload, { type UploadedFile } from '@/components/legal/shared/FileUpload'
 import {
   DOCUMENT_TYPES,
-  JURISDICTIONS,
+  DEFAULT_JURISDICTION,
   getFieldsForType,
   documentTypeLabel,
   type DocumentTypeId,
@@ -27,8 +27,9 @@ interface GeneratedDoc {
 }
 
 export default function InternationalDrafter() {
-  const [docType, setDocType] = useState<DocumentTypeId>('loan_agreement')
-  const [jurisdiction, setJurisdiction] = useState('england_wales')
+  const [docType, setDocType] = useState<DocumentTypeId>('mutuo')
+  // El redactor opera siempre bajo legislación peruana; no hay selector de jurisdicción.
+  const [jurisdiction, setJurisdiction] = useState(DEFAULT_JURISDICTION)
   const [fields, setFields] = useState<Record<string, string>>({})
   const [intakeMode, setIntakeMode] = useState<'form' | 'chat'>('form')
   const [attachments, setAttachments] = useState<UploadedFile[]>([])
@@ -144,9 +145,10 @@ export default function InternationalDrafter() {
 
   return (
     <div style={{ ...legalStyles.page, paddingTop: 48 }}>
-      <h1 style={legalStyles.h1}>Redactor internacional</h1>
+      <h1 style={legalStyles.h1}>Redactor de contratos</h1>
       <p style={{ color: 'var(--muted)', fontSize: 14, marginBottom: 24 }}>
-        Genera documentos legales en inglés según la jurisdicción seleccionada.
+        Genera contratos y documentos bajo la legislación peruana vigente (Código Civil y normas
+        especiales), con el mismo formato y estilo de las actas.
       </p>
 
       <div style={legalStyles.card}>
@@ -163,15 +165,6 @@ export default function InternationalDrafter() {
           {DOCUMENT_TYPES.map(t => (
             <option key={t.id} value={t.id}>
               {t.label}
-            </option>
-          ))}
-        </select>
-
-        <label style={{ ...legalStyles.label, marginTop: 16 }}>Jurisdicción</label>
-        <select value={jurisdiction} onChange={e => setJurisdiction(e.target.value)} style={legalStyles.input}>
-          {JURISDICTIONS.map(j => (
-            <option key={j.value} value={j.value}>
-              {j.label}
             </option>
           ))}
         </select>
