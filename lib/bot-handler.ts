@@ -5,7 +5,7 @@ import { scrapeCEJ } from './cej-scraper';
 import { chatWithProvider, type ChatMsg } from './llm-providers';
 
 const anthropic = new Anthropic();
-const MODEL = 'claude-sonnet-4-20250514';
+const MODEL = 'claude-sonnet-5';
 
 // System prompt for legal Q&A — reuses same provider infrastructure as dashboard/chat
 const SUNARP_BOT_SYSTEM = `Eres Arthur, asistente legal peruano especializado en SUNARP y procesos judiciales.

@@ -1,6 +1,14 @@
 import Anthropic from '@anthropic-ai/sdk'
 
-export const LEGAL_MODEL = 'claude-sonnet-4-20250514'
+export const LEGAL_MODEL = 'claude-sonnet-5'
+
+/**
+ * Sonnet 5 activa razonamiento adaptativo cuando no se especifica `thinking`.
+ * Lo desactivamos para mantener costo y latencia predecibles: el presupuesto de
+ * `max_tokens` se destina íntegro al documento. Para subir calidad en redacción
+ * compleja, cambiar a `{ type: 'adaptive' }` (consume más tokens).
+ */
+const LEGAL_THINKING = { type: 'disabled' } as const
 
 export type TextBlock = { type: 'text'; text: string }
 export type DocumentBlock = {
@@ -9,6 +17,18 @@ export type DocumentBlock = {
 }
 
 export type UserContent = string | Array<TextBlock | DocumentBlock>
+
+/**
+ * Concatena todos los bloques de texto de la respuesta. No asumimos que
+ * content[0] sea texto: según el modelo y la configuración, el primer bloque
+ * puede ser de otro tipo (thinking, tool_use) y devolveríamos vacío en silencio.
+ */
+function extractText(content: Anthropic.ContentBlock[]): string {
+  return content
+    .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+    .map(b => b.text)
+    .join('')
+}
 
 export function getAnthropicClient(): Anthropic {
   const apiKey = process.env.ANTHROPIC_API_KEY
@@ -27,9 +47,9 @@ export async function createLegalMessage(opts: {
     max_tokens: opts.maxTokens,
     system: opts.system,
     messages: [{ role: 'user', content: opts.userContent }],
+    thinking: LEGAL_THINKING,
   })
-  const block = response.content[0]
-  return block.type === 'text' ? block.text : ''
+  return extractText(response.content)
 }
 
 export async function createLegalConversation(opts: {
@@ -43,9 +63,9 @@ export async function createLegalConversation(opts: {
     max_tokens: opts.maxTokens,
     system: opts.system,
     messages: opts.messages.map(m => ({ role: m.role, content: m.content })),
+    thinking: LEGAL_THINKING,
   })
-  const block = response.content[0]
-  return block.type === 'text' ? block.text : ''
+  return extractText(response.content)
 }
 
 export interface LegalTool {
@@ -81,6 +101,7 @@ export async function createLegalToolMessage(opts: {
     messages: opts.messages.map(m => ({ role: m.role, content: m.content })),
     tools: opts.tools,
     tool_choice: { type: 'auto' },
+    thinking: LEGAL_THINKING,
   })
 
   let text = ''
