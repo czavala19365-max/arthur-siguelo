@@ -828,7 +828,7 @@ export default function JudicialDashboardPage() {
                 style={inputStyle}
               />
 
-              <label style={labelStyle}>Frecuencia de revisión</label>
+              {/* <label style={labelStyle}>Frecuencia de revisión</label>
               <select
                 value={form.polling_frequency_hours}
                 onChange={e => setForm(p => ({ ...p, polling_frequency_hours: Number(e.target.value) }))}
@@ -839,7 +839,7 @@ export default function JudicialDashboardPage() {
                 <option value={4}>Cada 4h</option>
                 <option value={12}>Cada 12h</option>
                 <option value={24}>Cada 24h</option>
-              </select>
+              </select>*/}
 
               {isSubmitting ? (
                 <div

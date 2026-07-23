@@ -167,12 +167,6 @@ class CapSolverImageWithTwoCaptchaFallback implements CaptchaSolver {
   }
 }
 
-console.log("cwd =", process.cwd());
-console.log("__dirname =", __dirname);
-console.log("node =", process.execPath);
-console.log("capsolver =", process.env.CAPSOLVER_API_KEY);
-console.log("two =", process.env.TWOCAPTCHA_API_KEY);
-
 function getImageCaptchaSolver(): CaptchaSolver {
   const capKey = process.env.CAPSOLVER_API_KEY?.trim()
   const twoKey = process.env.TWOCAPTCHA_API_KEY?.trim()
