@@ -51,8 +51,6 @@ app.post('/scrape', async (req, res) => {
   console.log("🚀 Llegó una petición desde Vercel");
   try {
     const { numero, parte } = req.body || {}
-    const disableCallbackHeader = String(req.headers['x-cej-disable-callback'] || '').trim().toLowerCase()
-    const disableCallback = disableCallbackHeader === '1' || disableCallbackHeader === 'true'
     if (numero == null || String(numero).trim() === '') {
       return res.status(400).json({ error: 'numero es requerido' })
     }
@@ -60,11 +58,9 @@ app.post('/scrape', async (req, res) => {
       return res.status(400).json({ error: 'parte es requerida' })
     }
     const result = await scrapeCEJ(String(numero).trim(), String(parte).trim())
-    if (!disableCallback) {
-      notifyNextPostprocess({ numero: String(numero).trim(), parte: String(parte).trim(), result }).catch(err => {
-        console.error('[scraper-service] callback postprocess error:', err instanceof Error ? err.message : String(err))
-      })
-    }
+    notifyNextPostprocess({ numero: String(numero).trim(), parte: String(parte).trim(), result }).catch(err => {
+      console.error('[scraper-service] callback postprocess error:', err instanceof Error ? err.message : String(err))
+    })
     res.json(result)
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)

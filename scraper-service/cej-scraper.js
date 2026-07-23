@@ -250,7 +250,7 @@ async function solveImageCaptchaFromDom(page, baseResult) {
     .grayscale()
     .normalize()
     .median(3)
-    .sharpen({ sigma: 1.5})
+    .sharpen({ sigma: 1.5 })
     .png()
     .toBuffer();
   /*const captchaPath = path.join(
@@ -585,7 +585,7 @@ async function downloadCejDocumentBuffer(page, docUrl) {
   }
   return Buffer.from(await res.body());
 }
-/*async function uploadActuacionDocuments(page, actuaciones, numeroExpediente) {
+async function uploadActuacionDocuments(page, actuaciones, numeroExpediente) {
   for (const a of actuaciones) {
     if (!a.tieneDocumento || !a.documentoUrl)
       continue;
@@ -615,7 +615,7 @@ async function downloadCejDocumentBuffer(page, docUrl) {
       a.documentoUrl = '';
     }
   }
-}*/
+}
 async function parseCaseHeader(page) {
   return page.evaluate(() => {
     const norm = (s) => s.replace(/\s+/g, ' ').trim();
@@ -865,7 +865,7 @@ async function scrapeResultsPage(page, baseResult, numeroExpediente, tab1Mode = 
   }
   const hashInput = actuaciones.slice(0, 5).map(a => `${a.fecha}|${a.acto}|${a.sumilla}`).join(';');
   const hash = crypto_1.default.createHash('md5').update(hashInput || numeroExpediente).digest('hex');
-  //await uploadActuacionDocuments(page, actuaciones, numeroExpediente);
+  await uploadActuacionDocuments(page, actuaciones, numeroExpediente);
   return { ...baseResult, ...headerData, actuaciones, totalActuaciones: actuaciones.length, hash, portalDown: false };
 }
 // Fill form and scrape results from a page that already loaded CEJ successfully.
