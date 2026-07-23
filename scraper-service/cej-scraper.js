@@ -13,6 +13,10 @@ const sharp_1 = __importDefault(require("sharp"));
 const supabase_storage_1 = require("./supabase-storage");
 const e = require("express");
 const dotenv = require('dotenv');
+const { kernel } = require("sharp");
+
+const fs = require('fs');
+const path = require('path');
 
 require('dotenv').config({
   path: '.env.local'
@@ -78,6 +82,10 @@ class TwoCaptchaImageSolver {
         method: 'base64',
         body: imageBase64,
         json: '1',
+        min_len: '4',
+        max_len: '4',
+        numeric: '4',
+        regsense: '1'
       }),
     }).then(r => r.json());
     if (submit.status !== 1)
@@ -122,6 +130,7 @@ class CapSolverImageSolver {
           case: true,
           minLength: 4,
           maxLength: 4,
+          score: 0.9
         },
       }),
     }).then(r => r.json());
@@ -237,10 +246,11 @@ async function solveImageCaptchaFromDom(page, baseResult) {
   const imgBuffer = await imgEl.screenshot({ type: 'png' }).catch(() => Buffer.alloc(0));
   console.log("4", imgBuffer.length)
   const processedBuffer = await (0, sharp_1.default)(imgBuffer)
-    .resize({ width: 400 })
+    .resize({ width: 400, kernel: 'lanczos3' })
     .grayscale()
     .normalize()
-    .sharpen()
+    .median(3)
+    .sharpen({ sigma: 1.5})
     .png()
     .toBuffer();
   /*const captchaPath = path.join(
@@ -575,7 +585,7 @@ async function downloadCejDocumentBuffer(page, docUrl) {
   }
   return Buffer.from(await res.body());
 }
-async function uploadActuacionDocuments(page, actuaciones, numeroExpediente) {
+/*async function uploadActuacionDocuments(page, actuaciones, numeroExpediente) {
   for (const a of actuaciones) {
     if (!a.tieneDocumento || !a.documentoUrl)
       continue;
@@ -605,7 +615,7 @@ async function uploadActuacionDocuments(page, actuaciones, numeroExpediente) {
       a.documentoUrl = '';
     }
   }
-}
+}*/
 async function parseCaseHeader(page) {
   return page.evaluate(() => {
     const norm = (s) => s.replace(/\s+/g, ' ').trim();
@@ -855,7 +865,7 @@ async function scrapeResultsPage(page, baseResult, numeroExpediente, tab1Mode = 
   }
   const hashInput = actuaciones.slice(0, 5).map(a => `${a.fecha}|${a.acto}|${a.sumilla}`).join(';');
   const hash = crypto_1.default.createHash('md5').update(hashInput || numeroExpediente).digest('hex');
-  await uploadActuacionDocuments(page, actuaciones, numeroExpediente);
+  //await uploadActuacionDocuments(page, actuaciones, numeroExpediente);
   return { ...baseResult, ...headerData, actuaciones, totalActuaciones: actuaciones.length, hash, portalDown: false };
 }
 // Fill form and scrape results from a page that already loaded CEJ successfully.
