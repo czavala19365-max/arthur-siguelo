@@ -4,6 +4,36 @@ const { chromium } = require('playwright-extra')
 const StealthPlugin = require('puppeteer-extra-plugin-stealth')
 
 let stealthApplied = false
+let sharedBrowser = null
+let sharedBrowserPromise = null
+let sharedBrowserKey = null
+let browserIdleTimer = null
+
+const DEFAULT_BROWSER_IDLE_MS = Number(process.env.SPRL_BROWSER_IDLE_MS || 120000)
+const LOGIN_FORM_SELECTOR =
+  'input[name="username"], input[placeholder="Username"], input[aria-label="Username"], input[type="text"]:not([name*="captcha" i])'
+const PASSWORD_SELECTOR =
+  'input[name="password"], input[placeholder="Password"], input[aria-label="Password"], input[type="password"]'
+const SUBMIT_SELECTOR =
+  'button[type="submit"], input[type="submit"], button:has-text("Ingresar"), button:has-text("INGRESAR"), input[value*="Ingresar" i], .btn-login, #btnLogin, #btnIngresar'
+
+function clearBrowserIdleTimer() {
+  if (!browserIdleTimer) return
+  clearTimeout(browserIdleTimer)
+  browserIdleTimer = null
+}
+
+function scheduleBrowserIdleClose() {
+  clearBrowserIdleTimer()
+  if (!DEFAULT_BROWSER_IDLE_MS || DEFAULT_BROWSER_IDLE_MS <= 0) return
+  browserIdleTimer = setTimeout(async () => {
+    const browserToClose = sharedBrowser
+    sharedBrowser = null
+    sharedBrowserPromise = null
+    sharedBrowserKey = null
+    if (browserToClose) await browserToClose.close().catch(() => { })
+  }, DEFAULT_BROWSER_IDLE_MS)
+}
 
 function applyStealthOnce() {
   if (stealthApplied) return
@@ -56,8 +86,57 @@ function sprlLaunchOptions(proxy) {
   return opts
 }
 
+function getBrowserKey(proxy) {
+  const proxyKey = proxy ? `${proxy.server}|${proxy.username || ''}` : 'direct'
+  const chromeKey = process.env.CHROME_EXECUTABLE_PATH || 'default-chrome'
+  return `${proxyKey}|${chromeKey}`
+}
+
+async function getSharedBrowser(proxy) {
+  const currentKey = getBrowserKey(proxy)
+
+  if (sharedBrowser && sharedBrowser.isConnected() && sharedBrowserKey === currentKey) {
+    clearBrowserIdleTimer()
+    return sharedBrowser
+  }
+
+  if (sharedBrowserPromise && sharedBrowserKey === currentKey) {
+    clearBrowserIdleTimer()
+    return sharedBrowserPromise
+  }
+
+  if (sharedBrowser) {
+    await sharedBrowser.close().catch(() => { })
+    sharedBrowser = null
+  }
+
+  sharedBrowserKey = currentKey
+  sharedBrowserPromise = chromium.launch(sprlLaunchOptions(proxy))
+    .then(browser => {
+      browser.on('disconnected', () => {
+        if (sharedBrowser === browser) {
+          sharedBrowser = null
+          sharedBrowserPromise = null
+          sharedBrowserKey = null
+        }
+      })
+      sharedBrowser = browser
+      return browser
+    })
+    .catch(error => {
+      sharedBrowserPromise = null
+      sharedBrowserKey = null
+      throw error
+    })
+
+  clearBrowserIdleTimer()
+  return sharedBrowserPromise
+}
+
 async function loginSPRL(username, password) {
   let browser = null
+  let context = null
+  let page = null
 
   try {
     applyStealthOnce()
@@ -65,9 +144,9 @@ async function loginSPRL(username, password) {
     const proxy = parseProxy(process.env.PROXY_URL)
     console.log('[SPRL] Proxy:', proxy ? proxy.server : 'none (direct)')
 
-    browser = await chromium.launch(sprlLaunchOptions(proxy))
+    browser = await getSharedBrowser(proxy)
 
-    const context = await browser.newContext({
+    context = await browser.newContext({
       userAgent:
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       viewport: { width: 1280, height: 800 },
@@ -75,7 +154,15 @@ async function loginSPRL(username, password) {
       ignoreHTTPSErrors: true,
     })
 
-    const page = await context.newPage()
+    await context.route('**/*', route => {
+      const type = route.request().resourceType()
+      if (type === 'font' || type === 'media') {
+        return route.abort().catch(() => { })
+      }
+      return route.continue().catch(() => { })
+    })
+
+    page = await context.newPage()
     let accessToken = null
     let refreshToken = null
 
@@ -124,16 +211,16 @@ async function loginSPRL(username, password) {
           return
         } catch (error) {
           if (attempt === 3) throw error
-          await page.waitForTimeout(3000)
+          await page.waitForTimeout(1200)
         }
       }
     }
 
     console.log('[SPRL] Starting login attempt for user:', username)
     await loadPage(SPRL_LOGIN_URL)
-    await page.waitForTimeout(2000)
+    await page.waitForSelector(`${LOGIN_FORM_SELECTOR}, button:has-text("INGRESAR")`, { timeout: 10000 }).catch(() => null)
 
-    let usernameField = await page.$('input[name="username"], input[placeholder="Username"], input[aria-label="Username"], input[type="text"]:not([name*="captcha" i])').catch(() => null)
+    let usernameField = await page.$(LOGIN_FORM_SELECTOR).catch(() => null)
 
     if (!usernameField) {
       console.log('[SPRL] Login fields not visible — looking for INGRESAR button...')
@@ -143,8 +230,8 @@ async function loginSPRL(username, password) {
       ])
 
       await page.waitForLoadState('domcontentloaded').catch(() => null)
-      await page.waitForSelector('input[name="username"], input[placeholder="Username"], input[type="text"]', { timeout: 15000 }).catch(() => null)
-      usernameField = await page.$('input[name="username"], input[placeholder="Username"], input[aria-label="Username"], input[type="text"]:not([name*="captcha" i])').catch(() => null)
+      await page.waitForSelector(LOGIN_FORM_SELECTOR, { timeout: 10000 }).catch(() => null)
+      usernameField = await page.$(LOGIN_FORM_SELECTOR).catch(() => null)
     }
 
     if (!usernameField) {
@@ -157,7 +244,7 @@ async function loginSPRL(username, password) {
     await usernameField.click()
     await usernameField.fill(username)
 
-    const passwordField = await page.$('input[name="password"], input[placeholder="Password"], input[aria-label="Password"], input[type="password"]').catch(() => null)
+    const passwordField = await page.$(PASSWORD_SELECTOR).catch(() => null)
     if (!passwordField) {
       return { ok: false, error: 'No se encontró el campo de contraseña en SPRL.' }
     }
@@ -198,7 +285,7 @@ async function loginSPRL(username, password) {
 
     const navPromise = page.waitForNavigation({ waitUntil: 'load', timeout: 30000 }).catch(() => null)
     const submitClicked = await page
-      .click('button[type="submit"], input[type="submit"], button:has-text("Ingresar"), button:has-text("INGRESAR"), input[value*="Ingresar" i], .btn-login, #btnLogin, #btnIngresar')
+      .click(SUBMIT_SELECTOR)
       .then(() => true)
       .catch(() => false)
 
@@ -210,8 +297,21 @@ async function loginSPRL(username, password) {
     }
 
     await navPromise
-    await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => { })
-    await page.waitForTimeout(3000)
+    await page.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => { })
+    await page
+      .waitForFunction(() => {
+        const bodyText = (document.body?.innerText || '').toLowerCase()
+        return (
+          bodyText.includes('hola') ||
+          bodyText.includes('saldo disponible') ||
+          bodyText.includes('usuario:') ||
+          bodyText.includes('incorrecto') ||
+          bodyText.includes('inválido') ||
+          bodyText.includes('invalido') ||
+          bodyText.includes('credenciales')
+        )
+      }, { timeout: 8000 })
+      .catch(() => null)
 
     const body = await page.evaluate(() => document.body?.textContent || '').catch(() => '')
     const hasHola = body.includes('HOLA!') || body.includes('HOLA ')
@@ -262,7 +362,9 @@ async function loginSPRL(username, password) {
     console.error('[SPRL] Login error:', message)
     return { ok: false, error: 'Error al intentar login en SPRL: ' + message }
   } finally {
-    if (browser) await browser.close().catch(() => { })
+    if (page) await page.close().catch(() => { })
+    if (context) await context.close().catch(() => { })
+    if (browser) scheduleBrowserIdleClose()
   }
 }
 

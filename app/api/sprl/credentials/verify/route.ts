@@ -41,6 +41,13 @@ function getChromeExecutablePath() {
   return chromePath ? chromePath : undefined
 }
 
+const LOGIN_FORM_SELECTOR =
+  'input[name="username"], input[placeholder="Username"], input[aria-label="Username"], input[name*="user" i], input[id*="user" i], input[type="text"]:not([name*="captcha" i])'
+const PASSWORD_SELECTOR =
+  'input[name="password"], input[placeholder="Password"], input[aria-label="Password"], input[type="password"]'
+const SUBMIT_SELECTOR =
+  'button[type="submit"], input[type="submit"], button:has-text("Ingresar"), button:has-text("INGRESAR"), input[value*="Ingresar" i], .btn-login, #btnLogin, #btnIngresar'
+
 async function loginSprlLocal(username: string, password: string) {
   applyStealthOnce()
 
@@ -63,6 +70,14 @@ async function loginSprlLocal(username: string, password: string) {
     viewport: { width: 1280, height: 800 },
     locale: 'es-PE',
     ignoreHTTPSErrors: true,
+  })
+
+  await context.route('**/*', route => {
+    const type = route.request().resourceType()
+    if (type === 'font' || type === 'media') {
+      return route.abort().catch(() => { })
+    }
+    return route.continue().catch(() => { })
   })
 
   const page = await context.newPage()
@@ -120,15 +135,15 @@ async function loginSprlLocal(username: string, password: string) {
         break
       } catch (error) {
         if (attempt === 3) throw error
-        await page.waitForTimeout(3000)
+        await page.waitForTimeout(1200)
       }
     }
 
     if (!navSuccess) throw new Error('No se pudo cargar la página de SPRL')
 
-    await page.waitForTimeout(2000)
+    await page.waitForSelector(`${LOGIN_FORM_SELECTOR}, button:has-text("INGRESAR")`, { timeout: 10000 }).catch(() => null)
 
-    let usernameField = await page.$('input[name="username"], input[placeholder="Username"], input[aria-label="Username"], input[name*="user" i], input[id*="user" i], input[type="text"]:not([name*="captcha" i])').catch(() => null)
+    let usernameField = await page.$(LOGIN_FORM_SELECTOR).catch(() => null)
 
     if (!usernameField) {
       const ingresarButton = page.locator('button:has-text("INGRESAR")').first()
@@ -138,8 +153,8 @@ async function loginSprlLocal(username: string, password: string) {
       ])
 
       await page.waitForLoadState('domcontentloaded').catch(() => null)
-      await page.waitForSelector('input[name="username"], input[placeholder="Username"], input[type="text"]', { timeout: 15000 }).catch(() => null)
-      usernameField = await page.$('input[name="username"], input[placeholder="Username"], input[aria-label="Username"], input[name*="user" i], input[id*="user" i], input[type="text"]:not([name*="captcha" i])').catch(() => null)
+      await page.waitForSelector(LOGIN_FORM_SELECTOR, { timeout: 10000 }).catch(() => null)
+      usernameField = await page.$(LOGIN_FORM_SELECTOR).catch(() => null)
     }
 
     if (!usernameField) {
@@ -149,7 +164,7 @@ async function loginSprlLocal(username: string, password: string) {
     await usernameField.click()
     await usernameField.fill(username)
 
-    const passwordField = await page.$('input[name="password"], input[placeholder="Password"], input[aria-label="Password"], input[type="password"]').catch(() => null)
+    const passwordField = await page.$(PASSWORD_SELECTOR).catch(() => null)
     if (!passwordField) {
       throw new Error('No se encontró el campo de contraseña en SPRL.')
     }
@@ -190,7 +205,7 @@ async function loginSprlLocal(username: string, password: string) {
 
     const navPromise = page.waitForNavigation({ waitUntil: 'load', timeout: 30000 }).catch(() => null)
     const submitClicked = await page
-      .click('button[type="submit"], input[type="submit"], button:has-text("Ingresar"), button:has-text("INGRESAR"), input[value*="Ingresar" i], .btn-login, #btnLogin, #btnIngresar')
+      .click(SUBMIT_SELECTOR)
       .then(() => true)
       .catch(() => false)
 
@@ -202,8 +217,21 @@ async function loginSprlLocal(username: string, password: string) {
     }
 
     await navPromise
-    await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => { })
-    await page.waitForTimeout(3000)
+    await page.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => { })
+    await page
+      .waitForFunction(() => {
+        const bodyText = (document.body?.innerText || '').toLowerCase()
+        return (
+          bodyText.includes('hola') ||
+          bodyText.includes('saldo disponible') ||
+          bodyText.includes('usuario:') ||
+          bodyText.includes('incorrecto') ||
+          bodyText.includes('inválido') ||
+          bodyText.includes('invalido') ||
+          bodyText.includes('credenciales')
+        )
+      }, { timeout: 8000 })
+      .catch(() => null)
 
     if (!accessToken) {
       const storageTokens = await page.evaluate(() => {
