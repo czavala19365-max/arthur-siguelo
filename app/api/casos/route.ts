@@ -18,24 +18,27 @@ async function fetchCejFromScraperService(numero: string, parte: string, scrapeC
   const scraperUrl = process.env.CEJ_SCRAPER_URL?.trim()
   if (!scraperUrl) return scrapeCEJ(numero, parte)
 
-    console.log("===== FETCH CEJ =====");
-    console.log("URL:", scraperUrl);
+  console.log("===== FETCH CEJ =====");
+  console.log("URL:", scraperUrl);
 
-    const inicio = Date.now();
+  const inicio = Date.now();
 
 
-    
+
 
   const url = `${scraperUrl.replace(/\/$/, '')}/scrape`
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'x-cej-disable-callback': '1',
+    },
     body: JSON.stringify({ numero, parte }),
     signal: AbortSignal.timeout(180_000),
   })
 
-    console.log("Tiempo fetch:", Date.now() - inicio);
-    console.log("Status:", res.status);
+  console.log("Tiempo fetch:", Date.now() - inicio);
+  console.log("Status:", res.status);
 
   let data: unknown = {}
   try {
