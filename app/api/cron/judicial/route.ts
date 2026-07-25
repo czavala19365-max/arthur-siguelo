@@ -29,7 +29,10 @@ async function fetchCej(numero: string, parte: string): Promise<CejCaseData> {
   const url = `${scraperUrl.replace(/\/$/, '')}/scrape`
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'x-cej-disable-callback': '1',
+    },
     body: JSON.stringify({ numero, parte }),
     signal: AbortSignal.timeout(8_000),
   })

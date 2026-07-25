@@ -313,6 +313,24 @@ export async function getCasoById(id: number): Promise<Caso | null> {
   return mapCaso(data as CasoRow)
 }
 
+export async function getCasoByNumeroExpediente(numeroExpediente: string): Promise<Caso | null> {
+  const supabase = getJudicialSupabase()
+  const { data, error } = await supabase
+    .from('casos')
+    .select('*')
+    .eq('numero_expediente', numeroExpediente)
+    .eq('activo', true)
+    .is('archived_at', null)
+    .is('deleted_at', null)
+    .order('created_at', { ascending: false })
+    .limit(1)
+
+  if (error) throw new Error(`getCasoByNumeroExpediente: ${error.message}`)
+  const row = data?.[0]
+  if (!row) return null
+  return mapCaso(row as CasoRow)
+}
+
 export async function createCaso(data: Partial<Caso>): Promise<Caso> {
   const supabase = getJudicialSupabase()
   const payload = casoToInsertPayload({
