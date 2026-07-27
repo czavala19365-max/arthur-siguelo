@@ -1,0 +1,679 @@
+.sprlServicePage {
+  padding: 22px;
+  background: #efefef;
+  min-height: 100%;
+  color: var(--ink);
+}
+
+.sprlServiceShell {
+  background: #fff;
+  border: 1px solid #d9d9d9;
+  padding: 28px 22px 30px;
+}
+
+.sprlServiceTitle {
+  font-family: var(--font-body);
+  font-size: 21px;
+  font-weight: 700;
+  margin: 0 0 20px;
+}
+
+.sprlServiceForm {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  column-gap: 22px;
+  row-gap: 16px;
+  align-items: start;
+}
+
+.sprlServiceRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  align-items: center;
+}
+
+.sprlServiceBtn {
+  background: #95c11f;
+  color: #fff;
+  border: none;
+  padding: 12px 24px;
+  min-width: 250px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.sprlServiceBtn:hover {
+  filter: brightness(0.98);
+}
+
+.sprlServiceHr {
+  border: none;
+  border-top: 1px solid #e7e7e7;
+  margin: 28px 0;
+}
+
+.sprlVigenciaPage {
+  padding: 22px;
+  background: #efefef;
+  min-height: 100%;
+  color: var(--ink);
+}
+
+.sprlVigenciaShell {
+  background: #fff;
+  border: 1px solid #d9d9d9;
+  padding: 28px 22px 30px;
+}
+
+.sprlVigenciaTitle {
+  font-family: var(--font-body);
+  font-size: 21px;
+  font-weight: 700;
+  margin: 0 0 20px;
+}
+
+.sprlVigenciaForm {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  column-gap: 22px;
+  row-gap: 16px;
+  align-items: start;
+}
+
+.sprlVigenciaSelect {
+  width: 100%;
+  appearance: none;
+  background: #fff;
+  border: 1px solid #d9d9d9;
+  padding: 12px 44px 12px 14px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--ink);
+  outline: none;
+}
+
+.sprlVigenciaBtn {
+  background: #95c11f;
+  color: #fff;
+  border: none;
+  padding: 12px 24px;
+  min-width: 250px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.sprlVigenciaBtn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.sprlVigenciaNote {
+  background: #fff8df;
+  border: 1px solid #f0d27a;
+  padding: 20px 22px;
+  display: flex;
+  gap: 16px;
+}
+
+.sprlVigenciaNoteIcon {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid #f5b32b;
+  color: #f5b32b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.sprlCopiaPage {
+  padding: 22px;
+  background: #efefef;
+  min-height: 100%;
+  color: var(--ink);
+}
+
+.sprlCopiaShell {
+  background: #fff;
+  border: 1px solid #d9d9d9;
+  padding: 28px 22px 30px;
+}
+
+.sprlCopiaTitle {
+  font-family: var(--font-body);
+  font-size: 21px;
+  font-weight: 700;
+  margin: 0 0 20px;
+}
+
+.sprlCopiaForm {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  column-gap: 22px;
+  row-gap: 16px;
+  align-items: start;
+}
+
+.sprlCopiaSelect {
+  width: 100%;
+  appearance: none;
+  background: #fff;
+  border: 1px solid #d9d9d9;
+  padding: 12px 44px 12px 14px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--ink);
+  outline: none;
+}
+
+.sprlCopiaBtn {
+  background: #95c11f;
+  color: #fff;
+  border: none;
+  padding: 12px 24px;
+  min-width: 250px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.sprlCopiaBtn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.sprlFlowPage {
+  padding: 22px;
+  background: #efefef;
+  min-height: 100%;
+  color: var(--ink);
+}
+
+.sprlFlowShell {
+  background: #fff;
+  border: 1px solid #d9d9d9;
+  padding: 28px 22px 30px;
+}
+
+.sprlFlowHeaderTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.sprlFlowBack {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.sprlFlowTitle {
+  font-family: var(--font-body);
+  font-size: 21px;
+  font-weight: 700;
+  margin: 0 0 20px;
+}
+
+.sprlFlowIntroRed {
+  color: #ff2d20;
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.25;
+  margin: 0 0 28px;
+  font-weight: 700;
+}
+
+.sprlFlowSectionHeader {
+  background: #d9d9d9;
+  color: #111;
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1;
+  padding: 12px 18px;
+  margin: 0 0 18px;
+  text-transform: uppercase;
+}
+
+.sprlFlowSection {
+  margin-bottom: 22px;
+}
+
+.sprlFlowGrid {
+  display: grid;
+  gap: 14px;
+}
+
+.sprlFlowRow {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 12px;
+  align-items: center;
+}
+
+.sprlFlowLabel {
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.sprlFlowSelect,
+.sprlFlowInput,
+.sprlFlowTextarea {
+  width: 100%;
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--ink);
+  border: 1px solid #d9d9d9;
+  background: #fff;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.sprlFlowSelect,
+.sprlFlowInput {
+  height: 34px;
+  padding: 0 12px;
+}
+
+.sprlFlowTextarea {
+  min-height: 158px;
+  padding: 12px;
+  resize: vertical;
+}
+
+.sprlFlowSelectWrap {
+  position: relative;
+}
+
+.sprlFlowArrow {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.sprlFlowRadioGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.sprlFlowRadio {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.sprlFlowActions {
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+  margin-top: 18px;
+  flex-wrap: wrap;
+}
+
+.sprlFlowButtonPrimary {
+  background: #95c11f;
+  color: #fff;
+  border: none;
+  padding: 12px 24px;
+  min-width: 250px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.sprlFlowButtonSecondary {
+  background: #f7b500;
+  color: #fff;
+  border: none;
+  padding: 12px 24px;
+  min-width: 250px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.sprlFlowNote {
+  margin-top: 18px;
+  background: #fff9e8;
+  border: 1px solid #f2c569;
+  padding: 10px 14px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.sprlFlowPdfLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 700;
+  color: #ff8a00;
+  text-decoration: none;
+}
+
+.sprlFlowMuted {
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.sprlFlowFooterNote {
+  margin-top: 20px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.6;
+  color: #3d6d0f;
+}
+
+.sprlFlowAsientoWrap {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+.sprlFlowAsientoTableWrap {
+  width: 100%;
+}
+
+.sprlFlowAsientoTitle {
+  text-align: center;
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--ink);
+  margin-bottom: 8px;
+}
+
+.sprlFlowAsientoTable {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid #ececec;
+}
+
+.sprlFlowAsientoTable thead th {
+  background: #000;
+  color: #fff;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 700;
+  padding: 14px 12px;
+  text-align: center;
+}
+
+.sprlFlowAsientoTable tbody td {
+  background: #fff;
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--ink);
+  padding: 16px 12px;
+  text-align: center;
+  border-top: 1px solid #ececec;
+}
+
+.sprlFlowDeleteLink {
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: #95c11f;
+  cursor: pointer;
+}
+
+.sprlTokenModalOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(20, 20, 20, 0.58);
+  backdrop-filter: blur(2px);
+}
+
+.sprlTokenModal {
+  width: min(520px, 100%);
+  background: #fff;
+  border: 1px solid #d9d9d9;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.22);
+  padding: 24px 22px 22px;
+}
+
+.sprlTokenModalTitle {
+  margin: 0 0 12px;
+  font-family: var(--font-body);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.sprlTokenModalText {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--muted);
+}
+
+.sprlTokenModalActions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
+.sprlTokenModalButton {
+  background: #95c11f;
+  color: #fff;
+  border: none;
+  padding: 12px 18px;
+  min-width: 180px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.sprlTokenModalButton:disabled {
+  opacity: 0.8;
+  cursor: not-allowed;
+}
+
+.sprlSummaryOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.42);
+}
+
+.sprlSummaryModal {
+  width: min(640px, 100%);
+  background: #fff;
+  border: 1px solid #d9d9d9;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.24);
+}
+
+.sprlSummaryHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 24px 14px;
+  border-bottom: 1px solid #ececec;
+}
+
+.sprlSummaryTitle {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.sprlSummaryClose {
+  border: none;
+  background: transparent;
+  color: #9a9a9a;
+  font-family: var(--font-body);
+  font-size: 28px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.sprlSummaryBody {
+  padding: 24px;
+}
+
+.sprlSummaryText {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.75;
+  color: var(--ink);
+}
+
+.sprlSummarySmall {
+  margin: 14px 0 0;
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.sprlSummaryFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 0 24px 22px;
+}
+
+.sprlSummarySecondary,
+.sprlSummaryPrimary {
+  border: 1px solid #d9d9d9;
+  padding: 11px 18px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.sprlSummarySecondary {
+  background: #fff;
+  color: var(--ink);
+}
+
+.sprlSummaryPrimary {
+  background: #95c11f;
+  color: #fff;
+  border-color: #95c11f;
+}
+
+.sprlSummarySuccess {
+  margin: 0 24px 22px;
+  padding: 12px 14px;
+  background: rgba(149, 193, 31, 0.12);
+  border: 1px solid rgba(149, 193, 31, 0.45);
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: #4b6b00;
+}
+
+@media (max-width: 768px) {
+
+  .sprlServicePage,
+  .sprlVigenciaPage,
+  .sprlCopiaPage,
+  .sprlFlowPage {
+    padding: 14px;
+  }
+
+  .sprlServiceShell,
+  .sprlVigenciaShell,
+  .sprlCopiaShell,
+  .sprlFlowShell {
+    padding: 18px 14px 20px !important;
+  }
+
+  .sprlServiceForm,
+  .sprlVigenciaForm,
+  .sprlCopiaForm {
+    grid-template-columns: 1fr !important;
+  }
+
+  .sprlServiceRow,
+  .sprlFlowRow {
+    grid-template-columns: 1fr !important;
+  }
+
+  .sprlFlowHeaderTop {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .sprlFlowActions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .sprlServiceBtn,
+  .sprlVigenciaBtn,
+  .sprlCopiaBtn,
+  .sprlFlowButtonPrimary,
+  .sprlFlowButtonSecondary {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .sprlFlowAsientoWrap {
+    grid-template-columns: 1fr;
+  }
+
+  .sprlSummaryOverlay {
+    padding: 14px;
+  }
+
+  .sprlSummaryHeader,
+  .sprlSummaryBody,
+  .sprlSummaryFooter,
+  .sprlSummarySuccess {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .sprlSummaryFooter {
+    justify-content: stretch;
+    flex-direction: column;
+  }
+
+  .sprlSummarySecondary,
+  .sprlSummaryPrimary {
+    width: 100%;
+  }
+}

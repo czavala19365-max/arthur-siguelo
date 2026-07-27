@@ -85,6 +85,7 @@ async function loginSprlLocal(username: string, password: string) {
   const authLoginUrl = 'https://im01-autorizacion-sprl-production.apps.paas.sunarp.gob.pe/v1/sunarp-services/im/autorizacion/login'
   let accessToken: string | null = null
   let refreshToken: string | null = null
+  let sunarpSessionId: string | null = null
 
   const captureTokenPayload = (raw: string) => {
     if (!raw) return
@@ -268,6 +269,18 @@ async function loginSprlLocal(username: string, password: string) {
       }
     }
 
+    const browserCookies = await context.cookies().catch(() => [])
+    const sunarpCookies = browserCookies.filter(cookie => /sunarp\.gob\.pe$/i.test(cookie.domain) || /sunarp/i.test(cookie.domain))
+    const sunarpCookieHeader = sunarpCookies.map(cookie => `${cookie.name}=${cookie.value}`).join('; ')
+
+    const sessionCookie = browserCookies.find(cookie => {
+      const name = cookie.name.toLowerCase()
+      return (name.includes('sesion') || name.includes('session') || name.includes('sunarp')) && cookie.value
+    })
+    if (sessionCookie?.value) {
+      sunarpSessionId = sessionCookie.value
+    }
+
     if (!accessToken) {
       const cookieToken = await context
         .cookies()
@@ -319,6 +332,8 @@ async function loginSprlLocal(username: string, password: string) {
       displayUsername: displayUsername || null,
       accessToken,
       refreshToken,
+      sunarpSessionId,
+      sunarpCookieHeader: sunarpCookieHeader || null,
       tokenSource: accessToken ? 'local-playwright' : null,
     }
   } finally {
@@ -355,6 +370,8 @@ export async function POST() {
       displayUsername?: string | null
       accessToken?: string | null
       refreshToken?: string | null
+      sunarpSessionId?: string | null
+      sunarpCookieHeader?: string | null
       error?: string
     }
 
@@ -390,6 +407,8 @@ export async function POST() {
           saldo: result.saldo,
           displayName: result.displayName,
           displayUsername: result.displayUsername,
+          sunarpSessionId: result.sunarpSessionId,
+          sunarpCookieHeader: result.sunarpCookieHeader,
           message: 'Login SPRL verificado correctamente.',
         }
         : {
@@ -421,6 +440,26 @@ export async function POST() {
         })
       }
 
+      if (result.sunarpSessionId) {
+        loginResponse.cookies.set('sunarp_sesion_id', result.sunarpSessionId, {
+          httpOnly: true,
+          sameSite: 'lax',
+          secure: secureCookie,
+          path: '/',
+          maxAge: 60 * 60 * 8,
+        })
+      }
+
+      if (result.sunarpCookieHeader) {
+        loginResponse.cookies.set('sprl_remote_cookie', result.sunarpCookieHeader, {
+          httpOnly: true,
+          sameSite: 'lax',
+          secure: secureCookie,
+          path: '/',
+          maxAge: 60 * 60 * 8,
+        })
+      }
+
       await updateCredentialStatus(credRecord.id, 'activo', {
         saldo_disponible: result.saldo ?? undefined,
         error_mensaje: null,
@@ -436,6 +475,8 @@ export async function POST() {
 
     loginResponse.cookies.delete('sprl_access_token')
     loginResponse.cookies.delete('sprl_refresh_token')
+    loginResponse.cookies.delete('sunarp_sesion_id')
+    loginResponse.cookies.delete('sprl_remote_cookie')
 
     return loginResponse
   } catch (err) {

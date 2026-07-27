@@ -27,60 +27,6 @@ type CatalogResponse = {
   }
 }
 
-const fallbackCatalog: CatalogResponse = {
-  success: true,
-  data: [
-    {
-      certificadoID: 75,
-      codGrupoLibroArea: 1,
-      nombreCertificado: 'Certificado Registral Inmobiliario con firma electronica',
-      desGrupoLibroArea: 'Propiedad Inmueble Predial',
-      tpoCertificado: 'Q',
-    },
-    {
-      certificadoID: 85,
-      codGrupoLibroArea: 1,
-      nombreCertificado: 'Certificado de Cargas y Gravámenes',
-      desGrupoLibroArea: 'Propiedad Inmueble Predial',
-      tpoCertificado: 'G',
-    },
-    {
-      certificadoID: 92,
-      codGrupoLibroArea: 1,
-      nombreCertificado: 'Certificado Positivo del Registro de Predios',
-      desGrupoLibroArea: 'Propiedad Inmueble Predial',
-      tpoCertificado: 'P',
-    },
-    {
-      certificadoID: 93,
-      codGrupoLibroArea: 1,
-      nombreCertificado: 'Certificado Negativo del Registro de Predios',
-      desGrupoLibroArea: 'Propiedad Inmueble Predial',
-      tpoCertificado: 'N',
-    },
-    {
-      certificadoID: 74,
-      codGrupoLibroArea: 1,
-      nombreCertificado: 'Certificado de Busqueda Catastral',
-      desGrupoLibroArea: 'Propiedad Inmueble Predial',
-      tpoCertificado: 'B',
-    },
-    {
-      certificadoID: 97,
-      codGrupoLibroArea: 20,
-      nombreCertificado: 'Certificado de Cargas y Gravamenes Reg. Naves y Embarcaciones',
-      desGrupoLibroArea: 'Registro de Embarcaciones Pesqueras',
-      tpoCertificado: 'G',
-    },
-  ],
-  response: {
-    codigo: '000',
-    titulo: 'INFO',
-    tipo: 'I',
-    mensaje: 'OPERACIÓN CORRECTA.',
-  },
-}
-
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as CatalogRequestBody
@@ -101,12 +47,8 @@ export async function POST(request: NextRequest) {
       ''
 
     if (!token) {
-      if (codArea === '21000' && tipoCert === 'C') {
-        return NextResponse.json(fallbackCatalog)
-      }
-
       return NextResponse.json(
-        { success: false, data: null, response: { codigo: '998', titulo: 'ERROR', tipo: 'E', mensaje: 'No ingresa un token' } },
+        { success: false, data: null, response: { codigo: '401', titulo: 'ERROR', tipo: 'E', mensaje: 'Token SPRL expirado o no autenticado.' } },
         { status: 401 },
       )
     }
@@ -132,6 +74,32 @@ export async function POST(request: NextRequest) {
     }
 
     if (!response.ok) {
+      const status = response.status
+      const bodyText = text.toLowerCase()
+      const tokenExpired =
+        status === 401 ||
+        status === 403 ||
+        bodyText.includes('token') ||
+        bodyText.includes('expir') ||
+        bodyText.includes('autentic') ||
+        bodyText.includes('no ingresa un token')
+
+      if (tokenExpired) {
+        return NextResponse.json(
+          {
+            success: false,
+            data: null,
+            response: {
+              codigo: '401',
+              titulo: 'ERROR',
+              tipo: 'E',
+              mensaje: 'Token SPRL expirado o no autenticado.',
+            },
+          },
+          { status: 401 },
+        )
+      }
+
       return NextResponse.json(
         json ?? {
           success: false,

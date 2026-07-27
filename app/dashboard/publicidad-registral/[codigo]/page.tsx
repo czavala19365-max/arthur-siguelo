@@ -3,6 +3,9 @@
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
+import styles from './publicidad-registral.module.css'
+import { getCertificateFlow } from './certificate-flows'
+import { VigenciaPoderPersonasJuridicasFlow } from './components/VigenciaPoderPersonasJuridicasFlow'
 
 type ServiceCode = 'vigencia_poder' | 'copia_literal'
 
@@ -212,6 +215,41 @@ type CatalogResponse = {
   }
 }
 
+function isTokenExpiredResponse(status: number, message: string) {
+  const lowered = message.toLowerCase()
+  return (
+    status === 401 ||
+    status === 403 ||
+    lowered.includes('token sprl expirado') ||
+    lowered.includes('no ingresa un token') ||
+    lowered.includes('expir') ||
+    lowered.includes('autentic')
+  )
+}
+
+function TokenExpiredModal({ open, onLogout, loading }: { open: boolean; onLogout: () => Promise<void>; loading: boolean }) {
+  if (!open) return null
+
+  return (
+    <div className={styles.sprlTokenModalOverlay} role="presentation">
+      <div className={styles.sprlTokenModal} role="alertdialog" aria-modal="true" aria-labelledby="sprl-token-expired-title">
+        <h2 id="sprl-token-expired-title" className={styles.sprlTokenModalTitle}>
+          Tu sesión SPRL expiró
+        </h2>
+        <p className={styles.sprlTokenModalText}>
+          Para continuar debes cerrar sesión y volver a conectar tu cuenta SPRL. El acceso al catálogo queda bloqueado
+          hasta que renueves el token.
+        </p>
+        <div className={styles.sprlTokenModalActions}>
+          <button type="button" className={styles.sprlTokenModalButton} onClick={() => void onLogout()} disabled={loading}>
+            {loading ? 'Cerrando sesión...' : 'Cerrar sesión y volver al login'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 const registryOptions = [
   { value: '', label: 'Seleccione tipo de Registro Jurídico' },
   { value: '21000', label: 'REGISTRO DE PROPIEDAD INMUEBLE' },
@@ -241,12 +279,35 @@ function VigenciaPoderPage() {
   const [selectedCertificadoId, setSelectedCertificadoId] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [activeFlow, setActiveFlow] = useState<string | null>(null)
+  const [sessionExpired, setSessionExpired] = useState(false)
+  const [logoutLoading, setLogoutLoading] = useState(false)
+
+  async function forceLogout() {
+    if (logoutLoading) return
+    setLogoutLoading(true)
+    try {
+      await fetch('/api/sprl/credentials', { method: 'DELETE' }).catch(() => { })
+    } finally {
+      window.location.assign('/dashboard/publicidad-registral/conectar')
+    }
+  }
+
+  function handleTokenExpired() {
+    setItems([])
+    setSelectedCertificadoId('')
+    setActiveFlow(null)
+    setError(null)
+    setSessionExpired(true)
+  }
 
   useEffect(() => {
     if (!codArea) {
       setItems([])
       setSelectedCertificadoId('')
       setError(null)
+      setActiveFlow(null)
+      setSessionExpired(false)
       return
     }
 
@@ -259,23 +320,36 @@ function VigenciaPoderPage() {
         const res = await fetch('/api/sprl/catalogo/publicidad-certificados', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ codArea, tipoCert: 'C' }),
+          body: JSON.stringify({ codArea, tipoCert: 'G' }),
           signal: controller.signal,
         })
 
         const data = (await res.json()) as CatalogResponse
 
+        const responseMessage = data.response?.mensaje ?? 'No se pudo cargar el catálogo de certificados'
         if (!res.ok || !data.success) {
-          throw new Error(data.response?.mensaje ?? 'No se pudo cargar el catálogo de certificados')
+          if (isTokenExpiredResponse(res.status, responseMessage)) {
+            handleTokenExpired()
+            return
+          }
+
+          throw new Error(responseMessage)
         }
 
         setItems(data.data ?? [])
         setSelectedCertificadoId('')
+        setActiveFlow(null)
       } catch (err) {
         if (controller.signal.aborted) return
         setItems([])
         setSelectedCertificadoId('')
-        setError(err instanceof Error ? err.message : 'Error al cargar el catálogo')
+        setActiveFlow(null)
+        const message = err instanceof Error ? err.message : 'Error al cargar el catálogo'
+        if (isTokenExpiredResponse(401, message)) {
+          handleTokenExpired()
+          return
+        }
+        setError(message)
       } finally {
         if (!controller.signal.aborted) setLoading(false)
       }
@@ -287,173 +361,152 @@ function VigenciaPoderPage() {
   }, [codArea])
 
   const selectedCatalog = items.find(item => String(item.certificadoID) === selectedCertificadoId) ?? null
+  const activeCertificateFlow = selectedCatalog ? getCertificateFlow(selectedCatalog.certificadoID) : null
+
+  if (sessionExpired) {
+    return <TokenExpiredModal open onLogout={forceLogout} loading={logoutLoading} />
+  }
+
+  if (activeFlow === 'vigencia_poder_personas_juridicas') {
+    return (
+      <VigenciaPoderPersonasJuridicasFlow
+        certificate={selectedCatalog ? getCertificateFlow(selectedCatalog.certificadoID) : null}
+        onBack={() => setActiveFlow(null)}
+        onTokenExpired={handleTokenExpired}
+      />
+    )
+  }
+
+  function handleSolicitar() {
+    if (!selectedCatalog) return
+
+    const flow = getCertificateFlow(selectedCatalog.certificadoID)
+    if (flow?.key === 'vigencia_poder_personas_juridicas') {
+      setActiveFlow(flow.key)
+    }
+  }
 
   return (
-    <>
-      <style>{`
-        .sprl-vigencia-page {
-          padding: 22px;
-          background: #efefef;
-          min-height: 100%;
-          color: var(--ink);
-        }
-        @media (max-width: 768px) {
-          .sprl-vigencia-page { padding: 14px; }
-          .sprl-vigencia-shell { padding: 18px 14px 20px !important; }
-          .sprl-vigencia-form { grid-template-columns: 1fr !important; }
-          .sprl-vigencia-row { grid-template-columns: 1fr !important; }
-        }
-        .sprl-vigencia-shell { background: #fff; border: 1px solid #d9d9d9; padding: 28px 22px 30px; }
-        .sprl-vigencia-title { font-family: var(--font-body); font-size: 21px; font-weight: 700; margin: 0 0 20px; }
-        .sprl-vigencia-form { display: grid; grid-template-columns: 1fr auto; column-gap: 22px; row-gap: 16px; align-items: start; }
-        .sprl-vigencia-select {
-          width: 100%;
-          appearance: none;
-          background: #fff;
-          border: 1px solid #d9d9d9;
-          padding: 12px 44px 12px 14px;
-          font-family: var(--font-body);
-          font-size: 14px;
-          color: var(--ink);
-          outline: none;
-        }
-        .sprl-vigencia-btn { background: #95c11f; color: #fff; border: none; padding: 12px 24px; min-width: 250px; font-family: var(--font-body); font-size: 14px; cursor: pointer; }
-        .sprl-vigencia-btn:disabled { opacity: 0.65; cursor: not-allowed; }
-        .sprl-vigencia-note { background: #fff8df; border: 1px solid #f0d27a; padding: 20px 22px; display: flex; gap: 16px; }
-        .sprl-vigencia-note-icon {
-          width: 24px;
-          height: 24px;
-          border-radius: 50%;
-          border: 2px solid #f5b32b;
-          color: #f5b32b;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-family: var(--font-mono);
-          font-size: 14px;
-          flex-shrink: 0;
-          margin-top: 2px;
-        }
-      `}</style>
+    <div className={styles.sprlVigenciaPage}>
+      <div className={styles.sprlVigenciaShell}>
+        <Link
+          href="/dashboard/publicidad-registral"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 8,
+            fontFamily: 'var(--font-body)',
+            fontSize: 12,
+            color: 'var(--muted)',
+            textDecoration: 'none',
+            marginBottom: 18,
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M19 12H5M12 19l-7-7 7-7" />
+          </svg>
+          Volver
+        </Link>
 
-      <div className="sprl-vigencia-page">
-        <div className="sprl-vigencia-shell">
-          <Link
-            href="/dashboard/publicidad-registral"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 8,
-              fontFamily: 'var(--font-body)',
-              fontSize: 12,
-              color: 'var(--muted)',
-              textDecoration: 'none',
-              marginBottom: 18,
-            }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M19 12H5M12 19l-7-7 7-7" />
-            </svg>
-            Volver
-          </Link>
+        <h1 className={styles.sprlVigenciaTitle}>Solicitar publicidad certificada (vigencias, CRI, etc)</h1>
 
-          <h1 className="sprl-vigencia-title">Solicitar publicidad certificada (vigencias, CRI, etc)</h1>
-
-          <div className="sprl-vigencia-form">
-            <div style={{ display: 'grid', gap: 14 }}>
-              <FieldRow label="Registro Jurídico *:">
-                <div style={{ position: 'relative' }}>
-                  <select
-                    value={codArea}
-                    onChange={e => setCodArea(e.target.value)}
-                    className="sprl-vigencia-select"
-                  >
-                    {registryOptions.map(option => (
-                      <option key={option.value || 'placeholder'} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="#b8b8b8"
-                    strokeWidth="2"
-                    style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}
-                  >
-                    <path d="M6 9l6 6 6-6" />
-                  </svg>
-                </div>
-              </FieldRow>
-
-              <FieldRow label="Tipo de Servicio:">
-                <div style={{ position: 'relative' }}>
-                  <select
-                    value={selectedCertificadoId}
-                    onChange={e => setSelectedCertificadoId(e.target.value)}
-                    disabled={!codArea || loading || items.length === 0}
-                    className="sprl-vigencia-select"
-                  >
-                    <option value="">
-                      {loading
-                        ? 'Cargando opciones...'
-                        : codArea
-                          ? 'Seleccione una opción'
-                          : 'Seleccione tipo de Registro Jurídico'}
+        <div className={styles.sprlVigenciaForm}>
+          <div style={{ display: 'grid', gap: 14 }}>
+            <FieldRow label="Registro Jurídico *:">
+              <div style={{ position: 'relative' }}>
+                <select
+                  value={codArea}
+                  onChange={e => setCodArea(e.target.value)}
+                  className={styles.sprlVigenciaSelect}
+                >
+                  {registryOptions.map(option => (
+                    <option key={option.value || 'placeholder'} value={option.value}>
+                      {option.label}
                     </option>
-                    {items.map(item => (
-                      <option key={item.certificadoID} value={String(item.certificadoID)}>
-                        {item.nombreCertificado}
-                      </option>
-                    ))}
-                  </select>
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="#b8b8b8"
-                    strokeWidth="2"
-                    style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}
-                  >
-                    <path d="M6 9l6 6 6-6" />
-                  </svg>
-                </div>
-              </FieldRow>
-            </div>
+                  ))}
+                </select>
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="#b8b8b8"
+                  strokeWidth="2"
+                  style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}
+                >
+                  <path d="M6 9l6 6 6-6" />
+                </svg>
+              </div>
+            </FieldRow>
 
-            <button type="button" className="sprl-vigencia-btn" disabled={!selectedCatalog}>
-              Solicitar
-            </button>
+            <FieldRow label="Tipo de Servicio:">
+              <div style={{ position: 'relative' }}>
+                <select
+                  value={selectedCertificadoId}
+                  onChange={e => setSelectedCertificadoId(e.target.value)}
+                  disabled={!codArea || loading || items.length === 0}
+                  className={styles.sprlVigenciaSelect}
+                >
+                  <option value="">
+                    {loading
+                      ? 'Cargando opciones...'
+                      : codArea
+                        ? 'Seleccione una opción'
+                        : 'Seleccione tipo de Registro Jurídico'}
+                  </option>
+                  {items.map(item => (
+                    <option key={item.certificadoID} value={String(item.certificadoID)}>
+                      {item.nombreCertificado}
+                    </option>
+                  ))}
+                </select>
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="#b8b8b8"
+                  strokeWidth="2"
+                  style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}
+                >
+                  <path d="M6 9l6 6 6-6" />
+                </svg>
+              </div>
+            </FieldRow>
           </div>
 
-          {selectedCatalog && (
-            <div style={{ marginTop: 10, fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--muted)' }}>
-              Seleccionado: {selectedCatalog.nombreCertificado} · Grupo: {selectedCatalog.desGrupoLibroArea}
-            </div>
-          )}
-
-          {error && (
-            <div style={{ marginTop: 18 }}>
-              <WarningBox title="No se pudo cargar el catálogo" bullets={[error]} compact />
-            </div>
-          )}
-
-          <div style={{ marginTop: 22 }}>
-            <WarningBox
-              bullets={[
-                'El certificado literal de la partida con firma electrónica se emite en un plazo máximo de tres (03) días hábiles, el cual es enviado a su cuenta del Servicio de Publicidad Registral en Línea (SPRL), y al correo electrónico consignado al momento de la suscripción de dicho servicio.',
-                'El certificado con firma electrónica tiene el mismo valor y eficacia jurídica que el certificado con firma manuscrita, su contenido podrá ser verificado y visualizado a través de nuestro portal institucional.',
-                'El certificado con firma electrónica a través del SPRL es válido para su uso dentro del territorio nacional. Si desea un certificado para uso en el extranjero, adicionalmente deberá de solicitar la autenticación de firma ante el funcionario autorizado por Sunarp para tal efecto conforme al procedimiento establecido por el Ministerio de Relaciones Exteriores.',
-                'Estimado Usuario/a: si el certificado registral vehicular lo necesita para ser presentado en el extranjero que, entre otros, requiera previamente de la autenticación de firma, agradecemos pueda solicitarlo a través de nuestro App-Sunarp o de forma presencial en cualquiera de nuestras Oficinas Registrales.',
-              ]}
-            />
-          </div>
+          <button type="button" className={styles.sprlVigenciaBtn} disabled={!selectedCatalog} onClick={handleSolicitar}>
+            Solicitar
+          </button>
         </div>
+
+        {selectedCatalog && (
+          <div style={{ marginTop: 10, fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--muted)' }}>
+            Seleccionado: {selectedCatalog.nombreCertificado} · Grupo: {selectedCatalog.desGrupoLibroArea}
+            {activeCertificateFlow && ` · Flujo: ${activeCertificateFlow.key}`}
+          </div>
+        )}
+
+        {error && (
+          <div style={{ marginTop: 18 }}>
+            <WarningBox title="No se pudo cargar el catálogo" bullets={[error]} compact />
+          </div>
+        )}
+
+        <div style={{ marginTop: 22 }}>
+          <WarningBox
+            bullets={[
+              'El certificado literal de la partida con firma electrónica se emite en un plazo máximo de tres (03) días hábiles, el cual es enviado a su cuenta del Servicio de Publicidad Registral en Línea (SPRL), y al correo electrónico consignado al momento de la suscripción de dicho servicio.',
+              'El certificado con firma electrónica tiene el mismo valor y eficacia jurídica que el certificado con firma manuscrita, su contenido podrá ser verificado y visualizado a través de nuestro portal institucional.',
+              'El certificado con firma electrónica a través del SPRL es válido para su uso dentro del territorio nacional. Si desea un certificado para uso en el extranjero, adicionalmente deberá de solicitar la autenticación de firma ante el funcionario autorizado por Sunarp para tal efecto conforme al procedimiento establecido por el Ministerio de Relaciones Exteriores.',
+              'Estimado Usuario/a: si el certificado registral vehicular lo necesita para ser presentado en el extranjero que, entre otros, requiera previamente de la autenticación de firma, agradecemos pueda solicitarlo a través de nuestro App-Sunarp o de forma presencial en cualquiera de nuestras Oficinas Registrales.',
+            ]}
+          />
+        </div>
+
+        <TokenExpiredModal open={sessionExpired} onLogout={forceLogout} loading={logoutLoading} />
       </div>
-    </>
+    </div>
   )
 }
 
@@ -464,12 +517,32 @@ function CopiaLiteralPage() {
   const [selectedCertificadoId, setSelectedCertificadoId] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [sessionExpired, setSessionExpired] = useState(false)
+  const [logoutLoading, setLogoutLoading] = useState(false)
+
+  async function forceLogout() {
+    if (logoutLoading) return
+    setLogoutLoading(true)
+    try {
+      await fetch('/api/sprl/credentials', { method: 'DELETE' }).catch(() => { })
+    } finally {
+      window.location.assign('/dashboard/publicidad-registral/conectar')
+    }
+  }
+
+  function handleTokenExpired() {
+    setItems([])
+    setSelectedCertificadoId('')
+    setError(null)
+    setSessionExpired(true)
+  }
 
   useEffect(() => {
     if (!codArea) {
       setItems([])
       setSelectedCertificadoId('')
       setError(null)
+      setSessionExpired(false)
       return
     }
 
@@ -488,8 +561,14 @@ function CopiaLiteralPage() {
 
         const data = (await res.json()) as CatalogResponse
 
+        const responseMessage = data.response?.mensaje ?? 'No se pudo cargar el catálogo de certificados'
         if (!res.ok || !data.success) {
-          throw new Error(data.response?.mensaje ?? 'No se pudo cargar el catálogo de certificados')
+          if (isTokenExpiredResponse(res.status, responseMessage)) {
+            handleTokenExpired()
+            return
+          }
+
+          throw new Error(responseMessage)
         }
 
         setItems(data.data ?? [])
@@ -498,7 +577,12 @@ function CopiaLiteralPage() {
         if (controller.signal.aborted) return
         setItems([])
         setSelectedCertificadoId('')
-        setError(err instanceof Error ? err.message : 'Error al cargar el catálogo')
+        const message = err instanceof Error ? err.message : 'Error al cargar el catálogo'
+        if (isTokenExpiredResponse(401, message)) {
+          handleTokenExpired()
+          return
+        }
+        setError(message)
       } finally {
         if (!controller.signal.aborted) setLoading(false)
       }
@@ -510,6 +594,10 @@ function CopiaLiteralPage() {
   }, [codArea])
 
   const selectedCatalog = items.find(item => String(item.certificadoID) === selectedCertificadoId) ?? null
+
+  if (sessionExpired) {
+    return <TokenExpiredModal open onLogout={forceLogout} loading={logoutLoading} />
+  }
 
   return (
     <>
@@ -668,6 +756,8 @@ function CopiaLiteralPage() {
               Si su Nro. de partida empieza con la letra P: debe seleccionar el servicio Certificado Literal Automatizado de Partida (PI-SARP) en el Registro de Propiedad Inmueble.
             </div>
           </div>
+
+          <TokenExpiredModal open={sessionExpired} onLogout={forceLogout} loading={logoutLoading} />
         </div>
       </div>
     </>
