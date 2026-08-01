@@ -4,6 +4,7 @@ import Link from 'next/link'
 import styles from '../publicidad-registral.module.css'
 import { useState, type ReactNode } from 'react'
 import type { CertificateFlowConfig } from '../certificate-flows'
+import { useEffect } from 'react'
 
 const registryOptions = [
   { value: '', label: 'Seleccionar' },
@@ -78,6 +79,14 @@ type AsientoItem = {
   asiento: string
 }
 
+type PaymentMethod = 'saldo' | 'tarjeta' | 'pagalo'
+
+const NAME_ALLOWED_PATTERN = /^[A-ZÁÉÍÓÚÜÑ\s]*$/
+
+function normalizeForBackend(value: string) {
+  return value.trim().replace(/\s+/g, ' ')
+}
+
 function SectionHeader({ children }: { children: ReactNode }) {
   return <div className={styles.sprlFlowSectionHeader}>{children}</div>
 }
@@ -97,36 +106,41 @@ function SelectRow({
   options,
   value,
   onChange,
+  error,
 }: {
   label: string
   placeholder: string
   options: Array<{ value?: string; label: string }>
   value: string
   onChange: (value: string) => void
+  error?: string | null
 }) {
   return (
     <label className={styles.sprlFlowRow}>
       <span className={styles.sprlFlowLabel}>{label}</span>
-      <div className={styles.sprlFlowSelectWrap}>
-        <select className={styles.sprlFlowSelect} value={value} onChange={event => onChange(event.target.value)}>
-          <option value="">{placeholder}</option>
-          {options.slice(1).map(option => (
-            <option key={option.label} value={option.label}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-        <svg
-          className={styles.sprlFlowArrow}
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="#b8b8b8"
-          strokeWidth="2"
-        >
-          <path d="M6 9l6 6 6-6" />
-        </svg>
+      <div>
+        <div className={styles.sprlFlowSelectWrap}>
+          <select className={styles.sprlFlowSelect} value={value} onChange={event => onChange(event.target.value)}>
+            <option value="">{placeholder}</option>
+            {options.slice(1).map(option => (
+              <option key={option.label} value={option.label}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <svg
+            className={styles.sprlFlowArrow}
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="#b8b8b8"
+            strokeWidth="2"
+          >
+            <path d="M6 9l6 6 6-6" />
+          </svg>
+        </div>
+        {error && <span className={styles.sprlFlowFieldError}>{error}</span>}
       </div>
     </label>
   )
@@ -142,16 +156,89 @@ export function VigenciaPoderPersonasJuridicasFlow({ onBack, certificate, onToke
   const [nombres, setNombres] = useState('')
   const [asientos, setAsientos] = useState<AsientoItem[]>([])
   const [showResumen, setShowResumen] = useState(false)
+  const [showPaymentForm, setShowPaymentForm] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [submitLoading, setSubmitLoading] = useState(false)
+  const [payLoading, setPayLoading] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [payError, setPayError] = useState<string | null>(null)
+  const [apellidoPaternoError, setApellidoPaternoError] = useState<string | null>(null)
+  const [apellidoMaternoError, setApellidoMaternoError] = useState<string | null>(null)
+  const [nombresError, setNombresError] = useState<string | null>(null)
+  const [acceptDeclaration, setAcceptDeclaration] = useState(false)
+  const [requiredErrors, setRequiredErrors] = useState({
+    oficinaRegistral: false,
+    numero: false,
+    asiento: false,
+    cargoApoderado: false,
+    apellidoPaterno: false,
+    nombres: false,
+    declaration: false,
+  })
+  const [paymentApePaterno, setPaymentApePaterno] = useState('')
+  const [paymentApeMaterno, setPaymentApeMaterno] = useState('')
+  const [paymentNombres, setPaymentNombres] = useState('')
+  const [paymentNumeroDocumento, setPaymentNumeroDocumento] = useState('')
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('saldo')
+  const [paymentActionLoading, setPaymentActionLoading] = useState(false)
+  const [showVisaGatewayView, setShowVisaGatewayView] = useState(false)
+  const [visaPurchaseCode, setVisaPurchaseCode] = useState('')
+  const [visaMonto, setVisaMonto] = useState('33')
+  const [visaTitularNombre, setVisaTitularNombre] = useState('')
+  const [visaTitularApellido, setVisaTitularApellido] = useState('')
+  const [visaTitularEmail, setVisaTitularEmail] = useState('')
+  const [visaIpClient, setVisaIpClient] = useState('')
+  const [visaContinueLoading, setVisaContinueLoading] = useState(false)
+  const [showVisaProviderModal, setShowVisaProviderModal] = useState(false)
+  const [visaProviderOption, setVisaProviderOption] = useState<'card' | 'yape'>('card')
+  const [visaSessionExtendId, setVisaSessionExtendId] = useState('')
+  const [visaFieldErrors, setVisaFieldErrors] = useState({
+    nombre: false,
+    apellido: false,
+    email: false,
+  })
   const [submitSummary, setSubmitSummary] = useState<null | {
     partida: string
     razSocCert: string
     refNumPart: string
     asiento: string
+    costoServicio?: string
+    costoTotal?: string
     message: string
   }>(null)
+
+  useEffect(() => {
+    const script = document.createElement('script')
+
+    script.src = 'https://static-content.vnforapps.com/v2/js/checkout.js'
+    script.async = true
+
+    script.onload = () => {
+      console.log('VisaNet SDK cargado', window.VisanetCheckout)
+    }
+
+    script.onerror = () => {
+      console.error('No se pudo cargar VisaNet SDK')
+    }
+
+    document.body.appendChild(script)
+
+    return () => {
+      document.body.removeChild(script)
+    }
+  }, [])
+
+  function handleNameChange(
+    value: string,
+    setValue: (nextValue: string) => void,
+    setError: (nextError: string | null) => void,
+  ) {
+    const upperValue = value.toUpperCase().replace(/^\s+/, '')
+    const hasInvalidChars = !NAME_ALLOWED_PATTERN.test(upperValue)
+
+    setError(hasInvalidChars ? 'Solo se permiten letras y espacios (sin signos de puntuación).' : null)
+    setValue(upperValue)
+  }
 
   function handleAgregarAsiento() {
     const cleanAsiento = asiento.trim().toUpperCase()
@@ -165,6 +252,7 @@ export function VigenciaPoderPersonasJuridicasFlow({ onBack, certificate, onToke
       },
     ])
     setAsiento('')
+    setRequiredErrors(current => ({ ...current, asiento: false }))
   }
 
   function handleEliminarAsiento(id: string) {
@@ -172,7 +260,26 @@ export function VigenciaPoderPersonasJuridicasFlow({ onBack, certificate, onToke
   }
 
   async function handleSolicitar() {
-    if (!oficinaRegistral || !numero.trim() || !cargoApoderado.trim() || !apellidoPaterno.trim() || !nombres.trim()) {
+    const hasAsiento = Boolean(asientos[0]?.asiento || asiento.trim().toUpperCase())
+    const nextRequiredErrors = {
+      oficinaRegistral: !oficinaRegistral,
+      numero: !numero.trim(),
+      asiento: !hasAsiento,
+      cargoApoderado: !cargoApoderado.trim(),
+      apellidoPaterno: !apellidoPaterno.trim(),
+      nombres: !nombres.trim(),
+      declaration: !acceptDeclaration,
+    }
+
+    setRequiredErrors(nextRequiredErrors)
+
+    if (Object.values(nextRequiredErrors).some(Boolean)) {
+      setSubmitError(null)
+      return
+    }
+
+    if (apellidoPaternoError || apellidoMaternoError || nombresError) {
+      setSubmitError('Corrige los campos de nombres: solo se permiten letras y espacios.')
       return
     }
 
@@ -188,6 +295,7 @@ export function VigenciaPoderPersonasJuridicasFlow({ onBack, certificate, onToke
     }
 
     setSubmitError(null)
+    setPayError(null)
     setSubmitLoading(true)
 
     try {
@@ -200,9 +308,9 @@ export function VigenciaPoderPersonasJuridicasFlow({ onBack, certificate, onToke
           partida: numero.trim(),
           asiento: asientoSeleccionadoValue,
           cargoApoderado,
-          apellidoPaterno,
-          apellidoMaterno,
-          nombres,
+          apellidoPaterno: normalizeForBackend(apellidoPaterno),
+          apellidoMaterno: normalizeForBackend(apellidoMaterno),
+          nombres: normalizeForBackend(nombres),
         }),
       })
 
@@ -235,12 +343,24 @@ export function VigenciaPoderPersonasJuridicasFlow({ onBack, certificate, onToke
         razSocCert: data.summary.razSocCert || '',
         refNumPart: data.summary.refNumPart || '',
         asiento: data.summary.asiento || asientoSeleccionadoValue,
+        costoServicio: data.summary.costoServicio,
+        costoTotal: data.summary.costoTotal,
         message: data.nextStep === 'pagar'
           ? 'SUNARP dejó la solicitud lista para pago. Revisa el resumen y continúa con el botón Pagar en la web real.'
           : data.message || 'Solicitud registrada correctamente.',
       })
+      setShowPaymentForm(false)
       setSubmitted(true)
       setShowResumen(true)
+      setRequiredErrors({
+        oficinaRegistral: false,
+        numero: false,
+        asiento: false,
+        cargoApoderado: false,
+        apellidoPaterno: false,
+        nombres: false,
+        declaration: false,
+      })
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : 'No se pudo registrar la solicitud')
     } finally {
@@ -252,12 +372,588 @@ export function VigenciaPoderPersonasJuridicasFlow({ onBack, certificate, onToke
     setShowResumen(false)
   }
 
+  async function handleIrAPagar() {
+    if (!certificate || !submitSummary) return
+
+    setPayError(null)
+    setPayLoading(true)
+
+    try {
+      const response = await fetch('/api/sprl/publicidad-registral/pagar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          flowKey: 'certificado',
+          redirectPath: '/sprl/main/sp-certificada',
+          certificate,
+          partida: submitSummary.partida || numero.trim(),
+          asiento: submitSummary.asiento || asientoSeleccionado,
+          cargoApoderado,
+          apellidoPaterno: normalizeForBackend(apellidoPaterno),
+          apellidoMaterno: normalizeForBackend(apellidoMaterno),
+          nombres: normalizeForBackend(nombres),
+          refNumPart: submitSummary.refNumPart,
+          razSocCert: submitSummary.razSocCert,
+          costoServicio: submitSummary.costoServicio,
+          costoTotal: submitSummary.costoTotal,
+        }),
+      })
+
+      const data = await response.json().catch(() => ({})) as {
+        ok?: boolean
+        error?: string
+        redirectUrl?: string
+        message?: string
+        applicant?: {
+          apellidoPaterno?: string
+          apellidoMaterno?: string
+          nombres?: string
+          numeroDocumento?: string
+        }
+      }
+
+      if (response.status === 401) {
+        onTokenExpired()
+        return
+      }
+
+      if (!response.ok || !data.ok) {
+        throw new Error(data.error || 'No se pudo preparar el pago en SUNARP')
+      }
+
+      setPaymentApePaterno((data.applicant?.apellidoPaterno || apellidoPaterno).trim().toUpperCase())
+      setPaymentApeMaterno((data.applicant?.apellidoMaterno || apellidoMaterno).trim().toUpperCase())
+      setPaymentNombres((data.applicant?.nombres || nombres).trim().toUpperCase())
+      setPaymentNumeroDocumento((data.applicant?.numeroDocumento || '').trim())
+      setShowResumen(false)
+      setShowPaymentForm(true)
+    } catch (error) {
+      setPayError(error instanceof Error ? error.message : 'No se pudo preparar el pago en SUNARP')
+    } finally {
+      setPayLoading(false)
+    }
+  }
+
+  function formatCurrency(value?: string) {
+    const amount = Number(value || '0')
+    if (!Number.isFinite(amount) || amount <= 0) return 'S/. 33.00'
+    return `S/. ${amount.toFixed(2)}`
+  }
+
+  function resolveMontoForPayment() {
+    const raw = submitSummary?.costoTotal || submitSummary?.costoServicio || '33'
+    const amount = Number(raw)
+    if (!Number.isFinite(amount) || amount <= 0) return '33'
+    if (Number.isInteger(amount)) return String(amount)
+    return amount.toFixed(2)
+  }
+
+  async function handleTarjetaPayment() {
+    setPayError(null)
+    setPaymentActionLoading(true)
+
+    try {
+      const monto = resolveMontoForPayment()
+      const response = await fetch('/api/sprl/publicidad-registral/payment/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ monto }),
+      })
+
+      const data = await response.json().catch(() => ({})) as {
+        ok?: boolean
+        error?: string
+        data?: {
+          purchase?: string
+        }
+      }
+
+      if (!response.ok || !data.ok || !data.data?.purchase) {
+        throw new Error(data.error || 'No se pudo inicializar el pago con Visa/Mastercard.')
+      }
+
+      setVisaPurchaseCode(data.data.purchase)
+      setVisaMonto(monto)
+      setVisaTitularNombre(paymentNombres || '')
+      setVisaTitularApellido([paymentApePaterno, paymentApeMaterno].filter(Boolean).join(' '))
+      setVisaTitularEmail('')
+      setVisaFieldErrors({ nombre: false, apellido: false, email: false })
+
+      const ipResponse = await fetch('https://api.ipify.org/?format=json', {
+        method: 'GET',
+        cache: 'no-store',
+      })
+      const ipData = await ipResponse.json().catch(() => ({})) as { ip?: string }
+      setVisaIpClient(String(ipData.ip || '').trim())
+
+      setShowVisaGatewayView(true)
+    } catch (error) {
+      setPayError(error instanceof Error ? error.message : 'No se pudo inicializar el pago con Visa/Mastercard.')
+    } finally {
+      setPaymentActionLoading(false)
+    }
+  }
+
+  async function handlePaymentAction() {
+    if (paymentMethod === 'tarjeta') {
+      await handleTarjetaPayment()
+      return
+    }
+
+    setPayError(
+      paymentMethod === 'saldo'
+        ? 'Pago con saldo disponible: pendiente de implementación.'
+        : 'Pago con Pagalo.pe: pendiente de implementación.',
+    )
+  }
+
+  async function handleVisaContinue() {
+    const nextErrors = {
+      nombre: !visaTitularNombre.trim(),
+      apellido: !visaTitularApellido.trim(),
+      email: !visaTitularEmail.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(visaTitularEmail.trim()),
+    }
+    setVisaFieldErrors(nextErrors)
+
+    if (Object.values(nextErrors).some(Boolean)) return
+
+    setPayError(null)
+    setVisaContinueLoading(true)
+
+    try {
+      const infoBotonResponse = await fetch('/api/sprl/publicidad-registral/payment/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: 'visa_mastercard',
+          action: 'info-boton',
+          nombre: visaTitularNombre,
+          apellido: visaTitularApellido,
+          email: visaTitularEmail,
+          purchase: visaPurchaseCode,
+          importe: visaMonto,
+          ipClient: visaIpClient,
+        }),
+      })
+
+      const infoBotonData = await infoBotonResponse.json().catch(() => ({})) as {
+        ok?: boolean
+        error?: string
+        data?: {
+          extendSessionId?: string
+        }
+      }
+
+      if (!infoBotonResponse.ok || !infoBotonData.ok) {
+        throw new Error(infoBotonData.error || 'No se pudo ejecutar info-boton.')
+      }
+
+      const extendSessionId = String(infoBotonData.data?.extendSessionId || '').trim()
+      if (!extendSessionId) {
+        throw new Error('No se obtuvo extendSessionId desde info-boton.')
+      }
+
+      const clientIpResponse = await fetch('/api/sprl/publicidad-registral/payment/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: 'visa_mastercard',
+          action: 'vn-clientip',
+        }),
+      })
+      const clientIpData = await clientIpResponse.json().catch(() => ({})) as { ok?: boolean; error?: string }
+      if (!clientIpResponse.ok || !clientIpData.ok) {
+        throw new Error(clientIpData.error || 'No se pudo ejecutar vn-clientip.')
+      }
+
+      const merchantConfigResponse = await fetch('/api/sprl/publicidad-registral/payment/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: 'visa_mastercard',
+          action: 'vn-merchant-config',
+        }),
+      })
+      const merchantConfigData = await merchantConfigResponse.json().catch(() => ({})) as { ok?: boolean; error?: string }
+      if (!merchantConfigResponse.ok || !merchantConfigData.ok) {
+        throw new Error(merchantConfigData.error || 'No se pudo ejecutar vn-merchant-config.')
+      }
+
+      const extendResponse = await fetch('/api/sprl/publicidad-registral/payment/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: 'visa_mastercard',
+          action: 'vn-extend-session',
+          extendSessionId,
+        }),
+      })
+      const extendData = await extendResponse.json().catch(() => ({})) as { ok?: boolean; error?: string }
+      if (!extendResponse.ok || !extendData.ok) {
+        throw new Error(extendData.error || 'No se pudo ejecutar vn-extend-session.')
+      }
+
+      const documentTypesResponse = await fetch('/api/sprl/publicidad-registral/payment/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: 'visa_mastercard',
+          action: 'vn-document-types',
+        }),
+      })
+      const documentTypesData = await documentTypesResponse.json().catch(() => ({})) as { ok?: boolean; error?: string }
+      if (!documentTypesResponse.ok || !documentTypesData.ok) {
+        throw new Error(documentTypesData.error || 'No se pudo ejecutar vn-document-types.')
+      }
+
+      setVisaSessionExtendId(extendSessionId)
+      //setShowVisaProviderModal(true)
+    } catch (error) {
+      setPayError(error instanceof Error ? error.message : 'No se pudo preparar la previsualización de pasarela Visa.')
+    } finally {
+      setVisaContinueLoading(false)
+    }
+  }
+
+const handleVisaCheckout = async () => {
+
+  try {
+
+    setVisaContinueLoading(true)
+
+
+    const response = await fetch('/api/sprl/publicidad-registral/payment/checkout', {
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+      },
+      body:JSON.stringify({
+        provider:'visa_mastercard',
+        action:'continue-preview',
+        nombre:visaTitularNombre,
+        apellido:visaTitularApellido,
+        email:visaTitularEmail,
+        purchase:visaPurchaseCode,
+        importe:visaMonto,
+      }),
+    })
+
+
+    const json = await response.json()
+
+
+    if(!json.ok){
+      throw new Error(json.error)
+    }
+
+
+    const cfg = json.data.configuration
+
+
+    await loadVisaSDK()
+
+
+    console.log(
+      'SDK:',
+      window.VisanetCheckout
+    )
+
+    console.log(
+      'CONFIG:',
+      cfg
+    )
+
+
+    window.VisanetCheckout.configure(cfg)
+
+    window.VisanetCheckout.open()
+
+
+  } catch(error){
+
+    console.error(error)
+
+    setPayError(
+      error instanceof Error
+      ? error.message
+      : 'Error iniciando pago'
+    )
+
+  } finally {
+
+    setVisaContinueLoading(false)
+
+  }
+
+}
+
+const loadVisaSDK = () => {
+  return new Promise<void>((resolve, reject) => {
+
+    if (window.VisanetCheckout) {
+      resolve()
+      return
+    }
+
+    const script = document.createElement('script')
+
+    script.src =
+      'https://static-content.vnforapps.com/v2/js/checkout.js'
+
+    script.onload = () => resolve()
+
+    script.onerror = () =>
+      reject(new Error('No se pudo cargar VisaNet SDK'))
+
+    document.body.appendChild(script)
+  })
+}
+
   const apoderadoCompleto = [apellidoPaterno, apellidoMaterno, nombres]
-    .map(value => value.trim().toUpperCase())
+    .map(value => normalizeForBackend(value).toUpperCase())
     .filter(Boolean)
     .join(' ')
 
   const asientoSeleccionado = asientos[0]?.asiento || asiento.trim().toUpperCase()
+  const apellidoPaternoTieneValor = apellidoPaterno.trim().length > 0
+  const apellidoMaternoTieneValor = apellidoMaterno.trim().length > 0
+  const nombresTieneValor = nombres.trim().length > 0
+  const apellidoPaternoValido = apellidoPaternoTieneValor && !apellidoPaternoError
+  const apellidoMaternoValido = apellidoMaternoTieneValor && !apellidoMaternoError
+  const nombresValido = nombresTieneValor && !nombresError
+
+  if (showVisaGatewayView) {
+    return (
+      <div className={styles.sprlFlowPage}>
+        <div className={styles.sprlFlowShell}>
+          <div className={styles.sprlGatewayHeaderText}>PASARELA ELECTRONICA DE PAGOS</div>
+          <div className={styles.sprlGatewayProgressBar}>
+            <span className={styles.sprlGatewayProgressOne} />
+            <span className={styles.sprlGatewayProgressTwo} />
+            <span className={styles.sprlGatewayProgressThree} />
+            <span className={styles.sprlGatewayProgressFour} />
+          </div>
+
+          <div className={styles.sprlGatewayPanel}>
+            <h2 className={styles.sprlGatewayTitle}>Ingrese los datos del titular de la tarjeta:</h2>
+
+            <div className={styles.sprlGatewayFormBox}>
+              <div className={styles.sprlGatewayGrid}>
+                <label className={styles.sprlGatewayRow}>
+                  <span className={styles.sprlFlowLabel}>Nombre * :</span>
+                  <div>
+                    <input
+                      className={styles.sprlFlowInput}
+                      placeholder="Ingrese sus nombres"
+                      value={visaTitularNombre}
+                      onChange={event => {
+                        setVisaTitularNombre(event.target.value)
+                        if (event.target.value.trim()) {
+                          setVisaFieldErrors(current => ({ ...current, nombre: false }))
+                        }
+                      }}
+                    />
+                    {visaFieldErrors.nombre && <span className={styles.sprlFlowFieldError}>Este campo es obligatorio.</span>}
+                  </div>
+                </label>
+
+                <label className={styles.sprlGatewayRow}>
+                  <span className={styles.sprlFlowLabel}>Apellido * :</span>
+                  <div>
+                    <input
+                      className={styles.sprlFlowInput}
+                      placeholder="Ingrese sus apellidos"
+                      value={visaTitularApellido}
+                      onChange={event => {
+                        setVisaTitularApellido(event.target.value)
+                        if (event.target.value.trim()) {
+                          setVisaFieldErrors(current => ({ ...current, apellido: false }))
+                        }
+                      }}
+                    />
+                    {visaFieldErrors.apellido && <span className={styles.sprlFlowFieldError}>Este campo es obligatorio.</span>}
+                  </div>
+                </label>
+
+                <label className={styles.sprlGatewayRowWide}>
+                  <span className={styles.sprlFlowLabel}>Email * :</span>
+                  <div>
+                    <input
+                      className={styles.sprlFlowInput}
+                      placeholder="Ingrese su correo electrónico"
+                      value={visaTitularEmail}
+                      onChange={event => {
+                        setVisaTitularEmail(event.target.value)
+                        if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(event.target.value.trim())) {
+                          setVisaFieldErrors(current => ({ ...current, email: false }))
+                        }
+                      }}
+                    />
+                    {visaFieldErrors.email && <span className={styles.sprlFlowFieldError}>Ingrese un correo válido.</span>}
+                  </div>
+                </label>
+              </div>
+
+              <div className={styles.sprlGatewayActions}>
+                <button 
+                type="button" 
+                className={styles.sprlFlowButtonPrimary} 
+                onClick={() => void handleVisaCheckout()} 
+                disabled={visaContinueLoading}
+                >
+                {visaContinueLoading ? 'Procesando...' : '→ Continuar'}
+                </button>
+              </div>
+
+              <div className={styles.sprlGatewayMeta}>
+                Operación: <strong>{visaPurchaseCode}</strong> | Monto: <strong>S/. {visaMonto}</strong>
+              </div>
+              {visaIpClient ? (
+                <div className={styles.sprlGatewayMeta}>IP cliente: <strong>{visaIpClient}</strong></div>
+              ) : null}
+              {visaSessionExtendId ? (
+                <div className={styles.sprlGatewayMeta}>Sesión extendida: <strong>{visaSessionExtendId}</strong></div>
+              ) : null}
+            </div>
+
+            <div className={styles.sprlGatewayWarningTitle}>Tener en cuenta lo siguiente antes de continuar:</div>
+            <ul className={styles.sprlGatewayNotes}>
+              <li>Asegurarse que su tarjeta tenga la opción de compras por internet habilitada.</li>
+              <li>Verificar su límite de compras por internet, por importe o número de transacciones diarias.</li>
+              <li>Asimismo, pueden realizar las consultas ante su entidad financiera.</li>
+            </ul>
+          </div>
+
+          <div className={styles.sprlFlowActions} style={{ marginTop: 20 }}>
+            <button type="button" className={styles.sprlFlowButtonSecondary} onClick={() => setShowVisaGatewayView(false)}>
+              Regresar
+            </button>
+          </div>
+
+          {payError && (
+            <div className={styles.sprlSummarySuccess} style={{ marginTop: 12, background: 'rgba(192, 57, 43, 0.08)', borderColor: 'rgba(192, 57, 43, 0.35)', color: '#9d1f11' }}>
+              {payError}
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  if (showPaymentForm) {
+    return (
+      <div className={styles.sprlFlowPage}>
+        <div className={styles.sprlFlowShell}>
+          <h1 className={styles.sprlFlowTitle}>Solicitar publicidad certificada (vigencias, CRI, etc)</h1>
+
+          <div className={styles.sprlFlowSection}>
+            <p className={styles.sprlSummaryText} style={{ marginBottom: 16 }}>
+              Usted ha solicitado un: <strong>"CERTIFICADO DE VIGENCIA DE PODER DE PERSONAS JURÍDICAS"</strong> de la Partida:
+              {' '}<strong>{submitSummary?.partida || numero.trim() || '—'}</strong>, Razon Social:
+              {' '}<strong>{submitSummary?.razSocCert || '—'}</strong>. Por favor, complete los datos de envío y la forma de pago.
+            </p>
+          </div>
+
+          <SectionHeader>DATOS DEL SOLICITANTE</SectionHeader>
+          <div className={styles.sprlFlowSection}>
+            <div className={styles.sprlFlowGrid}>
+              <div className={styles.sprlFlowRow}>
+                <span className={styles.sprlFlowLabel}>TIPO PERSONA:</span>
+                <div className={styles.sprlFlowRadioGroup}>
+                  <label className={styles.sprlFlowRadio}>
+                    <input type="radio" checked readOnly />
+                    <span>Persona Natural</span>
+                  </label>
+                  <label className={styles.sprlFlowRadio}>
+                    <input type="radio" disabled />
+                    <span>Persona Jurídica</span>
+                  </label>
+                </div>
+              </div>
+
+              <div className={styles.sprlFlowRow}>
+                <span className={styles.sprlFlowLabel}>Apellido Paterno *:</span>
+                <input className={styles.sprlFlowInput} value={paymentApePaterno} readOnly />
+              </div>
+
+              <div className={styles.sprlFlowRow}>
+                <span className={styles.sprlFlowLabel}>Apellido Materno:</span>
+                <input className={styles.sprlFlowInput} value={paymentApeMaterno} readOnly />
+              </div>
+
+              <div className={styles.sprlFlowRow}>
+                <span className={styles.sprlFlowLabel}>Nombres *:</span>
+                <input className={styles.sprlFlowInput} value={paymentNombres} readOnly />
+              </div>
+
+              <div className={styles.sprlFlowRow}>
+                <span className={styles.sprlFlowLabel}>Tipo Documento *:</span>
+                <input className={styles.sprlFlowInput} value="DNI-DOCUMENTO NACIONAL DE IDENTIDAD" readOnly />
+              </div>
+
+              <div className={styles.sprlFlowRow}>
+                <span className={styles.sprlFlowLabel}>Número documento *:</span>
+                <input className={styles.sprlFlowInput} value={paymentNumeroDocumento} readOnly />
+              </div>
+            </div>
+          </div>
+
+          <SectionHeader>DATOS DEL PAGO</SectionHeader>
+          <div className={styles.sprlFlowSection}>
+            <div className={styles.sprlFlowGrid}>
+              <div className={styles.sprlFlowRow}>
+                <span className={styles.sprlFlowLabel}>COSTO SERVICIO:</span>
+                <div className={styles.sprlFlowInput} style={{ display: 'flex', alignItems: 'center' }}>{formatCurrency(submitSummary?.costoServicio)}</div>
+              </div>
+
+              <div className={styles.sprlFlowRow}>
+                <span className={styles.sprlFlowLabel}>No CERTIFICADOS:</span>
+                <input className={styles.sprlFlowInput} value="1" readOnly />
+              </div>
+
+              <div className={styles.sprlFlowRow}>
+                <span className={styles.sprlFlowLabel}>TOTAL:</span>
+                <div className={styles.sprlFlowInput} style={{ display: 'flex', alignItems: 'center', fontWeight: 700 }}>{formatCurrency(submitSummary?.costoTotal || submitSummary?.costoServicio)}</div>
+              </div>
+
+              <div className={styles.sprlFlowRow}>
+                <span className={styles.sprlFlowLabel}>FORMA DE PAGO:</span>
+                <div className={styles.sprlFlowRadioGroup}>
+                  <label className={styles.sprlFlowRadio}>
+                    <input type="radio" checked={paymentMethod === 'saldo'} onChange={() => setPaymentMethod('saldo')} />
+                    <span>EN LÍNEA CON MI SALDO DISPONIBLE</span>
+                  </label>
+                  <label className={styles.sprlFlowRadio}>
+                    <input type="radio" checked={paymentMethod === 'tarjeta'} onChange={() => setPaymentMethod('tarjeta')} />
+                    <span>EN LÍNEA CON TARJETA VISA/MASTERCARD</span>
+                  </label>
+                  <label className={styles.sprlFlowRadio}>
+                    <input type="radio" checked={paymentMethod === 'pagalo'} onChange={() => setPaymentMethod('pagalo')} />
+                    <span>PAGALO.PE</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div className={styles.sprlFlowActions} style={{ marginTop: 20 }}>
+              <button type="button" className={styles.sprlFlowButtonSecondary} onClick={() => setShowPaymentForm(false)}>
+                Regresar
+              </button>
+              <button type="button" className={styles.sprlFlowButtonPrimary} onClick={() => void handlePaymentAction()} disabled={paymentActionLoading}>
+                {paymentActionLoading ? 'Procesando...' : 'Pagar'}
+              </button>
+            </div>
+
+            {payError && (
+              <div className={styles.sprlSummarySuccess} style={{ marginTop: 12, background: 'rgba(192, 57, 43, 0.08)', borderColor: 'rgba(192, 57, 43, 0.35)', color: '#9d1f11' }}>
+                {payError}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className={styles.sprlFlowPage}>
@@ -291,7 +987,13 @@ export function VigenciaPoderPersonasJuridicasFlow({ onBack, certificate, onToke
               placeholder="Seleccionar"
               options={registryOptions}
               value={oficinaRegistral}
-              onChange={setOficinaRegistral}
+              onChange={value => {
+                setOficinaRegistral(value)
+                if (value) {
+                  setRequiredErrors(current => ({ ...current, oficinaRegistral: false }))
+                }
+              }}
+              error={requiredErrors.oficinaRegistral ? 'Este campo es obligatorio.' : null}
             />
 
             <div className={styles.sprlFlowRow}>
@@ -314,17 +1016,40 @@ export function VigenciaPoderPersonasJuridicasFlow({ onBack, certificate, onToke
 
             <label className={styles.sprlFlowRow}>
               <span className={styles.sprlFlowLabel}>NÚMERO *:</span>
-              <input className={styles.sprlFlowInput} placeholder="Escriba aquí..." value={numero} onChange={event => setNumero(event.target.value)} />
+              <div>
+                <input
+                  className={styles.sprlFlowInput}
+                  placeholder="Escriba aquí..."
+                  name='numeroPartida'
+                  value={numero}
+                  onChange={event => {
+                    setNumero(event.target.value)
+                    if (event.target.value.trim()) {
+                      setRequiredErrors(current => ({ ...current, numero: false }))
+                    }
+                  }}
+                />
+                {requiredErrors.numero && <span className={styles.sprlFlowFieldError}>Este campo es obligatorio.</span>}
+              </div>
             </label>
 
             <label className={styles.sprlFlowRow}>
               <span className={styles.sprlFlowLabel}>N° Asiento:</span>
-              <input
-                className={styles.sprlFlowInput}
-                placeholder="Escriba aquí..."
-                value={asiento}
-                onChange={event => setAsiento(event.target.value.toUpperCase())}
-              />
+              <div>
+                <input
+                  className={styles.sprlFlowInput}
+                  placeholder="Escriba aquí..."
+                  name='numeroAsiento'
+                  value={asiento}
+                  onChange={event => {
+                    setAsiento(event.target.value.toUpperCase())
+                    if (event.target.value.trim()) {
+                      setRequiredErrors(current => ({ ...current, asiento: false }))
+                    }
+                  }}
+                />
+                {requiredErrors.asiento && <span className={styles.sprlFlowFieldError}>Debes ingresar al menos un asiento.</span>}
+              </div>
             </label>
 
             <div className={styles.sprlFlowRow}>
@@ -375,9 +1100,16 @@ export function VigenciaPoderPersonasJuridicasFlow({ onBack, certificate, onToke
               <input
                 className={styles.sprlFlowInput}
                 placeholder="Escriba aquí..."
+                name='cargoapoderado'
                 value={cargoApoderado}
-                onChange={event => setCargoApoderado(event.target.value.toUpperCase())}
+                onChange={event => {
+                  setCargoApoderado(event.target.value.toUpperCase())
+                  if (event.target.value.trim()) {
+                    setRequiredErrors(current => ({ ...current, cargoApoderado: false }))
+                  }
+                }}
               />
+              {requiredErrors.cargoApoderado && <span className={styles.sprlFlowFieldError}>Este campo es obligatorio.</span>}
             </label>
 
             <div className={styles.sprlFlowRow}>
@@ -396,32 +1128,80 @@ export function VigenciaPoderPersonasJuridicasFlow({ onBack, certificate, onToke
 
             <div className={styles.sprlFlowRow}>
               <span className={styles.sprlFlowLabel}>Apellido Paterno *:</span>
-              <input
-                className={styles.sprlFlowInput}
-                placeholder="Escriba aquí..."
-                value={apellidoPaterno}
-                onChange={event => setApellidoPaterno(event.target.value.toUpperCase())}
-              />
+              <div>
+                <div className={styles.sprlFlowInputStatusWrap}>
+                  <input
+                    className={styles.sprlFlowInput}
+                    placeholder="Escriba aquí..."
+                    name='apellidoPaterno'
+                    value={apellidoPaterno}
+                    onChange={event => {
+                      handleNameChange(event.target.value, setApellidoPaterno, setApellidoPaternoError)
+                      if (event.target.value.trim()) {
+                        setRequiredErrors(current => ({ ...current, apellidoPaterno: false }))
+                      }
+                    }}
+                  />
+                  <span
+                    className={`${styles.sprlFlowRealtimeCheck} ${apellidoPaternoTieneValor ? styles.sprlFlowRealtimeCheckVisible : ''} ${!apellidoPaternoValido && apellidoPaternoTieneValor ? styles.sprlFlowRealtimeCheckInvalid : ''}`}
+                    aria-hidden="true"
+                  >
+                    {apellidoPaternoValido ? '✓' : '✕'}
+                  </span>
+                </div>
+                {requiredErrors.apellidoPaterno && <span className={styles.sprlFlowFieldError}>Este campo es obligatorio.</span>}
+                {!requiredErrors.apellidoPaterno && apellidoPaternoError && <span className={styles.sprlFlowFieldError}>{apellidoPaternoError}</span>}
+              </div>
             </div>
 
             <div className={styles.sprlFlowRow}>
               <span className={styles.sprlFlowLabel}>Apellido Materno:</span>
-              <input
-                className={styles.sprlFlowInput}
-                placeholder="Escriba aquí..."
-                value={apellidoMaterno}
-                onChange={event => setApellidoMaterno(event.target.value.toUpperCase())}
-              />
+              <div>
+                <div className={styles.sprlFlowInputStatusWrap}>
+                  <input
+                    className={styles.sprlFlowInput}
+                    placeholder="Escriba aquí..."
+                    name='apellidoMaterno'
+                    value={apellidoMaterno}
+                    onChange={event => handleNameChange(event.target.value, setApellidoMaterno, setApellidoMaternoError)}
+                  />
+                  <span
+                    className={`${styles.sprlFlowRealtimeCheck} ${apellidoMaternoTieneValor ? styles.sprlFlowRealtimeCheckVisible : ''} ${!apellidoMaternoValido && apellidoMaternoTieneValor ? styles.sprlFlowRealtimeCheckInvalid : ''}`}
+                    aria-hidden="true"
+                  >
+                    {apellidoMaternoValido ? '✓' : '✕'}
+                  </span>
+                </div>
+                {apellidoMaternoError && <span className={styles.sprlFlowFieldError}>{apellidoMaternoError}</span>}
+              </div>
             </div>
 
             <div className={styles.sprlFlowRow}>
               <span className={styles.sprlFlowLabel}>Nombres *:</span>
-              <input
-                className={styles.sprlFlowInput}
-                placeholder="Escriba aquí..."
-                value={nombres}
-                onChange={event => setNombres(event.target.value.toUpperCase())}
-              />
+              <div>
+                <div className={styles.sprlFlowInputStatusWrap}>
+                  <input
+                    className={styles.sprlFlowInput}
+                    placeholder="Escriba aquí..."
+                    name='nombres'
+                    value={nombres}
+                    onChange={event => {
+                      handleNameChange(event.target.value, setNombres, setNombresError)
+                      if (event.target.value.trim()) {
+                        setRequiredErrors(current => ({ ...current, nombres: false }))
+                      }
+                    }}
+                  />
+                  <span
+                    className={`${styles.sprlFlowRealtimeCheck} ${nombresTieneValor ? styles.sprlFlowRealtimeCheckVisible : ''} ${!nombresValido && nombresTieneValor ? styles.sprlFlowRealtimeCheckInvalid : ''}`}
+                    aria-hidden="true"
+                  >
+                    {nombresValido ? '✓' : '✕'}
+                  </span>
+                </div>
+                {requiredErrors.nombres && <span className={styles.sprlFlowFieldError}>Este campo es obligatorio.</span>}
+                {!requiredErrors.nombres && nombresError && <span className={styles.sprlFlowFieldError}>{nombresError}</span>}
+              </div>
             </div>
           </div>
         </div>
@@ -453,13 +1233,28 @@ export function VigenciaPoderPersonasJuridicasFlow({ onBack, certificate, onToke
         </div>
 
         <label className={styles.sprlFlowRadio} style={{ marginTop: 18, alignItems: 'flex-start' }}>
-          <input type="checkbox" style={{ marginTop: 4 }} />
+          <input
+            type="checkbox"
+            style={{ marginTop: 4 }}
+            checked={acceptDeclaration}
+            onChange={event => {
+              setAcceptDeclaration(event.target.checked)
+              if (event.target.checked) {
+                setRequiredErrors(current => ({ ...current, declaration: false }))
+              }
+            }}
+          />
           <span style={{ color: '#4b6b00', lineHeight: 1.6 }}>
             Declaro conocer las implicancias del servicio de publicidad registral solicitado: "Certificado de Vigencia
             de Poder del Registro de Personas Jurídicas" acredita las facultades vigentes de un representante o
             apoderado.
           </span>
         </label>
+
+        <div className={styles.sprlFlowDeclarationStatus} aria-live="polite">
+          {acceptDeclaration ? '✓ Declaración aceptada' : 'Debes marcar la declaración para continuar'}
+        </div>
+        {requiredErrors.declaration && <div className={styles.sprlFlowFieldError}>Este campo es obligatorio.</div>}
 
         <div className={styles.sprlFlowActions} style={{ marginTop: 24 }}>
           <button type="button" className={styles.sprlFlowButtonSecondary} onClick={onBack}>
@@ -525,16 +1320,25 @@ export function VigenciaPoderPersonasJuridicasFlow({ onBack, certificate, onToke
                     {submitSummary.message}
                   </p>
                 )}
+                <p className={styles.sprlSummarySmall}>
+                  Al hacer click en <strong>Ir a pagar</strong>, SUNARP abre la misma URL y cambia la vista internamente al formulario de pago.
+                </p>
               </div>
 
               <div className={styles.sprlSummaryFooter}>
                 <button type="button" className={styles.sprlSummarySecondary} onClick={() => setShowResumen(false)}>
                   Cancelar
                 </button>
-                <button type="button" className={styles.sprlSummaryPrimary} onClick={handleCerrarResumen}>
-                  Cerrar
+                <button type="button" className={styles.sprlSummaryPrimary} onClick={() => void handleIrAPagar()} disabled={payLoading}>
+                  {payLoading ? 'Preparando...' : 'Ir a pagar'}
                 </button>
               </div>
+
+              {payError && (
+                <div className={styles.sprlSummarySuccess} style={{ background: 'rgba(192, 57, 43, 0.08)', borderColor: 'rgba(192, 57, 43, 0.35)', color: '#9d1f11' }}>
+                  {payError}
+                </div>
+              )}
 
               {submitted && (
                 <div className={styles.sprlSummarySuccess}>

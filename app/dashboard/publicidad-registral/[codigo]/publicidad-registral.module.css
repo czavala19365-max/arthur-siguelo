@@ -283,6 +283,40 @@
   box-sizing: border-box;
 }
 
+.sprlFlowInputStatusWrap {
+  position: relative;
+}
+
+.sprlFlowRealtimeCheck {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #95c11f;
+  font-family: var(--font-body);
+  font-size: 16px;
+  font-weight: 700;
+  opacity: 0;
+  transition: opacity 120ms ease-in-out;
+  pointer-events: none;
+}
+
+.sprlFlowRealtimeCheckVisible {
+  opacity: 1;
+}
+
+.sprlFlowRealtimeCheckInvalid {
+  color: #c0392b;
+}
+
+.sprlFlowFieldError {
+  display: inline-block;
+  margin-top: 6px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: #c0392b;
+}
+
 .sprlFlowSelect,
 .sprlFlowInput {
   height: 34px;
@@ -379,6 +413,14 @@
   font-size: 13px;
   color: var(--muted);
   line-height: 1.6;
+}
+
+.sprlFlowDeclarationStatus {
+  margin-top: 6px;
+  margin-left: 28px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: #4b6b00;
 }
 
 .sprlFlowFooterNote {
@@ -605,6 +647,211 @@
   color: #4b6b00;
 }
 
+.sprlGatewayHeaderText {
+  font-family: var(--font-body);
+  font-size: 28px;
+  color: #5a6d83;
+  margin-bottom: 10px;
+}
+
+.sprlGatewayProgressBar {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  max-width: 340px;
+  margin-bottom: 24px;
+}
+
+.sprlGatewayProgressBar span {
+  height: 4px;
+  display: block;
+}
+
+.sprlGatewayProgressOne {
+  background: #00a7a0;
+}
+
+.sprlGatewayProgressTwo {
+  background: #94be00;
+}
+
+.sprlGatewayProgressThree {
+  background: #f0b200;
+}
+
+.sprlGatewayProgressFour {
+  background: #f2522f;
+}
+
+.sprlGatewayPanel {
+  border: 1px solid #dddddd;
+  border-radius: 8px;
+  background: #f7f7f7;
+  padding: 18px;
+}
+
+.sprlGatewayTitle {
+  margin: 0 0 14px;
+  font-family: var(--font-body);
+  font-size: 36px;
+  color: #001d3a;
+}
+
+.sprlGatewayFormBox {
+  background: #fff;
+  border: 1px solid #e3e3e3;
+  border-radius: 8px;
+  padding: 26px;
+}
+
+.sprlGatewayGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px 18px;
+  align-items: start;
+}
+
+.sprlGatewayRow,
+.sprlGatewayRowWide {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  align-items: center;
+  gap: 10px;
+}
+
+.sprlGatewayRowWide {
+  grid-column: 1 / -1;
+}
+
+.sprlGatewayActions {
+  display: flex;
+  justify-content: center;
+  margin-top: 12px;
+}
+
+.sprlGatewayMeta {
+  margin-top: 12px;
+  text-align: center;
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.sprlGatewayWarningTitle {
+  margin: 24px 0 10px;
+  font-family: var(--font-body);
+  font-size: 32px;
+  color: #ff1f1f;
+  font-weight: 700;
+}
+
+.sprlGatewayNotes {
+  margin: 0;
+  padding-left: 22px;
+  font-family: var(--font-body);
+  font-size: 24px;
+  line-height: 1.55;
+  color: #0d1c2f;
+}
+
+.sprlVisaModalOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2300;
+  background: rgba(0, 0, 0, 0.66);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.sprlVisaModalCard {
+  position: relative;
+  width: min(430px, 100%);
+  background: #fff;
+  border-radius: 6px;
+  border: 1px solid #dadada;
+  padding: 20px 24px 22px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.35);
+}
+
+.sprlVisaModalClose {
+  position: absolute;
+  right: 10px;
+  top: 8px;
+  border: none;
+  background: transparent;
+  color: #9da3ab;
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.sprlVisaModalBrand {
+  font-family: var(--font-body);
+  font-size: 42px;
+  font-weight: 700;
+  color: #4b5f79;
+  text-align: center;
+  margin: 8px 0 10px;
+  text-transform: lowercase;
+}
+
+.sprlVisaModalTitle {
+  margin: 0 0 14px;
+  font-family: var(--font-body);
+  font-size: 19px;
+  color: #2e343b;
+  font-weight: 700;
+}
+
+.sprlVisaOptionRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-body);
+  font-size: 16px;
+  color: #3b434d;
+  margin-top: 10px;
+}
+
+.sprlVisaOptionHint {
+  margin: 8px 0 6px 26px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: #5f666e;
+}
+
+.sprlVisaCardMarks {
+  margin-left: 26px;
+  font-family: var(--font-body);
+  font-size: 26px;
+  font-weight: 700;
+  color: #1855cf;
+}
+
+.sprlVisaYapeMark {
+  margin: 4px 0 0 26px;
+  font-family: var(--font-body);
+  font-size: 24px;
+  font-weight: 700;
+  color: #7f3db8;
+}
+
+.sprlVisaContinueButton {
+  margin-top: 20px;
+  width: 100%;
+  border: none;
+  border-radius: 4px;
+  background: #26bb3b;
+  color: #fff;
+  font-family: var(--font-body);
+  font-size: 20px;
+  font-weight: 700;
+  padding: 12px 16px;
+  cursor: pointer;
+}
+
 @media (max-width: 768px) {
 
   .sprlServicePage,
@@ -675,5 +922,26 @@
   .sprlSummarySecondary,
   .sprlSummaryPrimary {
     width: 100%;
+  }
+
+  .sprlGatewayTitle {
+    font-size: 24px;
+  }
+
+  .sprlGatewayGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .sprlGatewayRow,
+  .sprlGatewayRowWide {
+    grid-template-columns: 1fr;
+  }
+
+  .sprlGatewayWarningTitle {
+    font-size: 22px;
+  }
+
+  .sprlGatewayNotes {
+    font-size: 16px;
   }
 }
