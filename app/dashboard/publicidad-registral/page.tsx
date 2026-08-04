@@ -537,6 +537,39 @@ export default function PublicidadRegistralPage() {
                 ))}
               </div>
             )}
+            <div style={{ marginTop: 40, fontFamily: 'var(--font-display)', color: 'var(--ink)' }}>
+              <h2 style={{ fontSize: 22 }}>PREPAGAR</h2>
+              <Link
+                href="/dashboard/publicidad-registral/recargar-saldo"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  marginTop: 10,
+                  padding: '12px 16px',
+                  border: '1px solid var(--line)',
+                  borderLeft: '3px solid var(--accent)',
+                  background: 'var(--paper)',
+                  color: 'var(--ink)',
+                  fontFamily: 'var(--font-body)',
+                  fontSize: 14,
+                  textDecoration: 'none',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.03)',
+                }}
+              >
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    width: 10,
+                    height: 10,
+                    borderRadius: '50%',
+                    background: 'var(--accent)',
+                    flexShrink: 0,
+                  }}
+                />
+                Recargar saldo
+              </Link>
+            </div>
           </div>
         )}
       </div>
