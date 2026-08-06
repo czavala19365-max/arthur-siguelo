@@ -77,7 +77,9 @@ export async function POST(req: NextRequest) {
         const result = await generateRedline({ oldBuffer, oldName, newBuffer, newName }, onProgress)
         send('done', {
           docx_base64: result.docx.toString('base64'),
+          summary_docx_base64: result.summaryDocx.toString('base64'),
           summary: result.summary,
+          changes: result.changes,
           stats: result.stats,
         })
       } catch (err) {
