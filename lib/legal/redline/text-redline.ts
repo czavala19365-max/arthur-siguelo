@@ -233,10 +233,14 @@ interface RunSegment {
 
 interface ParagraphMeta {
   index: number
-  raw: string
-  text: string       // concatenacion de w:t (unescaped)
+  raw: string             // XML actual (se actualiza tras cada edicion)
+  originalRaw: string     // XML tal como estaba en el body original
+  startInBody: number     // offset del inicio de <w:p> en el body original
+  endInBody: number       // offset del fin de </w:p> en el body original
+  text: string            // concatenacion de w:t (unescaped)
   segments: RunSegment[]
   pPr: string
+  hasComplexContent: boolean  // true si contiene imagenes, tablas anidadas u otros elementos que no manejamos
 }
 
 function applyEditsToDocx(
@@ -256,13 +260,11 @@ function applyEditsToDocx(
   const nextId = () => idCounter++
 
   const now = new Date().toISOString()
-  const fragments: string[] = paragraphs.map(p => p.raw)
 
   for (const edit of plan.edits) {
     if (edit.kind === 'substitution' && edit.old_text && edit.new_text !== undefined) {
       const applied = applyGranularSubstitution(
         paragraphs,
-        fragments,
         edit.old_text,
         edit.new_text,
         edit.context_before,
@@ -273,7 +275,6 @@ function applyEditsToDocx(
     } else if (edit.kind === 'insertion' && edit.after_text && edit.new_text !== undefined) {
       const applied = applyParagraphInsertion(
         paragraphs,
-        fragments,
         edit.after_text,
         edit.new_text,
         edit.context_before,
@@ -284,7 +285,6 @@ function applyEditsToDocx(
     } else if (edit.kind === 'deletion' && edit.old_text) {
       const applied = applyGranularDeletion(
         paragraphs,
-        fragments,
         edit.old_text,
         edit.context_before,
         nextId,
@@ -296,7 +296,20 @@ function applyEditsToDocx(
     }
   }
 
-  const newBody = fragments.join('')
+  // Reemplazo por indices sobre el body original — preserva todo el markup
+  // NO-parrafo (tablas w:tbl/w:tr/w:tc, secciones w:sectPr, bookmarks, etc.)
+  // que mi enfoque anterior perdia al hacer fragments.join(''). Aplicamos en
+  // orden inverso para no invalidar los indices de las modificaciones anteriores.
+  const modifications = paragraphs
+    .filter(p => p.raw !== p.originalRaw)
+    .map(p => ({ start: p.startInBody, end: p.endInBody, replacement: p.raw }))
+    .sort((a, b) => b.start - a.start)
+
+  let newBody = body
+  for (const mod of modifications) {
+    newBody = newBody.slice(0, mod.start) + mod.replacement + newBody.slice(mod.end)
+  }
+
   const newXml = pre + newBody + post
   zip.file('word/document.xml', newXml)
   return { buffer: zip.generate({ type: 'nodebuffer' }) as Buffer, stats }
@@ -312,7 +325,6 @@ function applyEditsToDocx(
  */
 function applyGranularSubstitution(
   paragraphs: ParagraphMeta[],
-  fragments: string[],
   oldText: string,
   newText: string,
   contextBefore: string | undefined,
@@ -325,6 +337,7 @@ function applyGranularSubstitution(
   if (target === null) return false
   const { index, matchStart } = target
   const paragraph = paragraphs[index]
+  if (paragraph.hasComplexContent) return false // no tocamos parrafos con imagenes / tablas anidadas
   const matchEnd = matchStart + oldText.length
 
   const prefixXml = renderRunsForRange(paragraph.segments, 0, matchStart)
@@ -340,7 +353,6 @@ function applyGranularSubstitution(
   )
 
   const newPXml = `<w:p>${paragraph.pPr}${prefixXml}${innerXml}${suffixXml}</w:p>`
-  fragments[index] = newPXml
   paragraphs[index] = {
     ...paragraph,
     raw: newPXml,
@@ -416,13 +428,12 @@ function renderInlineDiff(
 
 function applyGranularDeletion(
   paragraphs: ParagraphMeta[],
-  fragments: string[],
   oldText: string,
   contextBefore: string | undefined,
   nextId: () => number,
   isoDate: string,
 ): boolean {
-  return applyGranularSubstitution(paragraphs, fragments, oldText, '', contextBefore, nextId, isoDate)
+  return applyGranularSubstitution(paragraphs, oldText, '', contextBefore, nextId, isoDate)
 }
 
 /**
@@ -431,7 +442,6 @@ function applyGranularDeletion(
  */
 function applyParagraphInsertion(
   paragraphs: ParagraphMeta[],
-  fragments: string[],
   afterText: string,
   newParagraph: string,
   contextBefore: string | undefined,
@@ -450,7 +460,11 @@ function applyParagraphInsertion(
     `<w:r>${rPr}<w:t xml:space="preserve">${escapeXml(newParagraph)}</w:t></w:r>` +
     `</w:ins>`
   const newPXml = `<w:p>${pPrWithIns}${insXml}</w:p>`
-  fragments[index] = fragments[index] + newPXml
+  // Adjuntamos el parrafo nuevo AL raw del anclaje. El reemplazo por indices al
+  // final del pipeline substituira [startInBody, endInBody] del ancla por
+  // anchor.raw actual, que ya incluye el nuevo parrafo. Preserva la posicion
+  // exacta en el body original (incluso dentro de una tabla o seccion).
+  paragraphs[index] = { ...anchor, raw: anchor.raw + newPXml }
   return true
 }
 
@@ -482,12 +496,32 @@ function parseParagraphs(body: string): ParagraphMeta[] {
     paragraphs.push({
       index: index++,
       raw,
+      originalRaw: raw,
+      startInBody: m.index,
+      endInBody: m.index + raw.length,
       text: segments.map(s => s.text).join(''),
       segments,
       pPr: extractPPr(raw),
+      hasComplexContent: detectComplexContent(raw),
     })
   }
   return paragraphs
+}
+
+/**
+ * Detecta si el parrafo contiene elementos que mi reconstruccion NO preserva:
+ * imagenes (<w:drawing>), pictures viejas (<w:pict>), campos complejos
+ * (<w:fldChar>), objetos embebidos, SmartArt. Si detectamos alguno, marcamos
+ * el parrafo como "complex" y no lo modificamos — mejor perder un cambio de
+ * texto que romper una imagen o una tabla.
+ */
+function detectComplexContent(pXml: string): boolean {
+  return (
+    pXml.includes('<w:drawing') ||
+    pXml.includes('<w:pict') ||
+    pXml.includes('<w:object') ||
+    pXml.includes('<w:fldChar')
+  )
 }
 
 /**
