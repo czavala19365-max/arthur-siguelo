@@ -1,3 +1,4 @@
+import { diffWordsWithSpace } from 'diff'
 import mammoth from 'mammoth'
 import PizZip from 'pizzip'
 import { getAnthropicClient } from '@/lib/legal/anthropic'
@@ -302,8 +303,12 @@ function applyEditsToDocx(
 }
 
 /**
- * Sustituye granularmente: envuelve SOLO el fragmento cambiado con <w:del> +
- * <w:ins>, preservando el resto del parrafo intacto con su formato original.
+ * Sustituye granularmente. Si `oldText` y `newText` son similares (varias
+ * palabras iguales entre ambos), hace un diff palabra-a-palabra intra-fragmento
+ * y emite multiples <w:del> + <w:ins> pequenos SOLO donde realmente cambia el
+ * texto, preservando las palabras identicas como runs normales. Esto evita
+ * que el redline marque parrafos enteros cuando solo cambian una o dos
+ * palabras (p. ej. "S/ 300" -> "S/ 200").
  */
 function applyGranularSubstitution(
   paragraphs: ParagraphMeta[],
@@ -314,40 +319,99 @@ function applyGranularSubstitution(
   nextId: () => number,
   isoDate: string,
 ): boolean {
+  if (oldText === newText) return true // no-op
+
   const target = findParagraph(paragraphs, oldText, contextBefore)
   if (target === null) return false
   const { index, matchStart } = target
   const paragraph = paragraphs[index]
-
-  const prefix = paragraph.text.slice(0, matchStart)
-  const suffix = paragraph.text.slice(matchStart + oldText.length)
-
-  const rPrForEdit = findRPrAtOffset(paragraph.segments, matchStart)
+  const matchEnd = matchStart + oldText.length
 
   const prefixXml = renderRunsForRange(paragraph.segments, 0, matchStart)
-  const suffixXml = renderRunsForRange(paragraph.segments, matchStart + oldText.length, paragraph.text.length)
+  const suffixXml = renderRunsForRange(paragraph.segments, matchEnd, paragraph.text.length)
 
-  const delXml =
-    `<w:del w:id="${nextId()}" w:author="${AUTHOR}" w:date="${isoDate}">` +
-    `<w:r>${rPrForEdit}<w:delText xml:space="preserve">${escapeXml(oldText)}</w:delText></w:r>` +
-    `</w:del>`
+  const innerXml = renderInlineDiff(
+    oldText,
+    newText,
+    paragraph.segments,
+    matchStart,
+    nextId,
+    isoDate,
+  )
 
-  const insXml = newText
-    ? `<w:ins w:id="${nextId()}" w:author="${AUTHOR}" w:date="${isoDate}">` +
-      `<w:r>${rPrForEdit}<w:t xml:space="preserve">${escapeXml(newText)}</w:t></w:r>` +
-      `</w:ins>`
-    : ''
-
-  const newPXml = `<w:p>${paragraph.pPr}${prefixXml}${delXml}${insXml}${suffixXml}</w:p>`
+  const newPXml = `<w:p>${paragraph.pPr}${prefixXml}${innerXml}${suffixXml}</w:p>`
   fragments[index] = newPXml
-  // Actualizar el paragraph object para que ediciones posteriores no cazen el fragmento viejo
   paragraphs[index] = {
     ...paragraph,
     raw: newPXml,
-    text: prefix + newText + suffix,
-    segments: [{ text: prefix + newText + suffix, rPr: paragraph.segments[0]?.rPr ?? '' }],
+    text: paragraph.text.slice(0, matchStart) + newText + paragraph.text.slice(matchEnd),
+    // Simplificamos los segments porque el texto cambio y las offsets originales
+    // ya no son validos. Ediciones posteriores contra este parrafo funcionan
+    // pero pierden granularidad de rPr — es una compensacion aceptable.
+    segments: [
+      {
+        text: paragraph.text.slice(0, matchStart) + newText + paragraph.text.slice(matchEnd),
+        rPr: paragraph.segments[0]?.rPr ?? '',
+      },
+    ],
   }
   return true
+}
+
+/**
+ * Compara `oldText` y `newText` con un diff palabra-a-palabra y devuelve el
+ * XML de runs (incluyendo <w:del> y <w:ins>) que reproduce la transicion,
+ * conservando las palabras identicas como runs normales sin marcar. El
+ * parametro `segments` es la lista completa de segmentos del parrafo, y
+ * `absStart` es el offset absoluto del inicio de `oldText` dentro del texto
+ * plano del parrafo — se usa para recuperar el rPr correcto de cada region.
+ */
+function renderInlineDiff(
+  oldText: string,
+  newText: string,
+  segments: RunSegment[],
+  absStart: number,
+  nextId: () => number,
+  isoDate: string,
+): string {
+  const changes = diffWordsWithSpace(oldText, newText)
+  const parts: string[] = []
+  let cursor = absStart // avanza sobre el texto plano del parrafo original
+
+  for (const change of changes) {
+    if (!change.added && !change.removed) {
+      // Fragmento identico en ambos: preservar como runs normales con el rPr
+      // correcto de cada segmento original.
+      const chunkStart = cursor
+      const chunkEnd = cursor + change.value.length
+      parts.push(renderRunsForRange(segments, chunkStart, chunkEnd))
+      cursor = chunkEnd
+    } else if (change.removed) {
+      // Fragmento del original que desaparece: envolver en <w:del> usando el
+      // rPr del inicio de la region.
+      const chunkStart = cursor
+      const chunkEnd = cursor + change.value.length
+      const rPr = findRPrAtOffset(segments, chunkStart)
+      parts.push(
+        `<w:del w:id="${nextId()}" w:author="${AUTHOR}" w:date="${isoDate}">` +
+          `<w:r>${rPr}<w:delText xml:space="preserve">${escapeXml(change.value)}</w:delText></w:r>` +
+          `</w:del>`,
+      )
+      cursor = chunkEnd
+    } else if (change.added) {
+      // Fragmento nuevo: envolver en <w:ins> usando el rPr de la posicion
+      // actual en el original (no avanzamos el cursor porque el fragmento
+      // nuevo no consume caracteres del original).
+      const rPr = findRPrAtOffset(segments, cursor)
+      parts.push(
+        `<w:ins w:id="${nextId()}" w:author="${AUTHOR}" w:date="${isoDate}">` +
+          `<w:r>${rPr}<w:t xml:space="preserve">${escapeXml(change.value)}</w:t></w:r>` +
+          `</w:ins>`,
+      )
+    }
+  }
+
+  return parts.join('')
 }
 
 function applyGranularDeletion(
