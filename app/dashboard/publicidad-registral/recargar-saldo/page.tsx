@@ -1,4 +1,8 @@
+'use client'
+
+import { useState } from 'react'
 import Link from 'next/link'
+import VisaGatewayView, { type VisaGatewayFieldErrors } from '@/components/publicidad-registral/VisaGatewayView'
 
 const PAGE_PADDING = '48px 64px'
 const PAGE_PADDING_MOBILE = '32px 20px'
@@ -46,46 +50,8 @@ const styles = {
     fontWeight: 700,
     color: 'var(--ink)',
   },
-  selectorRow: {
-    display: 'grid',
-    gridTemplateColumns: '220px 1fr',
-    gap: 18,
-    alignItems: 'start',
-  },
-  methodCol: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: 18,
-  },
-  methodOption: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 10,
-    fontFamily: 'var(--font-body)',
-    fontSize: 15,
-    color: 'var(--ink)',
-  },
-  brand: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: 8,
-    fontFamily: 'var(--font-mono)',
-    fontSize: 18,
-    fontWeight: 700,
-    color: 'var(--ink)',
-    marginTop: 8,
-  },
-  cardBrand: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: 8,
-    padding: '4px 0',
-    fontFamily: 'var(--font-mono)',
-    fontSize: 14,
-    color: 'var(--ink)',
-  },
   inputRow: {
-    marginTop: 28,
+    marginTop: 20,
     display: 'grid',
     gridTemplateColumns: '170px minmax(220px, 280px)',
     gap: 12,
@@ -156,21 +122,195 @@ const styles = {
     textDecoration: 'none',
     color: 'var(--muted)',
   },
+  errorBox: {
+    marginTop: 16,
+    background: 'rgba(192, 57, 43, 0.08)',
+    border: '1px solid rgba(192, 57, 43, 0.35)',
+    color: '#9d1f11',
+    borderRadius: 10,
+    padding: '14px 16px',
+    fontFamily: 'var(--font-body)',
+    fontSize: 14,
+    lineHeight: 1.5,
+  },
+  loadingBox: {
+    marginTop: 16,
+    padding: '14px 16px',
+    border: '1px solid var(--line)',
+    background: 'var(--surface)',
+    borderRadius: 10,
+    fontFamily: 'var(--font-mono)',
+    fontSize: 11,
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.08em',
+    color: 'var(--muted)',
+  },
 } as const
 
+type CheckMontoResponse = {
+  ok?: boolean
+  error?: string
+  data?: {
+    purchase?: string
+    monto?: string
+  }
+  upstream?: {
+    code?: string
+    title?: string
+    description?: string
+  }
+}
+
+function normalizeMonto(value: string) {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed) || parsed <= 0) return ''
+  if (Number.isInteger(parsed)) return String(parsed)
+  return parsed.toFixed(2)
+}
+
 export default function RecargarSaldoPage() {
+  const [monto, setMonto] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [purchaseCode, setPurchaseCode] = useState('')
+  const [gatewayFieldErrors, setGatewayFieldErrors] = useState<VisaGatewayFieldErrors>({
+    nombre: false,
+    apellido: false,
+    email: false,
+  })
+  const [titularNombre, setTitularNombre] = useState('')
+  const [titularApellido, setTitularApellido] = useState('')
+  const [titularEmail, setTitularEmail] = useState('')
+  const [gatewayLoading, setGatewayLoading] = useState(false)
+  const [gatewayError, setGatewayError] = useState('')
+  const [showGateway, setShowGateway] = useState(false)
+  const [ipClient, setIpClient] = useState('')
+  const [sessionExtendId, setSessionExtendId] = useState('')
+
+  async function handleCheckMonto() {
+    const normalizedMonto = normalizeMonto(monto)
+    if (!normalizedMonto) {
+      setError('Ingresa un monto válido mayor a cero.')
+      return
+    }
+
+    setError('')
+    setLoading(true)
+
+    try {
+      const response = await fetch('/api/sprl/publicidad-registral/payment/check-monto-recarga', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ monto: normalizedMonto }),
+      })
+
+      const data = await response.json().catch(() => ({})) as CheckMontoResponse
+
+      if (!response.ok || !data.ok || !data.data?.purchase) {
+        throw new Error(data.error || data.upstream?.description || data.upstream?.title || 'No se pudo validar el monto.')
+      }
+
+      setPurchaseCode(data.data.purchase)
+      setTitularNombre('')
+      setTitularApellido('')
+      setTitularEmail('')
+      setGatewayFieldErrors({ nombre: false, apellido: false, email: false })
+      setGatewayError('')
+      setShowGateway(true)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo validar el monto.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleGatewayContinue() {
+    const nextErrors: VisaGatewayFieldErrors = {
+      nombre: !titularNombre.trim(),
+      apellido: !titularApellido.trim(),
+      email: !titularEmail.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(titularEmail.trim()),
+    }
+    setGatewayFieldErrors(nextErrors)
+
+    if (Object.values(nextErrors).some(Boolean)) return
+
+    setGatewayError('')
+    setGatewayLoading(true)
+
+    try {
+      const ipResponse = await fetch('https://api.ipify.org/?format=json', {
+        method: 'GET',
+        cache: 'no-store',
+      })
+      const ipData = await ipResponse.json().catch(() => ({})) as { ip?: string }
+      setIpClient(String(ipData.ip || '').trim())
+
+      // La pasarela reutilizable necesita el flow de Visa/Mastercard completo más adelante.
+      // Aquí solo dejamos lista la vista interna tal como SUNARP.
+      const infoResponse = await fetch('/api/sprl/publicidad-registral/payment/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: 'visa_mastercard',
+          action: 'info-boton',
+          nombre: titularNombre,
+          apellido: titularApellido,
+          email: titularEmail,
+          purchase: purchaseCode,
+          importe: normalizeMonto(monto),
+          ipClient: String(ipData.ip || '').trim(),
+        }),
+      })
+
+      const infoData = await infoResponse.json().catch(() => ({})) as { ok?: boolean; error?: string; data?: { extendSessionId?: string } }
+      if (!infoResponse.ok || !infoData.ok) {
+        throw new Error(infoData.error || 'No se pudo preparar la pasarela.')
+      }
+
+      setSessionExtendId(String(infoData.data?.extendSessionId || '').trim())
+    } catch (err) {
+      setGatewayError(err instanceof Error ? err.message : 'No se pudo preparar la pasarela.')
+    } finally {
+      setGatewayLoading(false)
+    }
+  }
+
+  if (showGateway) {
+    return (
+      <VisaGatewayView
+        purchaseCode={purchaseCode}
+        monto={normalizeMonto(monto) || monto}
+        titularNombre={titularNombre}
+        titularApellido={titularApellido}
+        titularEmail={titularEmail}
+        ipClient={ipClient}
+        sessionExtendId={sessionExtendId}
+        continueLoading={gatewayLoading}
+        payError={gatewayError}
+        fieldErrors={gatewayFieldErrors}
+        onNombreChange={value => {
+          setTitularNombre(value)
+          if (value.trim()) setGatewayFieldErrors(current => ({ ...current, nombre: false }))
+        }}
+        onApellidoChange={value => {
+          setTitularApellido(value)
+          if (value.trim()) setGatewayFieldErrors(current => ({ ...current, apellido: false }))
+        }}
+        onEmailChange={value => {
+          setTitularEmail(value)
+          if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())) setGatewayFieldErrors(current => ({ ...current, email: false }))
+        }}
+        onContinue={() => void handleGatewayContinue()}
+        onBack={() => setShowGateway(false)}
+        backLabel="Volver al monto"
+        headerLabel="PASARELA ELECTRONICA DE PAGOS"
+      />
+    )
+  }
+
   return (
     <>
-      <style>{`
-        .sprl-recharge-page { padding: ${PAGE_PADDING}; }
-        @media (max-width: 768px) {
-          .sprl-recharge-page { padding: ${PAGE_PADDING_MOBILE}; }
-          .sprl-recharge-selector { grid-template-columns: 1fr !important; }
-          .sprl-recharge-input-row { grid-template-columns: 1fr !important; }
-          .sprl-recharge-input-label { text-align: left !important; }
-          .sprl-recharge-method-col { gap: 14px; }
-        }
-      `}</style>
+      <style>{`\n        .sprl-recharge-page { padding: ${PAGE_PADDING}; }\n        @media (max-width: 768px) {\n          .sprl-recharge-page { padding: ${PAGE_PADDING_MOBILE}; }\n          .sprl-recharge-selector { grid-template-columns: 1fr !important; }\n          .sprl-recharge-input-row { grid-template-columns: 1fr !important; }\n          .sprl-recharge-input-label { text-align: left !important; }\n          .sprl-recharge-method-col { gap: 14px; }\n        }\n      `}</style>
 
       <div className="sprl-recharge-page" style={styles.page}>
         <div style={styles.shell}>
@@ -187,45 +327,34 @@ export default function RecargarSaldoPage() {
           <div className="sprl-recharge-selector" style={styles.banner}>
             <h2 style={styles.bannerTitle}>Recargar saldo</h2>
 
-            <div style={styles.selectorRow}>
-              <div className="sprl-recharge-method-col" style={styles.methodCol}>
-                <label style={styles.methodOption}>
-                  <input type="radio" name="medioPago" defaultChecked />
-                  <span>Tarjeta de Crédito o Débito</span>
-                </label>
-                <div style={{ paddingLeft: 28 }}>
-                  <div style={styles.brand}>
-                    <span style={{ color: '#1a4aa0' }}>VISA</span>
-                    <span style={{ color: '#e53935' }}>MasterCard</span>
-                  </div>
-                </div>
+            <div className="sprl-recharge-input-row" style={styles.inputRow}>
+              <div className="sprl-recharge-input-label" style={styles.inputLabel}>Monto *:</div>
+              <input
+                className="sprl-recharge-input"
+                style={styles.input}
+                placeholder="Escriba aquí..."
+                inputMode="decimal"
+                value={monto}
+                onChange={event => {
+                  setMonto(event.target.value)
+                  if (error) setError('')
+                }}
+              />
+            </div>
 
-                <label style={styles.methodOption}>
-                  <input type="radio" name="medioPago" />
-                  <span>Via pagalo pe</span>
-                </label>
-                <div style={{ paddingLeft: 28 }}>
-                  <div style={styles.cardBrand}>pagalo.pe</div>
-                </div>
-              </div>
+            <div style={styles.buttonRow}>
+              <button type="button" style={styles.continueButton} onClick={() => void handleCheckMonto()} disabled={loading}>
+                {loading ? 'Validando...' : '→ Continuar'}
+              </button>
+            </div>
 
-              <div>
-                <div className="sprl-recharge-input-row" style={styles.inputRow}>
-                  <div className="sprl-recharge-input-label" style={styles.inputLabel}>Monto *:</div>
-                  <input className="sprl-recharge-input" style={styles.input} placeholder="Escriba aquí..." defaultValue="" />
-                </div>
-                <div style={styles.buttonRow}>
-                  <button type="button" style={styles.continueButton}>
-                    → Continuar
-                  </button>
-                </div>
+            {error ? <div style={styles.errorBox}>{error}</div> : null}
+            {loading ? <div style={styles.loadingBox}>Validando monto con SUNARP...</div> : null}
 
-                <div style={styles.footerNote}>
-                  Para realizar correctamente el pago, por favor verificar el bloqueo de ventanas emergentes de su navegador.
-                  <br />
-                  Para mayor seguridad, adicione una contraseña personal al pago de nuestro servicio y evite el uso no autorizado de su tarjeta. Afilié su tarjeta a Verified by Visa.
-                </div>
-              </div>
+            <div style={styles.footerNote}>
+              Para realizar correctamente el pago, por favor verificar el bloqueo de ventanas emergentes de su navegador.
+              <br />
+              Para mayor seguridad, adicione una contraseña personal al pago de nuestro servicio y evite el uso no autorizado de su tarjeta. Afilié su tarjeta a Verified by Visa.
             </div>
           </div>
         </div>
