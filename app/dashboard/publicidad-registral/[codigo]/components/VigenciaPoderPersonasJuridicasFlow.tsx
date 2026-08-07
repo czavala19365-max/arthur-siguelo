@@ -1518,7 +1518,7 @@ export function VigenciaPoderPersonasJuridicasFlow({ onBack, certificate, onToke
 
               <div className={styles.sprlSummaryFooter}>
                 <button type="button" className={styles.sprlSummarySecondary} onClick={() => setShowResumen(false)}>
-                  Cancelar
+                  Corregir datos
                 </button>
                 <button type="button" className={styles.sprlSummaryPrimary} onClick={() => void handleIrAPagar()} disabled={payLoading}>
                   {payLoading ? 'Preparando...' : 'Ir a pagar'}

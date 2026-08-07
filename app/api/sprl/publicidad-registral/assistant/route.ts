@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import {
   canSubmitVigenciaAssistantState,
   createEmptyVigenciaAssistantState,
-  getNextVigenciaField,
+  getVigenciaMissingFields,
   mergeAssistantFieldUpdates,
   isVigenciaPoderFieldKey,
   normalizeAssistantFieldValue,
@@ -53,6 +53,156 @@ function tryParseJson(text: string) {
   }
 }
 
+type UserIntent =
+  | 'create'
+  | 'update'
+  | 'confirm'
+
+type ExtractedEntities = {
+  numero?: string
+  oficinaRegistral?: string
+  asiento?: string
+  cargoApoderado?: string
+  apellidoPaterno?: string
+  apellidoMaterno?: string
+  nombres?: string
+  razonSocial?: string
+  declarationAccepted?: boolean
+}
+
+function detectIntent(text: string): UserIntent {
+
+  const value = text.toLowerCase()
+
+  if (
+    /\b(cambia|cambiar|corrige|corregir|modifica|modificar|actualiza|actualizar|reemplaza)\b/.test(value)
+  ) {
+    return 'update'
+  }
+
+  if (
+    /^(solicitar|confirmo|confirmar|enviar|envía|proceder|adelante)\b/.test(value)
+  ) {
+    return 'confirm'
+  }
+
+  return 'create'
+}
+
+function cleanMessage(text: string) {
+
+  return text
+
+    .replace(
+      /^quiero\s+/i,
+      ''
+    )
+
+    .replace(
+      /^necesito\s+/i,
+      ''
+    )
+
+    .replace(
+      /^una\s+/i,
+      ''
+    )
+
+    .replace(
+      /^vigencia\s+de\s+poder(?:\s+de\s+personas\s+jur[íi]dicas)?\s+de\s+/i,
+      ''
+    )
+
+    .replace(
+      /^(cambia|corrige|actualiza|modifica)\s+(el\s+)?nombre\s+a\s+/i,
+      ''
+    )
+
+    .replace(
+      /^(cambia|corrige|actualiza|modifica)\s+/i,
+      ''
+    )
+
+    .replace(
+      /\s+/g,
+      ' '
+    )
+
+    .trim()
+
+}
+
+function applyEntityUpdates(
+
+  state: VigenciaPoderAssistantState,
+
+  updates: ExtractedEntities,
+
+  intent: UserIntent
+
+): VigenciaPoderAssistantState {
+
+  const next = { ...state }
+
+  const overwrite = intent === 'update'
+
+  const fields: Array<keyof ExtractedEntities> = [
+
+    'numero',
+
+    'oficinaRegistral',
+
+    'asiento',
+
+    'cargoApoderado',
+
+    'apellidoPaterno',
+
+    'apellidoMaterno',
+
+    'nombres'
+
+  ]
+
+  for (const field of fields) {
+
+    const value = updates[field]
+
+    if (!value)
+      continue
+
+    if (overwrite) {
+
+      ;(next as any)[field] = normalizeAssistantFieldValue(
+        field as VigenciaPoderFieldKey,
+        value
+      )
+
+    } else {
+
+      if (!(next as any)[field]) {
+
+        ;(next as any)[field] = normalizeAssistantFieldValue(
+          field as VigenciaPoderFieldKey,
+          value
+        )
+
+      }
+
+    }
+
+  }
+
+  if (updates.declarationAccepted) {
+
+    next.declarationAccepted = true
+
+  }
+
+  return next
+
+}
+
 function normalizeState(partial?: Partial<VigenciaPoderAssistantState>): VigenciaPoderAssistantState {
   const base = createEmptyVigenciaAssistantState()
   return {
@@ -70,14 +220,23 @@ function normalizeState(partial?: Partial<VigenciaPoderAssistantState>): Vigenci
 }
 
 function buildDeterministicResponse(state: VigenciaPoderAssistantState, moduleKey: PublicidadRegistralAssistantModuleKey): ParsedAssistantResponse {
-  const nextField = getNextVigenciaField(state)
+  const missingFields = getVigenciaMissingFields(state)
+  const nextField = missingFields[0] ?? null
   const canSubmit = canSubmitVigenciaAssistantState(state)
   const labels = VIGENCIA_FIELD_LABELS
+
+  const formatMissingFields = (fields: VigenciaPoderFieldKey[]) => {
+    const fieldLabels = fields.map(field => labels[field])
+    if (fieldLabels.length === 0) return ''
+    if (fieldLabels.length === 1) return fieldLabels[0]
+    if (fieldLabels.length === 2) return `${fieldLabels[0]} y ${fieldLabels[1]}`
+    return `${fieldLabels.slice(0, -1).join(', ')} y ${fieldLabels[fieldLabels.length - 1]}`
+  }
 
   if (!nextField && !state.declarationAccepted) {
     return {
       moduleKey,
-      message: 'Ya tengo los datos principales. Solo falta que aceptes la declaración para continuar con la solicitud.',
+      message: 'Ya tengo los datos principales. ¿Aceptas la declaración para continuar con la solicitud?',
       fieldUpdates: {},
       declarationAccepted: false,
       missingFields: [],
@@ -94,12 +253,12 @@ function buildDeterministicResponse(state: VigenciaPoderAssistantState, moduleKe
   if (!canSubmit) {
     return {
       moduleKey,
-      message: nextField
-        ? `Indícame ${labels[nextField].toLowerCase()} para continuar.`
+      message: missingFields.length > 0
+        ? `Me faltan ${formatMissingFields(missingFields)}. Envíamelos en un solo mensaje para continuar.`
         : 'Indícame el siguiente dato para continuar.',
       fieldUpdates: {},
       declarationAccepted: false,
-      missingFields: nextField ? [nextField] : [],
+      missingFields,
       nextField,
       mode: 'collecting',
       readyForReview: false,
@@ -112,7 +271,7 @@ function buildDeterministicResponse(state: VigenciaPoderAssistantState, moduleKe
 
   return {
     moduleKey,
-    message: 'Tengo todos los datos. ¿Confirmas que deseas revisar el resumen y continuar con la solicitud de vigencia de poder?',
+    message: 'Tengo todos los datos. Si están correctos, responde "SOLICITAR" para enviarlos. Si quieres corregir algo, escríbelo ahora.',
     fieldUpdates: {},
     declarationAccepted: true,
     missingFields: [],
@@ -128,11 +287,123 @@ function buildDeterministicResponse(state: VigenciaPoderAssistantState, moduleKe
 
 function maybeApplyConfirmation(state: VigenciaPoderAssistantState, lastMessage: string) {
   const lower = lastMessage.toLowerCase()
-  if (!canSubmitVigenciaAssistantState(state)) return false
-  return /^(si|sí|confirmo|confirmar|adelante|continuar|envía|enviar|ok|okay|listo)\b/.test(lower)
+  const explicitSubmit = /^(solicitar|enviar|env[íi]a|confirmo env[ií]o|confirmar env[ií]o|proceder|procedo|adelante con la solicitud)\b/.test(lower)
+  if (!explicitSubmit) return false
+
+  const missingFields = getVigenciaMissingFields(state)
+  return missingFields.length === 0 && state.declarationAccepted
 }
 
-function applyPersonNameHeuristics(state: VigenciaPoderAssistantState, text: string) {
+function looksLikeRazonSocialCandidate(text: string) {
+  const normalized = text.trim().toUpperCase().replace(/\s+/g, ' ')
+  if (normalized.length < 3) return false
+
+  const companyMarkers = [
+    /\bSOCIEDAD\b/,
+    /\bS\.?A\.?\b/,
+    /\bS\.?A\.?C\.?\b/,
+    /\bS\.?R\.?L\.?\b/,
+    /\bE\.?I\.?R\.?L\.?\b/,
+    /\bLTDA\.?\b/,
+    /\bEMPRESA\b/,
+    /\bDENOMINACI[ÓO]N\b/,
+    /\bCONSORCIO\b/,
+    /\bCOOPERATIVA\b/,
+    /\bASOCIACION\b/,
+    /\bCOMPAÑ[II]A\b/,
+    /\bC[IÍ]A\.?\b/,
+  ]
+
+  if (companyMarkers.some(pattern => pattern.test(normalized))) return true
+
+  const words = normalized.split(' ').filter(Boolean)
+  return words.length >= 2 && /[A-ZÁÉÍÓÚÜÑ]/.test(normalized) && /\d/.test(normalized)
+}
+
+function extractRazonSocialCandidate(text: string): string | null {
+
+  const clean = cleanMessage(text)
+    .replace(/[¿?¡!]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  if (!clean)
+    return null
+
+  // Si explícitamente menciona razón social o empresa
+  const explicitPatterns = [
+
+    /(?:empresa|raz[oó]n social|denominaci[oó]n)\s*(?:es|:)?\s+(.+)$/i,
+
+    /(?:de la empresa|de la sociedad)\s+(.+)$/i,
+
+  ]
+
+  for (const pattern of explicitPatterns) {
+
+    const match = clean.match(pattern)
+
+    if (match?.[1]) {
+
+      return match[1]
+        .trim()
+        .replace(/[.,;]+$/, '')
+
+    }
+
+  }
+
+  // Si parece un nombre de persona NO buscar empresa
+
+  if (looksLikePersonNameText(clean))
+    return null
+
+  // Si contiene palabras típicas de empresa
+
+  if (looksLikeRazonSocialCandidate(clean))
+    return clean
+
+  // Caso importante:
+  //
+  // Mesa 247
+  // Constructora ABC
+  // Grupo Romero
+  // Clínica Internacional
+  //
+
+  const words = clean.split(' ')
+
+  if (words.length >= 2)
+    return clean
+
+  return null
+
+}
+
+async function resolvePartidaFromRazonSocial(requestUrl: string, razonSocial: string) {
+  const endpoint = new URL('/api/personas-juridicas/buscar', requestUrl)
+  endpoint.searchParams.set('razon', razonSocial)
+  endpoint.searchParams.set('pagina', '1')
+
+  const response = await fetch(endpoint.toString(), {
+    method: 'GET',
+    headers: { Accept: 'application/json' },
+  })
+
+  if (!response.ok) return null
+
+  const data = await response.json().catch(() => null) as { resultados?: Array<{ partida?: string; oficina?: string }> } | null
+  const first = data?.resultados?.[0]
+  const partida = String(first?.partida || '').trim()
+  if (!partida) return null
+
+  return {
+    numero: partida,
+    oficinaRegistral: String(first?.oficina || '').trim(),
+  }
+}
+
+function applyPersonNameHeuristics(state: VigenciaPoderAssistantState, text: string, intent:string) {
   const nextState = { ...state }
   const normalizedText = text.trim().replace(/\s+/g, ' ')
   const tokens = normalizedText
@@ -184,41 +455,261 @@ function applyPersonNameHeuristics(state: VigenciaPoderAssistantState, text: str
   return nextState
 }
 
-function buildFallbackFromConversation(
-  moduleKey: PublicidadRegistralAssistantModuleKey,
-  state: VigenciaPoderAssistantState,
-  messages: AssistantMessage[],
-): ParsedAssistantResponse {
-  const lastUserMessage = [...messages].reverse().find(message => message.role === 'user')?.content || ''
-  if (maybeApplyConfirmation(state, lastUserMessage)) {
+function looksLikePersonNameText(text: string) {
+  const normalized = text.trim().replace(/\s+/g, ' ')
+  if (!normalized) return false
+
+  const upper = normalized.toUpperCase()
+  const blockedWords = [
+    'VIGENCIA',
+    'PODER',
+    'PARTIDA',
+    'ASIENTO',
+    'Razon Social',
+    'RAZON SOCIAL',
+    'DENOMINACION',
+    'EMPRESA',
+    'SOCIEDAD',
+    'REGISTRAL',
+    'OFICINA',
+    'BUSCA',
+    'BUSCAR',
+    'QUIERO',
+    'NECESITO',
+    'DAME',
+    'CONSULTA',
+    'CONSULTAR',
+  ]
+
+  if (blockedWords.some(word => upper.includes(word))) return false
+  if (/\d/.test(upper)) return false
+
+  const tokens = upper.split(' ').filter(Boolean)
+  return tokens.length >= 1 && tokens.length <= 4
+}
+
+function splitResponseSegments(text: string) {
+  return text
+    .replace(/[，；]/g, ',')
+    .split(/[,\n;]/)
+    .map(segment => segment.trim())
+    .filter(Boolean)
+}
+
+function looksLikeAsientoValue(segment: string) {
+  const value = segment.trim().toUpperCase().replace(/\s+/g, '')
+  return /^[A-Z]\d{3,}$/.test(value) || /^[A-Z]{1,3}\d{2,}[A-Z0-9-]*$/.test(value)
+}
+
+function parsePersonNameSegment(segment: string) {
+  const value = segment.trim().replace(/\s+/g, ' ')
+  const tokens = value.split(' ').filter(Boolean)
+  if (tokens.length < 2 || tokens.length > 6) return null
+  if (/\d/.test(value)) return null
+  if (looksLikeRazonSocialCandidate(value)) return null
+  if (/\b(GERENTE|REPRESENTANTE|APODERADO|PODER|VIGENCIA|PARTIDA|ASIENTO|OFICINA|EMPRESA|SOCIEDAD)\b/i.test(value)) return null
+  if (!looksLikePersonNameText(value)) return null
+
+  const upperTokens = tokens.map(token => token.toUpperCase())
+  if (upperTokens.length === 2) {
     return {
-      moduleKey,
-      message: 'Confirmación recibida. Estoy enviando la solicitud con los datos ya completados.',
-      fieldUpdates: {},
-      declarationAccepted: true,
-      missingFields: [],
-      nextField: null,
-      mode: 'ready',
-      readyForReview: true,
-      shouldOpenSummary: true,
-      shouldSubmit: true,
-      confidence: 'high',
-      summaryText: 'Usuario confirmó el envío.',
+      apellidoPaterno: upperTokens[0],
+      apellidoMaterno: upperTokens[1],
+      nombres: '',
     }
   }
 
-  return buildDeterministicResponse(state, moduleKey)
+  if (upperTokens.length === 3) {
+    return {
+      apellidoPaterno: upperTokens[1],
+      apellidoMaterno: upperTokens[2],
+      nombres: upperTokens[0],
+    }
+  }
+
+  return {
+    apellidoPaterno: upperTokens[upperTokens.length - 2],
+    apellidoMaterno: upperTokens[upperTokens.length - 1],
+    nombres: upperTokens.slice(0, upperTokens.length - 2).join(' '),
+  }
 }
 
-function mergeStateWithHeuristics(state: VigenciaPoderAssistantState, lastMessage: string) {
-  const text = lastMessage.trim()
+function isCargoSegment(segment: string) {
+  const upper = segment.trim().toUpperCase().replace(/\s+/g, ' ')
+  if (!upper) return false
+  const cargoPhrases = [
+    'GERENTE GENERAL',
+    'GERENTE COMERCIAL',
+    'GERENTE',
+    'REPRESENTANTE LEGAL',
+    'APODERADO',
+  ]
+
+  if (cargoPhrases.some(phrase => upper === phrase || upper.includes(phrase))) return true
+  if (/^A NOMBRE DEL\b/i.test(upper)) return true
+  if (/^COMO\b/i.test(upper)) return true
+  return false
+}
+
+function extractEntities(
+    text: string,
+): ExtractedEntities {
+
+    const entities: ExtractedEntities = {}
+
+    const upper = text.toUpperCase()
+
+    //-----------------------------------
+    // Oficina
+    //-----------------------------------
+
+    const office =
+        upper.match(
+            /\b(LIMA|AREQUIPA|CUSCO|CALLAO|PIURA|ICA|TRUJILLO|HUANCAYO|PUNO|TACNA|CHICLAYO|HUARAZ)\b/
+        )
+
+    if (office) {
+
+        entities.oficinaRegistral = office[1]
+
+    }
+
+    //-----------------------------------
+    // Partida
+    //-----------------------------------
+
+    const partida =
+        text.match(
+            /\b(?:PARTIDA|NUMERO|NÚMERO)\s*[:#-]?\s*([A-Z0-9\-\/]{4,})/i
+        )
+
+    if (partida) {
+
+        entities.numero = partida[1]
+
+    }
+
+    //-----------------------------------
+    // Asiento
+    //-----------------------------------
+
+    const asiento =
+        text.match(
+            /\bASIENTO\s*[:#-]?\s*([A-Z0-9\-\/]+)/i
+        )
+
+    if (asiento) {
+
+        entities.asiento = asiento[1]
+
+    }
+
+    //-----------------------------------
+    // Cargo
+    //-----------------------------------
+
+    const cargo =
+        text.match(
+            /\b(GERENTE GENERAL|GERENTE COMERCIAL|GERENTE|REPRESENTANTE LEGAL|APODERADO)\b/i
+        )
+
+    if (cargo) {
+
+        entities.cargoApoderado = cargo[1]
+
+    }
+
+    //-----------------------------------
+    // Nombre completo
+    //-----------------------------------
+
+    const cleanName =
+
+        text
+
+        .replace(
+            /^(cambia|corrige|actualiza|modifica)\s+/i,
+            ''
+        )
+
+        .replace(
+            /^(el\s+)?nombre\s+a\s+/i,
+            ''
+        )
+
+        .trim()
+
+    const person = parsePersonNameSegment(cleanName)
+
+    if (person) {
+
+        entities.apellidoPaterno =
+            person.apellidoPaterno
+
+        entities.apellidoMaterno =
+            person.apellidoMaterno
+
+        entities.nombres =
+            person.nombres
+
+    }
+
+    //-----------------------------------
+    // Declaración
+    //-----------------------------------
+
+    if (
+
+        /^(si|sí|ok|okay|confirmo|adelante|continuar|listo)$/i
+
+            .test(text.trim())
+
+    ) {
+
+        entities.declarationAccepted = true
+
+    }
+
+    //-----------------------------------
+    // Empresa
+    //-----------------------------------
+
+    const empresa =
+        extractRazonSocialCandidate(text)
+
+    if (empresa) {
+
+        entities.razonSocial = empresa
+
+    }
+
+    return entities
+
+}
+
+async function mergeStateWithHeuristics(state: VigenciaPoderAssistantState, lastMessage: string, requestUrl: string) {
+  const intent=detectIntent(lastMessage)
+  const text = cleanMessage(lastMessage)
   const nextState = { ...state }
   let handledStructuredField = false
+  const razonSocialCandidate = extractRazonSocialCandidate(text)
 
-  if (/^(si|sí|confirmo|confirmar|adelante|continuar|ok|okay|listo)\b/i.test(text)) {
-    nextState.declarationAccepted = true
-    handledStructuredField = true
-  }
+  const entities = extractEntities(text)
+
+    Object.assign(
+
+        nextState,
+
+        applyEntityUpdates(
+            nextState,
+            entities,
+            intent
+        )
+
+    )
+
+    handledStructuredField = Object.keys(entities).length>0
+
 
   if (!nextState.oficinaRegistral && /\b(?:LIMA|AREQUIPA|CUSCO|CALLAO|PIURA|TRUJILLO|ICA|HUANCAYO|HUARAZ|CHICLAYO|PUNO|TACNA)\b/i.test(text)) {
     const office = text.match(/\b(?:LIMA|AREQUIPA|CUSCO|CALLAO|PIURA|TRUJILLO|ICA|HUANCAYO|HUARAZ|CHICLAYO|PUNO|TACNA)\b/i)?.[0] || ''
@@ -264,11 +755,52 @@ function mergeStateWithHeuristics(state: VigenciaPoderAssistantState, lastMessag
     }
   }
 
+  if (!nextState.numero && razonSocialCandidate) {
+    const resolved = await resolvePartidaFromRazonSocial(requestUrl, razonSocialCandidate)
+    if (resolved?.numero) {
+      nextState.numero = normalizeAssistantFieldValue('numero', resolved.numero)
+      if (!nextState.oficinaRegistral && resolved.oficinaRegistral) {
+        nextState.oficinaRegistral = normalizeAssistantFieldValue('oficinaRegistral', resolved.oficinaRegistral)
+      }
+      handledStructuredField = true
+    }
+  }
+
   if (!handledStructuredField) {
-    return applyPersonNameHeuristics(nextState, text)
+    if (!looksLikePersonNameText(text) || razonSocialCandidate) {
+      return nextState
+    }
+
+    return applyPersonNameHeuristics(nextState, text, intent)
   }
 
   return nextState
+}
+
+function buildFallbackFromConversation(
+  moduleKey: PublicidadRegistralAssistantModuleKey,
+  state: VigenciaPoderAssistantState,
+  messages: AssistantMessage[],
+): ParsedAssistantResponse {
+  const lastUserMessage = [...messages].reverse().find(message => message.role === 'user')?.content || ''
+  if (maybeApplyConfirmation(state, lastUserMessage)) {
+    return {
+      moduleKey,
+      message: 'Confirmación recibida. Estoy enviando la solicitud con los datos ya completados.',
+      fieldUpdates: {},
+      declarationAccepted: true,
+      missingFields: [],
+      nextField: null,
+      mode: 'ready',
+      readyForReview: true,
+      shouldOpenSummary: true,
+      shouldSubmit: true,
+      confidence: 'high',
+      summaryText: 'Usuario confirmó el envío.',
+    }
+  }
+
+  return buildDeterministicResponse(state, moduleKey)
 }
 
 function buildHeuristicFieldUpdates(
@@ -303,13 +835,31 @@ export async function POST(request: NextRequest) {
     const messages = Array.isArray(body.messages) ? body.messages : []
     const state = normalizeState(body.state)
     const lastUserMessage = [...messages].reverse().find(message => message.role === 'user')?.content || ''
-    const mergedState = mergeStateWithHeuristics(state, lastUserMessage)
+    const mergedState = await mergeStateWithHeuristics(state, lastUserMessage, request.url)
     const heuristicFieldUpdates = buildHeuristicFieldUpdates(state, mergedState)
+    const hasHeuristicUpdates = Object.keys(heuristicFieldUpdates).length > 0
 
     if (maybeApplyConfirmation(mergedState, lastUserMessage)) {
       return NextResponse.json({
         ...buildFallbackFromConversation(moduleKey, mergedState, messages),
         fieldUpdates: heuristicFieldUpdates,
+      })
+    }
+
+    if (canSubmitVigenciaAssistantState(mergedState) && hasHeuristicUpdates) {
+      return NextResponse.json({
+        moduleKey,
+        message: 'Datos actualizados. Si están correctos, responde "SOLICITAR" para enviarlos. Si quieres corregir algo más, escríbelo ahora.',
+        fieldUpdates: heuristicFieldUpdates,
+        declarationAccepted: true,
+        missingFields: [],
+        nextField: null,
+        mode: 'review',
+        readyForReview: true,
+        shouldOpenSummary: true,
+        shouldSubmit: false,
+        confidence: 'high',
+        summaryText: 'Datos actualizados para revisión.',
       })
     }
 
