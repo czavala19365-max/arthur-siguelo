@@ -3,6 +3,8 @@ import { chromium } from 'playwright-extra'
 import StealthPlugin from 'puppeteer-extra-plugin-stealth'
 import { getAuthServerClient } from '@/lib/supabase-auth-server'
 import { getDecryptedCredentials, getCredentialByUserId, updateCredentialStatus } from '@/lib/sprl/db'
+import crypto from 'crypto'
+
 
 export const runtime = 'nodejs'
 
@@ -18,21 +20,27 @@ function applyStealthOnce() {
   }
 }
 
-function getProxyConfig() {
-  const proxyUrl = process.env.PROXY_URL
-  if (!proxyUrl) return null
+function generateProxySessionId() {
+  return crypto.randomBytes(6).toString('hex') // alfanumérico
+}
 
-  try {
-    const match = proxyUrl.match(/^(https?):\/\/([^:]+):([^@]+)@([^:]+):(\d+)$/)
-    if (!match) return null
-    const [, protocol, rawUser, rawPass, host, port] = match
-    return {
-      server: `${protocol}://${host}:${port}`,
-      username: decodeURIComponent(rawUser),
-      password: decodeURIComponent(rawPass),
-    }
-  } catch {
-    return null
+function getProxyConfig(sessionId?: string) {
+  const host = process.env.PROXY_HOST
+  const port = process.env.PROXY_PORT
+  const userBase = process.env.PROXY_USER_BASE
+  const area = process.env.PROXY_AREA
+  const city = process.env.PROXY_CITY
+  const password = process.env.PROXY_PASSWORD
+
+  if (!host || !port || !userBase || !password) return null
+
+  const id = sessionId || generateProxySessionId()
+  const username = `${userBase}_area-${area}_city-${city}_life-30_session-${id}`
+
+  return {
+    server: `http://${host}:${port}`,
+    username,
+    password,
   }
 }
 
@@ -48,10 +56,10 @@ const PASSWORD_SELECTOR =
 const SUBMIT_SELECTOR =
   'button[type="submit"], input[type="submit"], button:has-text("Ingresar"), button:has-text("INGRESAR"), input[value*="Ingresar" i], .btn-login, #btnLogin, #btnIngresar'
 
-async function loginSprlLocal(username: string, password: string) {
+async function loginSprlLocal(username: string, password: string, sessionId: string) {
   applyStealthOnce()
 
-  const proxy = getProxyConfig()
+  const proxy = getProxyConfig(sessionId)
   const browser = await chromium.launch({
     headless: true,
     executablePath: getChromeExecutablePath(),
@@ -358,6 +366,8 @@ export async function POST() {
       )
     }
 
+    const sessionId = user.id.replace(/-/g, '').slice(0, 12)
+
     const credRecord = await getCredentialByUserId(user.id)
     if (!credRecord) {
       return NextResponse.json({ error: 'Registro de credenciales no encontrado' }, { status: 404 })
@@ -377,7 +387,7 @@ export async function POST() {
 
     try {
       console.log('[SPRL verify] Running local Playwright login for user:', user.id)
-      result = await loginSprlLocal(creds.username, creds.password)
+      result = await loginSprlLocal(creds.username, creds.password, sessionId)
     } catch (localError) {
       const localMessage = localError instanceof Error ? localError.message : String(localError)
       console.error('[SPRL verify] Local login failed:', localMessage)

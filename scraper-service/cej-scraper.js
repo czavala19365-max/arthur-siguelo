@@ -14,6 +14,8 @@ const supabase_storage_1 = require("./supabase-storage");
 const e = require("express");
 const dotenv = require('dotenv');
 const { kernel } = require("sharp");
+const crypto = require('crypto');
+
 
 const fs = require('fs');
 const path = require('path');
@@ -371,6 +373,26 @@ function isCejBrowserDebug() {
   const v = process.env.CEJ_DEBUG;
   return v === '1' || v === 'true';
 }
+
+function generateProxySessionId() {
+  // alfanumérico, sin guiones ni símbolos
+  return crypto.randomBytes(6).toString('hex');
+}
+
+function buildProxyUsername({ sticky = false, sessionId = null } = {}) {
+  const base = `${process.env.PROXY_USER_BASE}_area-${process.env.PROXY_AREA}_city-${process.env.PROXY_CITY}`;
+
+  if (sticky) {
+    // Para SUNARP: mantiene la misma IP por 30 min
+    const id = sessionId || generateProxySessionId();
+    return `${base}_life-30_session-${id}`;
+  }
+
+  // Para CEJ y partidas registrales: IP distinta cada vez
+  return `${base}_session-${generateProxySessionId()}`;
+}
+
+
 function cejChromiumLaunchOptions() {
   const debug = isCejBrowserDebug();
 
@@ -384,13 +406,15 @@ function cejChromiumLaunchOptions() {
   if (process.env.PROXY_HOST) {
     options.proxy = {
       server: `http://${process.env.PROXY_HOST}:${process.env.PROXY_PORT}`,
-      username: process.env.PROXY_USERNAME,
+      username: buildProxyUsername({ sticky: false }), // CEJ: sin login, IP distinta cada vez
       password: process.env.PROXY_PASSWORD,
     };
   }
 
   return options;
 }
+
+
 // Dump visible page text without the `offsetParent` filter (which is always null in headless).
 async function dumpPageText(page, label) {
   const texts = await page.$$eval('body *:not(script):not(style):not(head)', els => els
