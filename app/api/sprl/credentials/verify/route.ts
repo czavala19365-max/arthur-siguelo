@@ -56,6 +56,57 @@ const PASSWORD_SELECTOR =
 const SUBMIT_SELECTOR =
   'button[type="submit"], input[type="submit"], button:has-text("Ingresar"), button:has-text("INGRESAR"), input[value*="Ingresar" i], .btn-login, #btnLogin, #btnIngresar'
 
+
+  type SprlLoginResult = {
+  ok: boolean
+  saldo?: number | null
+  displayName?: string | null
+  displayUsername?: string | null
+  accessToken?: string | null
+  refreshToken?: string | null
+  sunarpSessionId?: string | null
+  sunarpCookieHeader?: string | null
+  error?: string
+}
+
+async function loginSPRL(username: string, password: string, sessionId: string): Promise<SprlLoginResult> {
+  const scraperUrl = process.env.SCRAPER_SERVICE_URL?.trim()
+
+  // Si NO hay scraper service configurado -> corre local (dev)
+  if (!scraperUrl) {
+    return loginSprlLocal(username, password, sessionId)
+  }
+
+  console.log('===== FETCH SPRL LOGIN =====')
+  console.log('URL:', scraperUrl)
+
+  const inicio = Date.now()
+
+  const url = `${scraperUrl.replace(/\/$/, '')}/sprl/login`
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+    signal: AbortSignal.timeout(180_000),
+  })
+
+  console.log('Tiempo fetch:', Date.now() - inicio)
+  console.log('Status:', res.status)
+
+  let data: SprlLoginResult = { ok: false }
+  try {
+    data = await res.json()
+  } catch {
+    data = { ok: false, error: `Respuesta inválida del scraper service (status ${res.status})` }
+  }
+
+  if (!res.ok && !data.error) {
+    data.error = `Error del scraper service (status ${res.status})`
+  }
+
+  return data
+}
+
 async function loginSprlLocal(username: string, password: string, sessionId: string) {
   applyStealthOnce()
 
@@ -373,28 +424,20 @@ export async function POST() {
       return NextResponse.json({ error: 'Registro de credenciales no encontrado' }, { status: 404 })
     }
 
-    let result: {
-      ok: boolean
-      saldo?: number | null
-      displayName?: string | null
-      displayUsername?: string | null
-      accessToken?: string | null
-      refreshToken?: string | null
-      sunarpSessionId?: string | null
-      sunarpCookieHeader?: string | null
-      error?: string
-    }
+    let result: SprlLoginResult
 
     try {
-      console.log('[SPRL verify] Running local Playwright login for user:', user.id)
-      result = await loginSprlLocal(creds.username, creds.password, sessionId)
-    } catch (localError) {
-      const localMessage = localError instanceof Error ? localError.message : String(localError)
-      console.error('[SPRL verify] Local login failed:', localMessage)
+      result = await loginSPRL(creds.username, creds.password, sessionId)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      console.error('[SPRL verify] Login failed:', message)
+      return NextResponse.json({ error: `Error al intentar login en SPRL: ${message}` }, { status: 500 })
+    }
 
+    if (!result.ok) {
       const scraperUrl = process.env.SCRAPER_SERVICE_URL
       if (!scraperUrl || /localhost:3001/.test(scraperUrl)) {
-        return NextResponse.json({ error: `Error al intentar login en SPRL: ${localMessage}` }, { status: 500 })
+        return NextResponse.json({ error: 'Error al intentar login en SPRL' }, { status: 500 })
       }
 
       console.log('[SPRL verify] Falling back to scraper service:', scraperUrl)

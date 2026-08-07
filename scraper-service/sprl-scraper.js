@@ -312,6 +312,23 @@ async function loginSPRL(username, password) {
         )
       }, { timeout: 8000 })
       .catch(() => null)
+    
+
+    const browserCookies = await context.cookies().catch(() => [])
+    const sunarpCookies = browserCookies.filter(cookie => /sunarp\.gob\.pe$/i.test(cookie.domain) || /sunarp/i.test(cookie.domain))
+    const sunarpCookieHeader = sunarpCookies.map(cookie => `${cookie.name}=${cookie.value}`).join('; ')
+
+    let sunarpSessionId = null
+    const sessionCookie = browserCookies.find(cookie => {
+      const name = cookie.name.toLowerCase()
+      return (name.includes('sesion') || name.includes('session') || name.includes('sunarp')) && cookie.value
+    })
+    if (sessionCookie?.value) sunarpSessionId = sessionCookie.value
+
+    if (!accessToken) {
+      const cookieToken = browserCookies.find(cookie => /token|auth/i.test(cookie.name) && cookie.value)?.value || null
+      if (cookieToken) accessToken = cookieToken
+    }
 
     const body = await page.evaluate(() => document.body?.textContent || '').catch(() => '')
     const hasHola = body.includes('HOLA!') || body.includes('HOLA ')
@@ -356,6 +373,8 @@ async function loginSPRL(username, password) {
       accessToken,
       refreshToken,
       tokenSource: accessToken ? 'local-playwright' : null,
+      sunarpSessionId,
+      sunarpCookieHeader: sunarpCookieHeader || null,
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
