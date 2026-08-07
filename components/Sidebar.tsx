@@ -106,13 +106,13 @@ export default function Sidebar({ observadosCount = 0 }: SidebarProps) {
     fetch('/api/dashboard/stats')
       .then(r => r.json())
       .then(data => setCount(data.observados || 0))
-      .catch(() => {});
+      .catch(() => { });
     getAuthClient()
       .auth.getUser()
       .then(({ data }) => {
         setUserEmail(data.user?.email ?? '');
       })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   const links = [
@@ -171,10 +171,11 @@ export default function Sidebar({ observadosCount = 0 }: SidebarProps) {
         onClick={() => setMobileOpen(v => !v)}
         aria-label="Abrir menú"
         style={{
+          display: mobileOpen ? 'none' : 'flex',
           position: 'fixed',
           top: 10,
           left: 10,
-          zIndex: 400,
+          zIndex: 260,
           width: '44px',
           height: '44px',
           backgroundColor: 'var(--paper)',
