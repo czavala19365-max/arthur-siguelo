@@ -9,7 +9,7 @@ const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 })
 
-const MODEL = 'claude-3-5-sonnet-latest' // The current best model from Anthropic for text
+const MODEL = 'claude-sonnet-5' // The current best model from Anthropic for text
 
 /**
  * Lee un archivo y le dice a Claude que revise si es una resolución/documento legal

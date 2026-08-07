@@ -36,7 +36,9 @@ export async function generarYGuardarDocumento(params: {
   const raw = await createLegalMessage({
     system: DRAFTER_SYSTEM,
     userContent: content,
-    maxTokens: 4000,
+    // Un contrato completo con comparecencia, antecedentes y 10+ cláusulas
+    // supera holgadamente los 4.000 tokens y se truncaba a media redacción.
+    maxTokens: 16000,
   })
 
   const sections = parseGeneratedSections(raw)

@@ -5,21 +5,12 @@ export type { DrafterField, DrafterFieldType, DocumentTypeSchema } from './schem
 
 export type DocumentTypeId = (typeof DOCUMENT_TYPE_IDS)[number]
 
-export const JURISDICTIONS = [
-  { value: 'england_wales', label: 'Inglaterra y Gales' },
-  { value: 'us_general', label: 'Estados Unidos (general)' },
-  { value: 'new_york', label: 'Nueva York' },
-  { value: 'california', label: 'California' },
-  { value: 'singapore', label: 'Singapur' },
-  { value: 'hong_kong', label: 'Hong Kong' },
-  { value: 'uae_difc', label: 'EAU (DIFC)' },
-  { value: 'kenya', label: 'Kenia' },
-  { value: 'nigeria', label: 'Nigeria' },
-  { value: 'south_africa', label: 'Sudáfrica' },
-  { value: 'india', label: 'India' },
-  { value: 'canada_ontario', label: 'Canadá (Ontario)' },
-  { value: 'other', label: 'Otra' },
-] as const
+// El redactor opera exclusivamente bajo legislación peruana. Se mantiene el
+// arreglo (en vez de una constante suelta) para no romper a los consumidores
+// existentes de JURISDICTIONS / jurisdictionLabel.
+export const JURISDICTIONS = [{ value: 'peru', label: 'Perú' }] as const
+
+export const DEFAULT_JURISDICTION = 'peru'
 
 export const DOCUMENT_TYPES: Array<{ id: DocumentTypeId; label: string }> = PRIMARY_DOCUMENT_TYPE_IDS.map(id => ({
   id,
