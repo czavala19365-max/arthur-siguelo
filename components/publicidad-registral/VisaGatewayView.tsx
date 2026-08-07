@@ -97,6 +97,7 @@ export default function VisaGatewayView({
                 <div>
                   <input
                     className={styles.sprlFlowInput}
+                    name='email'
                     placeholder="Ingrese su correo electrónico"
                     value={titularEmail}
                     onChange={event => onEmailChange(event.target.value)}
@@ -119,9 +120,6 @@ export default function VisaGatewayView({
 
             {ipClient ? (
               <div className={styles.sprlGatewayMeta}>IP cliente: <strong>{ipClient}</strong></div>
-            ) : null}
-            {sessionExtendId ? (
-              <div className={styles.sprlGatewayMeta}>Sesión extendida: <strong>{sessionExtendId}</strong></div>
             ) : null}
           </div>
 

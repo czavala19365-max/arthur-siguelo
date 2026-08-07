@@ -168,6 +168,22 @@ function normalizeMonto(value: string) {
   return parsed.toFixed(2)
 }
 
+function loadVisaSDK() {
+  return new Promise<void>((resolve, reject) => {
+    if (typeof window !== 'undefined' && (window as Window & { VisanetCheckout?: unknown }).VisanetCheckout) {
+      resolve()
+      return
+    }
+
+    const script = document.createElement('script')
+    script.src = 'https://static-content.vnforapps.com/v2/js/checkout.js'
+    script.async = true
+    script.onload = () => resolve()
+    script.onerror = () => reject(new Error('No se pudo cargar VisaNet SDK'))
+    document.body.appendChild(script)
+  })
+}
+
 export default function RecargarSaldoPage() {
   const [monto, setMonto] = useState('')
   const [loading, setLoading] = useState(false)
@@ -245,14 +261,12 @@ export default function RecargarSaldoPage() {
       const ipData = await ipResponse.json().catch(() => ({})) as { ip?: string }
       setIpClient(String(ipData.ip || '').trim())
 
-      // La pasarela reutilizable necesita el flow de Visa/Mastercard completo más adelante.
-      // Aquí solo dejamos lista la vista interna tal como SUNARP.
-      const infoResponse = await fetch('/api/sprl/publicidad-registral/payment/checkout', {
+      const response = await fetch('/api/sprl/publicidad-registral/payment/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           provider: 'visa_mastercard',
-          action: 'info-boton',
+          action: 'continue-preview',
           nombre: titularNombre,
           apellido: titularApellido,
           email: titularEmail,
@@ -262,12 +276,36 @@ export default function RecargarSaldoPage() {
         }),
       })
 
-      const infoData = await infoResponse.json().catch(() => ({})) as { ok?: boolean; error?: string; data?: { extendSessionId?: string } }
-      if (!infoResponse.ok || !infoData.ok) {
-        throw new Error(infoData.error || 'No se pudo preparar la pasarela.')
+      const data = await response.json().catch(() => ({})) as {
+        ok?: boolean
+        error?: string
+        data?: {
+          extendSessionId?: string
+          configuration?: unknown
+        }
       }
 
-      setSessionExtendId(String(infoData.data?.extendSessionId || '').trim())
+      if (!response.ok || !data.ok || !data.data?.configuration) {
+        throw new Error(data.error || 'No se pudo preparar la pasarela.')
+      }
+
+      setSessionExtendId(String(data.data.extendSessionId || '').trim())
+
+      await loadVisaSDK()
+
+      const sdk = window as Window & {
+        VisanetCheckout?: {
+          configure: (configuration: unknown) => void
+          open: () => void
+        }
+      }
+
+      if (!sdk.VisanetCheckout) {
+        throw new Error('No se pudo cargar VisaNet SDK')
+      }
+
+      sdk.VisanetCheckout.configure(data.data.configuration)
+      sdk.VisanetCheckout.open()
     } catch (err) {
       setGatewayError(err instanceof Error ? err.message : 'No se pudo preparar la pasarela.')
     } finally {
