@@ -229,7 +229,7 @@ export function VigenciaPoderPersonasJuridicasFlow({ onBack, certificate, onToke
   ])
   const [assistantInput, setAssistantInput] = useState('')
   const [assistantLoading, setAssistantLoading] = useState(false)
-  const assistantBottomRef = useRef<HTMLDivElement>(null)
+  const assistantMessagesRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const script = document.createElement('script')
@@ -253,10 +253,6 @@ export function VigenciaPoderPersonasJuridicasFlow({ onBack, certificate, onToke
   }, [])
 
   useEffect(() => {
-    assistantBottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [assistantMessages, assistantLoading])
-
-  useEffect(() => {
     setAssistantState(current => ({
       ...current,
       oficinaRegistral,
@@ -269,6 +265,17 @@ export function VigenciaPoderPersonasJuridicasFlow({ onBack, certificate, onToke
       declarationAccepted: acceptDeclaration,
     }))
   }, [acceptDeclaration, apellidoMaterno, apellidoPaterno, asiento, cargoApoderado, nombres, numero, oficinaRegistral])
+
+  useEffect(() => {
+    const container = assistantMessagesRef.current
+    if (!container) return
+
+    const rafId = window.requestAnimationFrame(() => {
+      container.scrollTop = container.scrollHeight
+    })
+
+    return () => window.cancelAnimationFrame(rafId)
+  }, [assistantMessages, assistantLoading])
 
   function handleNameChange(
     value: string,
@@ -930,6 +937,14 @@ const loadVisaSDK = () => {
     )
   }
 
+  const assistantStatusLabel = canSubmitVigenciaAssistantState(assistantState)
+    ? 'Datos completos'
+    : `Faltan ${getVigenciaMissingFields(assistantState).length} datos`
+
+  const assistantStatusTone = canSubmitVigenciaAssistantState(assistantState)
+    ? styles.sprlFlowAssistantStatusReady
+    : styles.sprlFlowAssistantStatusPending
+
   if (showPaymentForm) {
     return (
       <div className={styles.sprlFlowPage}>
@@ -1068,108 +1083,91 @@ const loadVisaSDK = () => {
           Por ejemplo: cuando se requiere saber o acreditar las facultades del gerente general de una empresa.
         </p>
 
-        <div
-          className={styles.sprlFlowSection}
-          style={{
-            marginBottom: 18,
-            background: 'linear-gradient(180deg, rgba(20, 32, 62, 0.04), rgba(255,255,255,0.92))',
-            border: '1px solid rgba(20, 32, 62, 0.08)',
-          }}
+        <section
+          className={styles.sprlFlowAssistantCard}
+          aria-labelledby="sprl-ai-assistant-title"
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', marginBottom: 12 }}>
+          <div className={styles.sprlFlowAssistantHero}>
             <div>
-              <div className={styles.sprlFlowLabel} style={{ marginBottom: 6 }}>ASISTENTE IA DE VIGENCIA</div>
-              <div style={{ fontSize: 14, color: 'var(--ink)', lineHeight: 1.6 }}>
-                Te guía paso a paso, captura los datos del trámite y puede disparar la solicitud cuando confirmes el resumen.
-              </div>
+              <div className={styles.sprlFlowAssistantEyebrow}>Asistente IA de vigencia</div>
+              <h2 id="sprl-ai-assistant-title" className={styles.sprlFlowAssistantTitle}>
+                Chat guiado para completar la solicitud
+              </h2>
+              <p className={styles.sprlFlowAssistantText}>
+                Captura los datos del trámite, arma el resumen y envía la solicitud sin obligarte a tocar el formulario.
+              </p>
             </div>
-            <div style={{ textAlign: 'right', fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>
-              <div>{canSubmitVigenciaAssistantState(assistantState) ? 'Datos completos' : 'Capturando datos'}</div>
-              <div>{getVigenciaMissingFields(assistantState).length > 0 ? `Faltan: ${getVigenciaMissingFields(assistantState).map(field => VIGENCIA_FIELD_LABELS[field]).join(', ')}` : 'Listo para confirmar'}</div>
+            <div className={`${styles.sprlFlowAssistantStatusBadge} ${assistantStatusTone}`}>
+              {assistantStatusLabel}
             </div>
           </div>
 
-          <div
-            style={{
-              maxHeight: 280,
-              overflowY: 'auto',
-              padding: '14px 14px 10px',
-              border: '1px solid rgba(20, 32, 62, 0.08)',
-              borderRadius: 12,
-              background: 'rgba(255,255,255,0.88)',
-            }}
-          >
-            {assistantMessages.map((message, index) => (
-              <div
-                key={`${message.role}-${index}`}
-                style={{
-                  display: 'flex',
-                  justifyContent: message.role === 'user' ? 'flex-end' : 'flex-start',
-                  marginBottom: 10,
-                }}
-              >
-                <div
-                  style={{
-                    maxWidth: '88%',
-                    padding: '10px 12px',
-                    borderRadius: 12,
-                    background: message.role === 'user' ? 'rgba(20, 32, 62, 0.95)' : 'rgba(95, 126, 48, 0.10)',
-                    color: message.role === 'user' ? '#fff' : '#203018',
-                    fontSize: 13,
-                    lineHeight: 1.6,
-                    whiteSpace: 'pre-wrap',
+          <div className={styles.sprlFlowAssistantGrid}>
+            <div className={styles.sprlFlowAssistantThread}>
+              <div className={styles.sprlFlowAssistantThreadHeader}>
+                <span>Conversación</span>
+                <span>
+                  {assistantLoading ? 'Procesando...' : 'Listo'}
+                </span>
+              </div>
+
+              <div ref={assistantMessagesRef} className={styles.sprlFlowAssistantMessages}>
+                {assistantMessages.map((message, index) => (
+                  <div
+                    key={`${message.role}-${index}`}
+                    className={`${styles.sprlFlowAssistantBubble} ${message.role === 'user' ? styles.sprlFlowAssistantBubbleUser : styles.sprlFlowAssistantBubbleAI}`}
+                  >
+                    {message.content}
+                  </div>
+                ))}
+                {assistantLoading && <div className={styles.sprlFlowAssistantTyping}>Analizando datos...</div>}
+              </div>
+
+              <div className={styles.sprlFlowAssistantComposer}>
+                <textarea
+                  value={assistantInput}
+                  onChange={event => setAssistantInput(event.target.value)}
+                  onKeyDown={event => {
+                    if (event.key === 'Enter' && !event.shiftKey) {
+                      event.preventDefault()
+                      void handleAssistantSend()
+                    }
                   }}
+                  placeholder="Escribe el dato que tengas o responde confirmando..."
+                  rows={2}
+                  className={styles.sprlFlowAssistantInput}
+                />
+                <button
+                  type="button"
+                  className={styles.sprlFlowAssistantSend}
+                  onClick={() => void handleAssistantSend()}
+                  disabled={assistantLoading || !assistantInput.trim()}
                 >
-                  {message.content}
-                </div>
+                  {assistantLoading ? 'Procesando...' : 'Enviar'}
+                </button>
               </div>
-            ))}
-            {assistantLoading && (
-              <div style={{ fontSize: 12, color: 'var(--muted)', padding: '4px 2px' }}>Analizando datos...</div>
-            )}
-            <div ref={assistantBottomRef} />
-          </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, marginTop: 12, alignItems: 'end' }}>
-            <textarea
-              value={assistantInput}
-              onChange={event => setAssistantInput(event.target.value)}
-              onKeyDown={event => {
-                if (event.key === 'Enter' && !event.shiftKey) {
-                  event.preventDefault()
-                  void handleAssistantSend()
-                }
-              }}
-              placeholder="Escribe aquí el dato que tengas o responde confirmando la solicitud..."
-              rows={2}
-              style={{
-                resize: 'vertical',
-                minHeight: 56,
-                padding: '12px 14px',
-                borderRadius: 12,
-                border: '1px solid rgba(20, 32, 62, 0.16)',
-                fontFamily: 'var(--font-body)',
-                fontSize: 14,
-                lineHeight: 1.5,
-                color: 'var(--ink)',
-                background: '#fff',
-              }}
-            />
-            <button
-              type="button"
-              className={styles.sprlFlowButtonPrimary}
-              onClick={() => void handleAssistantSend()}
-              disabled={assistantLoading || !assistantInput.trim()}
-              style={{ minWidth: 150 }}
-            >
-              {assistantLoading ? 'Procesando...' : 'Enviar al asistente'}
-            </button>
-          </div>
+              <div className={styles.sprlFlowAssistantHint}>
+                Acepta entradas sueltas como "LIMA", "Partida 12345", "Asiento B7" o "sí, enviar".
+              </div>
+            </div>
 
-          <div style={{ marginTop: 10, fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>
-            Puedes escribir datos sueltos como "LIMA", "Partida 12345", "Asiento B7" o incluso "sí, enviar" cuando ya esté todo completo.
+            <aside className={styles.sprlFlowAssistantSummary}>
+              <div className={styles.sprlFlowAssistantSummaryTitle}>Estado detectado</div>
+              <div className={styles.sprlFlowAssistantSummaryList}>
+                <div><span>Oficina</span><strong>{assistantState.oficinaRegistral || '—'}</strong></div>
+                <div><span>Número</span><strong>{assistantState.numero || '—'}</strong></div>
+                <div><span>Asiento</span><strong>{assistantState.asiento || '—'}</strong></div>
+                <div><span>Cargo</span><strong>{assistantState.cargoApoderado || '—'}</strong></div>
+                <div><span>Apellidos y nombres</span><strong>{[assistantState.apellidoPaterno, assistantState.apellidoMaterno, assistantState.nombres].filter(Boolean).join(' ') || '—'}</strong></div>
+                <div><span>Declaración</span><strong>{assistantState.declarationAccepted ? 'Aceptada' : 'Pendiente'}</strong></div>
+              </div>
+              <div className={styles.sprlFlowAssistantSummaryFoot}>
+                El formulario de abajo sigue disponible como respaldo técnico.
+              </div>
+            </aside>
           </div>
-        </div>
+        </section>
 
         <SectionHeader>DATOS REGISTRALES</SectionHeader>
 

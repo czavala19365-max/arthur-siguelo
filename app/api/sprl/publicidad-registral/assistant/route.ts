@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { chatWithProvider } from '@/lib/llm-providers'
 import {
-  buildVigenciaAssistantPrompt,
   canSubmitVigenciaAssistantState,
   createEmptyVigenciaAssistantState,
   getNextVigenciaField,
@@ -134,6 +132,58 @@ function maybeApplyConfirmation(state: VigenciaPoderAssistantState, lastMessage:
   return /^(si|sí|confirmo|confirmar|adelante|continuar|envía|enviar|ok|okay|listo)\b/.test(lower)
 }
 
+function applyPersonNameHeuristics(state: VigenciaPoderAssistantState, text: string) {
+  const nextState = { ...state }
+  const normalizedText = text.trim().replace(/\s+/g, ' ')
+  const tokens = normalizedText
+    .toUpperCase()
+    .split(' ')
+    .map(token => token.trim())
+    .filter(Boolean)
+
+  const missingApellidoPaterno = !nextState.apellidoPaterno.trim()
+  const missingApellidoMaterno = !nextState.apellidoMaterno.trim()
+  const missingNombres = !nextState.nombres.trim()
+
+  if (!missingApellidoPaterno && !missingApellidoMaterno && !missingNombres) {
+    return nextState
+  }
+
+  if (tokens.length === 0) {
+    return nextState
+  }
+
+  if (tokens.length === 1) {
+    const nextMissingField = (['apellidoPaterno', 'apellidoMaterno', 'nombres'] as const).find(
+      field => !nextState[field].trim(),
+    )
+
+    if (nextMissingField) {
+      nextState[nextMissingField] = normalizeAssistantFieldValue(nextMissingField, tokens[0])
+    }
+
+    return nextState
+  }
+
+  let endIndex = tokens.length - 1
+
+  if (missingApellidoMaterno && endIndex >= 0) {
+    nextState.apellidoMaterno = normalizeAssistantFieldValue('apellidoMaterno', tokens[endIndex])
+    endIndex -= 1
+  }
+
+  if (missingApellidoPaterno && endIndex >= 0) {
+    nextState.apellidoPaterno = normalizeAssistantFieldValue('apellidoPaterno', tokens[endIndex])
+    endIndex -= 1
+  }
+
+  if (missingNombres && endIndex >= 0) {
+    nextState.nombres = normalizeAssistantFieldValue('nombres', tokens.slice(0, endIndex + 1).join(' '))
+  }
+
+  return nextState
+}
+
 function buildFallbackFromConversation(
   moduleKey: PublicidadRegistralAssistantModuleKey,
   state: VigenciaPoderAssistantState,
@@ -163,24 +213,33 @@ function buildFallbackFromConversation(
 function mergeStateWithHeuristics(state: VigenciaPoderAssistantState, lastMessage: string) {
   const text = lastMessage.trim()
   const nextState = { ...state }
+  let handledStructuredField = false
 
   if (/^(si|sí|confirmo|confirmar|adelante|continuar|ok|okay|listo)\b/i.test(text)) {
     nextState.declarationAccepted = true
+    handledStructuredField = true
   }
 
   if (!nextState.oficinaRegistral && /\b(?:LIMA|AREQUIPA|CUSCO|CALLAO|PIURA|TRUJILLO|ICA|HUANCAYO|HUARAZ|CHICLAYO|PUNO|TACNA)\b/i.test(text)) {
     const office = text.match(/\b(?:LIMA|AREQUIPA|CUSCO|CALLAO|PIURA|TRUJILLO|ICA|HUANCAYO|HUARAZ|CHICLAYO|PUNO|TACNA)\b/i)?.[0] || ''
     nextState.oficinaRegistral = normalizeAssistantFieldValue('oficinaRegistral', office)
+    handledStructuredField = true
   }
 
   if (!nextState.numero) {
     const partidaMatch = text.match(/\b(?:partida|n[úu]mero|numero)\s*[:#-]?\s*([A-Z0-9\-\/]{4,})/i)
-    if (partidaMatch?.[1]) nextState.numero = normalizeAssistantFieldValue('numero', partidaMatch[1])
+    if (partidaMatch?.[1]) {
+      nextState.numero = normalizeAssistantFieldValue('numero', partidaMatch[1])
+      handledStructuredField = true
+    }
   }
 
   if (!nextState.asiento) {
     const asientoMatch = text.match(/\basiento\s*[:#-]?\s*([A-Z0-9\-\/]{1,})/i)
-    if (asientoMatch?.[1]) nextState.asiento = normalizeAssistantFieldValue('asiento', asientoMatch[1])
+    if (asientoMatch?.[1]) {
+      nextState.asiento = normalizeAssistantFieldValue('asiento', asientoMatch[1])
+      handledStructuredField = true
+    }
   }
 
   if (!nextState.cargoApoderado) {
@@ -200,8 +259,13 @@ function mergeStateWithHeuristics(state: VigenciaPoderAssistantState, lastMessag
 
       const cargo = match[1] || match[0]
       nextState.cargoApoderado = normalizeAssistantFieldValue('cargoApoderado', cargo)
+      handledStructuredField = true
       break
     }
+  }
+
+  if (!handledStructuredField) {
+    return applyPersonNameHeuristics(nextState, text)
   }
 
   return nextState
@@ -242,61 +306,23 @@ export async function POST(request: NextRequest) {
     const mergedState = mergeStateWithHeuristics(state, lastUserMessage)
     const heuristicFieldUpdates = buildHeuristicFieldUpdates(state, mergedState)
 
-    const prompt = buildVigenciaAssistantPrompt({
-      messages,
-      state: mergedState,
-      certificateName: 'Certificado de Vigencia de Poder de Personas Jurídicas',
-    })
-
-    if (!process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY === 'placeholder') {
-      return NextResponse.json(buildFallbackFromConversation(moduleKey, mergedState, messages))
+    if (maybeApplyConfirmation(mergedState, lastUserMessage)) {
+      return NextResponse.json({
+        ...buildFallbackFromConversation(moduleKey, mergedState, messages),
+        fieldUpdates: heuristicFieldUpdates,
+      })
     }
 
-    const result = await chatWithProvider(
-      messages.length > 0 ? messages : [{ role: 'user', content: 'Comenzar flujo de vigencia de poder.' }],
-      'anthropic',
-      prompt.system,
-    )
+    const response = buildDeterministicResponse(mergedState, moduleKey)
 
-    const parsed = parseJsonBlock(result.text)
-    if (!parsed) {
-      return NextResponse.json(buildFallbackFromConversation(moduleKey, mergedState, messages))
-    }
-
-    const fieldUpdates = (parsed.fieldUpdates && typeof parsed.fieldUpdates === 'object' ? parsed.fieldUpdates : {}) as Record<string, string>
-    const normalizedFieldUpdates: ParsedAssistantResponse['fieldUpdates'] = {}
-    for (const [field, value] of Object.entries(fieldUpdates)) {
-      if (!isVigenciaPoderFieldKey(field)) continue
-      normalizedFieldUpdates[field] = normalizeAssistantFieldValue(field, String(value || ''))
-    }
-
-    const response: ParsedAssistantResponse = {
-      moduleKey,
-      message: String(parsed.message || 'Continuemos con la solicitud.'),
+    return NextResponse.json({
+      ...response,
       fieldUpdates: {
         ...heuristicFieldUpdates,
-        ...normalizedFieldUpdates,
+        ...response.fieldUpdates,
       },
-      declarationAccepted: Boolean(parsed.declarationAccepted ?? mergedState.declarationAccepted),
-      missingFields: Array.isArray(parsed.missingFields) ? (parsed.missingFields as VigenciaPoderFieldKey[]) : [],
-      nextField: (parsed.nextField as VigenciaPoderFieldKey | null) ?? getNextVigenciaField(mergedState),
-      mode: (parsed.mode as ParsedAssistantResponse['mode']) || 'collecting',
-      readyForReview: Boolean(parsed.readyForReview),
-      shouldOpenSummary: Boolean(parsed.shouldOpenSummary),
-      shouldSubmit: Boolean(parsed.shouldSubmit),
-      confidence: (parsed.confidence as ParsedAssistantResponse['confidence']) || 'medium',
-      summaryText: String(parsed.summaryText || ''),
-    }
-
-    if (response.shouldSubmit && !canSubmitVigenciaAssistantState(mergeAssistantFieldUpdates(mergedState, response.fieldUpdates))) {
-      response.shouldSubmit = false
-    }
-
-    if (!response.message.trim()) {
-      return NextResponse.json(buildFallbackFromConversation(moduleKey, mergedState, messages))
-    }
-
-    return NextResponse.json(response)
+      declarationAccepted: Boolean(response.declarationAccepted || mergedState.declarationAccepted),
+    })
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error)
     return NextResponse.json({ error: msg || 'No se pudo procesar el asistente.' }, { status: 500 })
