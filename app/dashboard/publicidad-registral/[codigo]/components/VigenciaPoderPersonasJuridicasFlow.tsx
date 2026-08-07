@@ -793,99 +793,99 @@ export function VigenciaPoderPersonasJuridicasFlow({ onBack, certificate, onToke
     }
   }
 
-const handleVisaCheckout = async () => {
+  const handleVisaCheckout = async () => {
 
-  try {
+    try {
 
-    setVisaContinueLoading(true)
-
-
-    const response = await fetch('/api/sprl/publicidad-registral/payment/checkout', {
-      method:'POST',
-      headers:{
-        'Content-Type':'application/json',
-      },
-      body:JSON.stringify({
-        provider:'visa_mastercard',
-        action:'continue-preview',
-        nombre:visaTitularNombre,
-        apellido:visaTitularApellido,
-        email:visaTitularEmail,
-        purchase:visaPurchaseCode,
-        importe:visaMonto,
-      }),
-    })
+      setVisaContinueLoading(true)
 
 
-    const json = await response.json()
+      const response = await fetch('/api/sprl/publicidad-registral/payment/checkout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          provider: 'visa_mastercard',
+          action: 'continue-preview',
+          nombre: visaTitularNombre,
+          apellido: visaTitularApellido,
+          email: visaTitularEmail,
+          purchase: visaPurchaseCode,
+          importe: visaMonto,
+        }),
+      })
 
 
-    if(!json.ok){
-      throw new Error(json.error)
+      const json = await response.json()
+
+
+      if (!json.ok) {
+        throw new Error(json.error)
+      }
+
+
+      const cfg = json.data.configuration
+
+
+      await loadVisaSDK()
+
+
+      console.log(
+        'SDK:',
+        window.VisanetCheckout
+      )
+
+      console.log(
+        'CONFIG:',
+        cfg
+      )
+
+
+      window.VisanetCheckout.configure(cfg)
+
+      window.VisanetCheckout.open()
+
+
+    } catch (error) {
+
+      console.error(error)
+
+      setPayError(
+        error instanceof Error
+          ? error.message
+          : 'Error iniciando pago'
+      )
+
+    } finally {
+
+      setVisaContinueLoading(false)
+
     }
-
-
-    const cfg = json.data.configuration
-
-
-    await loadVisaSDK()
-
-
-    console.log(
-      'SDK:',
-      window.VisanetCheckout
-    )
-
-    console.log(
-      'CONFIG:',
-      cfg
-    )
-
-
-    window.VisanetCheckout.configure(cfg)
-
-    window.VisanetCheckout.open()
-
-
-  } catch(error){
-
-    console.error(error)
-
-    setPayError(
-      error instanceof Error
-      ? error.message
-      : 'Error iniciando pago'
-    )
-
-  } finally {
-
-    setVisaContinueLoading(false)
 
   }
 
-}
+  const loadVisaSDK = () => {
+    return new Promise<void>((resolve, reject) => {
 
-const loadVisaSDK = () => {
-  return new Promise<void>((resolve, reject) => {
+      if (window.VisanetCheckout) {
+        resolve()
+        return
+      }
 
-    if (window.VisanetCheckout) {
-      resolve()
-      return
-    }
+      const script = document.createElement('script')
 
-    const script = document.createElement('script')
+      script.src =
+        'https://static-content.vnforapps.com/v2/js/checkout.js'
 
-    script.src =
-      'https://static-content.vnforapps.com/v2/js/checkout.js'
+      script.onload = () => resolve()
 
-    script.onload = () => resolve()
+      script.onerror = () =>
+        reject(new Error('No se pudo cargar VisaNet SDK'))
 
-    script.onerror = () =>
-      reject(new Error('No se pudo cargar VisaNet SDK'))
-
-    document.body.appendChild(script)
-  })
-}
+      document.body.appendChild(script)
+    })
+  }
 
   const apoderadoCompleto = [apellidoPaterno, apellidoMaterno, nombres]
     .map(value => normalizeForBackend(value).toUpperCase())
