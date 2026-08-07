@@ -1,5 +1,6 @@
 'use strict'
 
+const crypto = require('crypto')
 const { chromium } = require('playwright-extra')
 const StealthPlugin = require('puppeteer-extra-plugin-stealth')
 
@@ -46,7 +47,29 @@ function applyStealthOnce() {
 const SPRL_LOGIN_URL = 'https://sprl.sunarp.gob.pe/sprl/ingreso'
 const SPRL_AUTH_URL = 'https://im01-autorizacion-sprl-production.apps.paas.sunarp.gob.pe/v1/sunarp-services/im/autorizacion/login'
 
-function parseProxy(proxyUrl) {
+function generateProxySessionId() {
+  return crypto.randomBytes(6).toString('hex')
+}
+
+const SPRL_PROXY_SESSION_ID = process.env.SPRL_PROXY_SESSION_ID || generateProxySessionId()
+
+function buildProxyUsername({ sticky = true, sessionId = null } = {}) {
+  const userBase = String(process.env.PROXY_USER_BASE || '').trim()
+  const area = String(process.env.PROXY_AREA || '').trim()
+  const city = String(process.env.PROXY_CITY || '').trim()
+  if (!userBase || !area || !city) return ''
+
+  const base = `${userBase}_area-${area}_city-${city}`
+
+  if (sticky) {
+    const id = sessionId || SPRL_PROXY_SESSION_ID
+    return `${base}_life-30_session-${id}`
+  }
+
+  return `${base}_session-${generateProxySessionId()}`
+}
+
+function parseProxyUrl(proxyUrl) {
   if (!proxyUrl) return null
   try {
     const match = proxyUrl.match(/^(https?):\/\/([^:]+):([^@]+)@([^:]+):(\d+)$/)
@@ -58,8 +81,27 @@ function parseProxy(proxyUrl) {
       password: decodeURIComponent(rawPass),
     }
   } catch (error) {
-    console.error('[SPRL] parseProxy error:', error.message)
+    console.error('[SPRL] parseProxyUrl error:', error.message)
     return null
+  }
+}
+
+function buildProxyConfig() {
+  const legacyProxy = parseProxyUrl(process.env.PROXY_URL)
+  if (legacyProxy) return legacyProxy
+
+  const host = String(process.env.PROXY_HOST || '').trim()
+  const port = String(process.env.PROXY_PORT || '').trim()
+  const password = String(process.env.PROXY_PASSWORD || '').trim()
+  if (!host || !port || !password) return null
+
+  const username = buildProxyUsername({ sticky: true })
+  if (!username) return null
+
+  return {
+    server: `http://${host}:${port}`,
+    username,
+    password,
   }
 }
 
@@ -141,7 +183,7 @@ async function loginSPRL(username, password) {
   try {
     applyStealthOnce()
 
-    const proxy = parseProxy(process.env.PROXY_URL)
+    const proxy = buildProxyConfig()
     console.log('[SPRL] Proxy:', proxy ? proxy.server : 'none (direct)')
 
     browser = await getSharedBrowser(proxy)
@@ -312,7 +354,7 @@ async function loginSPRL(username, password) {
         )
       }, { timeout: 8000 })
       .catch(() => null)
-    
+
 
     const browserCookies = await context.cookies().catch(() => [])
     const sunarpCookies = browserCookies.filter(cookie => /sunarp\.gob\.pe$/i.test(cookie.domain) || /sunarp/i.test(cookie.domain))
