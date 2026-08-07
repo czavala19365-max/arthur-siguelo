@@ -24,9 +24,9 @@ const tools = [
   },
   {
     href: '/legal/checklist',
-    tag: 'Transacciones M&A',
-    title: 'Checklist de cierre',
-    desc: 'Genera y edita checklists de cierre para operaciones corporativas.',
+    tag: 'Derecho societario — Perú',
+    title: 'Checklist',
+    desc: 'Checklists de pasos y documentos para constitución, fusión, escisión, disolución y más operaciones societarias peruanas.',
   },
 ]
 
@@ -38,7 +38,7 @@ export default function LegalHubPage() {
       </div>
       <h1 style={legalStyles.h1}>Herramientas legales</h1>
       <p style={{ color: 'var(--muted)', fontSize: 14, marginBottom: 32, maxWidth: 560 }}>
-        Suite de redacción, actas societarias, comparación documental y checklists de cierre.
+        Suite de redacción, actas societarias, comparación documental y checklists societarios.
       </p>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 20 }}>

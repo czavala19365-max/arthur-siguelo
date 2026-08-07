@@ -10,7 +10,7 @@ const links = [
   { href: '/legal/drafter', label: 'Redactor de contratos' },
   { href: '/legal/actas', label: 'Actas JGA' },
   { href: '/legal/redline', label: 'Comparador redline' },
-  { href: '/legal/checklist', label: 'Checklist de cierre' },
+  { href: '/legal/checklist', label: 'Checklist' },
 ]
 
 export default function LegalSidebar() {
