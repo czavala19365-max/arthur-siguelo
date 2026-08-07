@@ -81,7 +81,11 @@ export async function DELETE() {
 
     await disconnectCredential(user.id)
 
-    return NextResponse.json({ ok: true, message: 'Cuenta SUNARP desconectada' })
+    const response = NextResponse.json({ ok: true, message: 'Cuenta SUNARP desconectada' })
+    response.cookies.delete('sprl_access_token')
+    response.cookies.delete('sprl_refresh_token')
+    response.cookies.delete('sunarp_sesion_id')
+    return response
   } catch (err) {
     console.error('[SPRL credentials DELETE]', err)
     return NextResponse.json({ error: 'Error al desconectar cuenta' }, { status: 500 })
