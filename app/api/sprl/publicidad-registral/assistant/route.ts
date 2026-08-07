@@ -168,14 +168,16 @@ function applyEntityUpdates(
 
     const value = updates[field]
 
-    if (!value)
+    if (typeof value !== 'string' || !value)
       continue
+
+    const stringValue = value
 
     if (overwrite) {
 
       ;(next as any)[field] = normalizeAssistantFieldValue(
         field as VigenciaPoderFieldKey,
-        value
+        stringValue
       )
 
     } else {
@@ -184,7 +186,7 @@ function applyEntityUpdates(
 
         ;(next as any)[field] = normalizeAssistantFieldValue(
           field as VigenciaPoderFieldKey,
-          value
+          stringValue
         )
 
       }
