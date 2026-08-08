@@ -17,31 +17,6 @@ const PASSWORD_SELECTOR =
 const SUBMIT_SELECTOR =
   'button[type="submit"], input[type="submit"], button:has-text("Ingresar"), button:has-text("INGRESAR"), input[value*="Ingresar" i], .btn-login, #btnLogin, #btnIngresar'
 
-function isFalseLike(value) {
-  return /^(false|0|no)$/i.test(String(value || '').trim())
-}
-
-function getBrowserHeadlessMode() {
-  const raw = process.env.SPRL_BROWSER_HEADLESS
-  if (raw == null || String(raw).trim() === '') return true
-  return !isFalseLike(raw)
-}
-
-function getBrowserSlowMo() {
-  const raw = Number(process.env.SPRL_BROWSER_SLOWMO_MS || 0)
-  return Number.isFinite(raw) && raw > 0 ? raw : 0
-}
-
-function generateProxySessionId() {
-  const alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
-  const bytes = require('crypto').randomBytes(12)
-  let output = ''
-  for (const byte of bytes) {
-    output += alphabet[byte % alphabet.length]
-  }
-  return output
-}
-
 function clearBrowserIdleTimer() {
   if (!browserIdleTimer) return
   clearTimeout(browserIdleTimer)
@@ -71,54 +46,9 @@ function applyStealthOnce() {
 const SPRL_LOGIN_URL = 'https://sprl.sunarp.gob.pe/sprl/ingreso'
 const SPRL_AUTH_URL = 'https://im01-autorizacion-sprl-production.apps.paas.sunarp.gob.pe/v1/sunarp-services/im/autorizacion/login'
 
-function parseProxy(proxyUrl) {
-  if (!proxyUrl) return null
-  try {
-    const match = proxyUrl.match(/^(https?):\/\/([^:]+):([^@]+)@([^:]+):(\d+)$/)
-    if (!match) return null
-    const [, protocol, rawUser, rawPass, host, port] = match
-    return {
-      server: `${protocol}://${host}:${port}`,
-      username: decodeURIComponent(rawUser),
-      password: decodeURIComponent(rawPass),
-    }
-  } catch (error) {
-    console.error('[SPRL] parseProxy error:', error.message)
-    return null
-  }
-}
-
-function buildProxyConfig(sessionId = null) {
-  const host = String(process.env.PROXY_HOST || '').trim()
-  const port = String(process.env.PROXY_PORT || '').trim()
-  const userBase = String(process.env.PROXY_USER_BASE || '').trim()
-  const area = String(process.env.PROXY_AREA || '').trim()
-  const city = String(process.env.PROXY_CITY || '').trim()
-  const life = String(process.env.PROXY_LIFE || '30').trim() || '30'
-  const password = String(process.env.PROXY_PASSWORD || '').trim()
-
-  if (host && port && userBase && password) {
-    const id = sessionId || generateProxySessionId()
-    const locationSuffix = [
-      area ? `area-${area}` : '',
-      city ? `city-${city}` : '',
-    ].filter(Boolean).join('_')
-    const username = [userBase, locationSuffix, `life-${life}`, `session-${id}`].filter(Boolean).join('_')
-
-    return {
-      server: `http://${host}:${port}`,
-      username,
-      password,
-    }
-  }
-
-  return parseProxy(process.env.PROXY_URL)
-}
-
-function sprlLaunchOptions(proxy) {
-  const opts = {
-    headless: getBrowserHeadlessMode(),
-    slowMo: getBrowserSlowMo(),
+function sprlLaunchOptions() {
+  return {
+    headless: true,
     executablePath: process.env.CHROME_EXECUTABLE_PATH || undefined,
     args: [
       '--no-sandbox',
@@ -127,26 +57,15 @@ function sprlLaunchOptions(proxy) {
       '--ignore-certificate-errors',
     ],
   }
-
-  if (proxy) {
-    opts.proxy = {
-      server: proxy.server,
-      username: proxy.username,
-      password: proxy.password,
-    }
-  }
-
-  return opts
 }
 
-function getBrowserKey(proxy) {
-  const proxyKey = proxy ? `${proxy.server}|${proxy.username || ''}` : 'direct'
+function getBrowserKey() {
   const chromeKey = process.env.CHROME_EXECUTABLE_PATH || 'default-chrome'
-  return `${proxyKey}|${chromeKey}`
+  return `direct|${chromeKey}`
 }
 
-async function getSharedBrowser(proxy) {
-  const currentKey = getBrowserKey(proxy)
+async function getSharedBrowser() {
+  const currentKey = getBrowserKey()
 
   if (sharedBrowser && sharedBrowser.isConnected() && sharedBrowserKey === currentKey) {
     clearBrowserIdleTimer()
@@ -164,7 +83,7 @@ async function getSharedBrowser(proxy) {
   }
 
   sharedBrowserKey = currentKey
-  sharedBrowserPromise = chromium.launch(sprlLaunchOptions(proxy))
+  sharedBrowserPromise = chromium.launch(sprlLaunchOptions())
     .then(browser => {
       browser.on('disconnected', () => {
         if (sharedBrowser === browser) {
@@ -186,7 +105,7 @@ async function getSharedBrowser(proxy) {
   return sharedBrowserPromise
 }
 
-async function loginSPRL(username, password, sessionId = null) {
+async function loginSPRL(username, password) {
   let browser = null
   let context = null
   let page = null
@@ -194,10 +113,12 @@ async function loginSPRL(username, password, sessionId = null) {
   try {
     applyStealthOnce()
 
-    const proxy = buildProxyConfig(sessionId)
-    console.log('[SPRL] Proxy:', proxy ? proxy.server : 'none (direct)')
+    console.log('[SPRL] login start:', {
+      username,
+      mode: 'direct',
+    })
 
-    browser = await getSharedBrowser(proxy)
+    browser = await getSharedBrowser()
 
     context = await browser.newContext({
       userAgent:
@@ -260,9 +181,16 @@ async function loginSPRL(username, password, sessionId = null) {
     const loadPage = async url => {
       for (let attempt = 1; attempt <= 3; attempt += 1) {
         try {
+          console.log('[SPRL] page.goto attempt:', { url, attempt })
           await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 })
+          console.log('[SPRL] page.goto ok:', { url, attempt })
           return
         } catch (error) {
+          console.error('[SPRL] page.goto error:', {
+            url,
+            attempt,
+            message: error instanceof Error ? error.message : String(error),
+          })
           if (attempt === 3) throw error
           await page.waitForTimeout(1200)
         }
@@ -270,9 +198,6 @@ async function loginSPRL(username, password, sessionId = null) {
     }
 
     console.log('[SPRL] Starting login attempt for user:', username)
-    if (proxy?.username) {
-      console.log('[SPRL] Proxy username (masked):', `${String(proxy.username).slice(0, 48)}...`)
-    }
     await loadPage(SPRL_LOGIN_URL)
     await page.waitForSelector(`${LOGIN_FORM_SELECTOR}, button:has-text("INGRESAR")`, { timeout: 10000 }).catch(() => null)
 
@@ -354,6 +279,7 @@ async function loginSPRL(username, password, sessionId = null) {
 
     await navPromise
     await page.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => { })
+    console.log('[SPRL] post-login URL:', page.url())
     await page
       .waitForFunction(() => {
         const bodyText = (document.body?.innerText || '').toLowerCase()
@@ -369,6 +295,7 @@ async function loginSPRL(username, password, sessionId = null) {
       }, { timeout: 8000 })
       .catch(() => null)
 
+
     const browserCookies = await context.cookies().catch(() => [])
     const sunarpCookies = browserCookies.filter(cookie => /sunarp\.gob\.pe$/i.test(cookie.domain) || /sunarp/i.test(cookie.domain))
     const sunarpCookieHeader = sunarpCookies.map(cookie => `${cookie.name}=${cookie.value}`).join('; ')
@@ -378,9 +305,20 @@ async function loginSPRL(username, password, sessionId = null) {
       const name = cookie.name.toLowerCase()
       return (name.includes('sesion') || name.includes('session') || name.includes('sunarp')) && cookie.value
     })
-    if (sessionCookie?.value) {
-      sunarpSessionId = sessionCookie.value
+    if (sessionCookie?.value) sunarpSessionId = sessionCookie.value
+
+    if (!accessToken) {
+      const cookieToken = browserCookies.find(cookie => /token|auth/i.test(cookie.name) && cookie.value)?.value || null
+      if (cookieToken) accessToken = cookieToken
     }
+
+    console.log('[SPRL] tokens/cookies captured:', {
+      hasAccessToken: Boolean(accessToken),
+      hasRefreshToken: Boolean(refreshToken),
+      hasSunarpSessionId: Boolean(sunarpSessionId),
+      cookiesCount: browserCookies.length,
+      sunarpCookiesCount: sunarpCookies.length,
+    })
 
     const body = await page.evaluate(() => document.body?.textContent || '').catch(() => '')
     const hasHola = body.includes('HOLA!') || body.includes('HOLA ')
@@ -416,6 +354,16 @@ async function loginSPRL(username, password, sessionId = null) {
     if (!isLoggedIn) {
       return { ok: false, error: 'No se pudo confirmar el login en SPRL. Intente nuevamente.' }
     }
+
+    console.log('[SPRL] login ok summary:', {
+      saldo,
+      displayUsername,
+      displayName,
+      hasAccessToken: Boolean(accessToken),
+      hasRefreshToken: Boolean(refreshToken),
+      hasSunarpSessionId: Boolean(sunarpSessionId),
+      sunarpCookieHeaderLength: sunarpCookieHeader.length,
+    })
 
     return {
       ok: true,

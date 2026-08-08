@@ -59,6 +59,10 @@ export async function POST(request: NextRequest) {
       fromAuthHeader: Boolean(request.headers.get('authorization')),
       fromEnv: Boolean(process.env.SPRL_CATALOGO_TOKEN),
       tokenLength: token.length,
+      tokenStart: token.slice(0, 10),
+      tokenEnd: token.slice(-10),
+      sessionIdLength: request.cookies.get('sunarp_sesion_id')?.value?.length ?? 0,
+      remoteCookieLength: request.cookies.get('sprl_remote_cookie')?.value?.length ?? 0,
     })
 
     if (!token) {
