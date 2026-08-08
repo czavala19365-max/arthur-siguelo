@@ -3,6 +3,7 @@
 const express = require('express')
 const { scrapeCEJ } = require('./cej-scraper')
 const { chromium } = require('playwright')
+const { HttpsProxyAgent } = require('https-proxy-agent')
 
 const app = express()
 app.use(express.json({ limit: '1mb' }))
