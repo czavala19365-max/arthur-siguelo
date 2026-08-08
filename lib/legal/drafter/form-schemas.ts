@@ -2,11 +2,6 @@ import { DOCUMENT_SCHEMAS, DOCUMENT_TYPE_IDS, PRIMARY_DOCUMENT_TYPE_IDS, getDocu
 import type { DrafterField } from './schema/types'
 
 export type { DrafterField, DrafterFieldType, DocumentTypeSchema } from './schema/types'
-<<<<<<< HEAD
-=======
-
-export type DocumentTypeId = (typeof DOCUMENT_TYPE_IDS)[number]
->>>>>>> b18de3c87f15f1b14dc0f6da03a87062ff3bdd70
 
 export type DocumentTypeId = (typeof DOCUMENT_TYPE_IDS)[number]
 
