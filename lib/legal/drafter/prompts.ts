@@ -224,6 +224,7 @@ ${legalBasis}${extraGuidance ? `\n\nGuía específica adicional:\n${extraGuidanc
 Datos del negocio e instrucciones:
 ${fieldBlock}
 
+<<<<<<< HEAD
 Entrega el documento completo, listo para revisión de un abogado, como secciones estructuradas según el formato JSON requerido. Redacta en español, con estilo notarial peruano estricto (formato de encabezado según requiera escritura pública o documento privado, comparecencia con generales de ley, cláusulas numeradas con ordinales en mayúscula, y cierre correspondiente).`
 }
 
@@ -237,3 +238,18 @@ Responde SOLO con un objeto JSON (sin fences de markdown, sin comentarios fuera 
   "cambios_realizados": [ { "seccion": "título de la sección", "tipo_cambio": "agregado|modificado|eliminado", "descripcion": "qué cambió" } ]
 }
 "sections" debe contener SIEMPRE el conjunto COMPLETO y actual de secciones (las no afectadas copiadas sin cambios) para que el cliente pueda renderizar todo el documento desde este único campo.`
+=======
+Produce the full document ready for review by counsel, as structured sections per the required JSON format.`
+}
+
+export const REFINE_SYSTEM = `You are a senior international legal drafter helping revise an existing legal document.
+Apply ONLY the requested change — modify the affected section(s) and leave the rest untouched. Never regenerate the whole document from scratch.
+
+Respond ONLY with a JSON object (no markdown fences, no commentary outside the JSON) with this exact shape:
+{
+  "message": "brief explanation, in the same language as the user's instruction",
+  "sections": [ { "titulo": "1. DEFINITIONS", "contenido": "full, up to date text of EVERY section" } ],
+  "cambios_realizados": [ { "seccion": "section title", "tipo_cambio": "agregado|modificado|eliminado", "descripcion": "what changed" } ]
+}
+"sections" must always contain the COMPLETE, current set of sections (unaffected ones copied through unchanged) so the client can render the whole document from this single field.`
+>>>>>>> b18de3c87f15f1b14dc0f6da03a87062ff3bdd70

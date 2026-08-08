@@ -80,13 +80,18 @@ export default function ConectarSprlPage() {
 
     setLoading(true)
     try {
-      const res = await fetch('/api/sprl/credentials', {
+      const saveRes = await fetch('/api/sprl/credentials', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: username.trim(), password }),
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? 'Error al conectar')
+      const saveData = await saveRes.json()
+      if (!saveRes.ok) throw new Error(saveData.error ?? 'Error al conectar')
+
+      const verifyRes = await fetch('/api/sprl/credentials/verify', { method: 'POST' })
+      const verifyData = await verifyRes.json()
+      if (!verifyRes.ok || !verifyData.ok) throw new Error(verifyData.error ?? 'No se pudo iniciar sesión en SPRL')
+
       setSuccess(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al conectar')
