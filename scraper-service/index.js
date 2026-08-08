@@ -73,38 +73,6 @@ app.post('/scrape', async (req, res) => {
   }
 })
 
-app.get('/health/proxy', async (req, res) => {
-  const { chromium } = require('playwright')
-  function parseProxy(proxyUrl) {
-    const url = new URL(proxyUrl)
-    return {
-      server: url.protocol + '//' + url.hostname + ':' + url.port,
-      username: decodeURIComponent(url.username),
-      password: decodeURIComponent(url.password),
-    }
-  }
-  let browser
-  try {
-    browser = await chromium.launch({
-      headless: true,
-      proxy: parseProxy(process.env.PROXY_URL),
-      args: ['--no-sandbox', '--ignore-certificate-errors']
-    });
-    const page = await browser.newPage();
-    await page.setExtraHTTPHeaders({});
-    const response = await page.goto('http://checkip.amazonaws.com/', {
-      waitUntil: 'domcontentloaded',
-      timeout: 30000
-    });
-    const ip = (await page.textContent('body')).trim();
-    res.json({ ok: true, ip });
-  } catch (err) {
-    res.status(500).json({ ok: false, error: err.message })
-  } finally {
-    if (browser) await browser.close()
-  }
-})
-
 // ─── SPRL (Publicidad Registral) ────────────────────────────────
 const { loginSPRL } = require('./sprl-scraper')
 

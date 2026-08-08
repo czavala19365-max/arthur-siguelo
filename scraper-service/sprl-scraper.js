@@ -1,6 +1,5 @@
 'use strict'
 
-const crypto = require('crypto')
 const { chromium } = require('playwright-extra')
 const StealthPlugin = require('puppeteer-extra-plugin-stealth')
 
@@ -47,66 +46,8 @@ function applyStealthOnce() {
 const SPRL_LOGIN_URL = 'https://sprl.sunarp.gob.pe/sprl/ingreso'
 const SPRL_AUTH_URL = 'https://im01-autorizacion-sprl-production.apps.paas.sunarp.gob.pe/v1/sunarp-services/im/autorizacion/login'
 
-function generateProxySessionId() {
-  return crypto.randomBytes(6).toString('hex')
-}
-
-const SPRL_PROXY_SESSION_ID = process.env.SPRL_PROXY_SESSION_ID || generateProxySessionId()
-
-function buildProxyUsername({ sticky = true, sessionId = null } = {}) {
-  const userBase = String(process.env.PROXY_USER_BASE || '').trim()
-  const area = String(process.env.PROXY_AREA || '').trim()
-  const city = String(process.env.PROXY_CITY || '').trim()
-  if (!userBase || !area || !city) return ''
-
-  const base = `${userBase}_area-${area}_city-${city}`
-
-  if (sticky) {
-    const id = sessionId || SPRL_PROXY_SESSION_ID
-    return `${base}_life-30_session-${id}`
-  }
-
-  return `${base}_session-${generateProxySessionId()}`
-}
-
-function parseProxyUrl(proxyUrl) {
-  if (!proxyUrl) return null
-  try {
-    const match = proxyUrl.match(/^(https?):\/\/([^:]+):([^@]+)@([^:]+):(\d+)$/)
-    if (!match) return null
-    const [, protocol, rawUser, rawPass, host, port] = match
-    return {
-      server: `${protocol}://${host}:${port}`,
-      username: decodeURIComponent(rawUser),
-      password: decodeURIComponent(rawPass),
-    }
-  } catch (error) {
-    console.error('[SPRL] parseProxyUrl error:', error.message)
-    return null
-  }
-}
-
-function buildProxyConfig(sessionId = null) {
-  const legacyProxy = parseProxyUrl(process.env.PROXY_URL)
-  if (legacyProxy) return legacyProxy
-
-  const host = String(process.env.PROXY_HOST || '').trim()
-  const port = String(process.env.PROXY_PORT || '').trim()
-  const password = String(process.env.PROXY_PASSWORD || '').trim()
-  if (!host || !port || !password) return null
-
-  const username = buildProxyUsername({ sticky: true, sessionId })
-  if (!username) return null
-
+function sprlLaunchOptions() {
   return {
-    server: `http://${host}:${port}`,
-    username,
-    password,
-  }
-}
-
-function sprlLaunchOptions(proxy) {
-  const opts = {
     headless: true,
     executablePath: process.env.CHROME_EXECUTABLE_PATH || undefined,
     args: [
@@ -116,26 +57,15 @@ function sprlLaunchOptions(proxy) {
       '--ignore-certificate-errors',
     ],
   }
-
-  if (proxy) {
-    opts.proxy = {
-      server: proxy.server,
-      username: proxy.username,
-      password: proxy.password,
-    }
-  }
-
-  return opts
 }
 
-function getBrowserKey(proxy) {
-  const proxyKey = proxy ? `${proxy.server}|${proxy.username || ''}` : 'direct'
+function getBrowserKey() {
   const chromeKey = process.env.CHROME_EXECUTABLE_PATH || 'default-chrome'
-  return `${proxyKey}|${chromeKey}`
+  return `direct|${chromeKey}`
 }
 
-async function getSharedBrowser(proxy) {
-  const currentKey = getBrowserKey(proxy)
+async function getSharedBrowser() {
+  const currentKey = getBrowserKey()
 
   if (sharedBrowser && sharedBrowser.isConnected() && sharedBrowserKey === currentKey) {
     clearBrowserIdleTimer()
@@ -153,7 +83,7 @@ async function getSharedBrowser(proxy) {
   }
 
   sharedBrowserKey = currentKey
-  sharedBrowserPromise = chromium.launch(sprlLaunchOptions(proxy))
+  sharedBrowserPromise = chromium.launch(sprlLaunchOptions())
     .then(browser => {
       browser.on('disconnected', () => {
         if (sharedBrowser === browser) {
@@ -175,7 +105,7 @@ async function getSharedBrowser(proxy) {
   return sharedBrowserPromise
 }
 
-async function loginSPRL(username, password, sessionId = null) {
+async function loginSPRL(username, password) {
   let browser = null
   let context = null
   let page = null
@@ -183,15 +113,12 @@ async function loginSPRL(username, password, sessionId = null) {
   try {
     applyStealthOnce()
 
-    const proxy = buildProxyConfig(sessionId)
     console.log('[SPRL] login start:', {
       username,
-      sessionId,
-      proxyServer: proxy ? proxy.server : 'none (direct)',
-      proxyUserPrefix: proxy?.username ? String(proxy.username).slice(0, 32) : null,
+      mode: 'direct',
     })
 
-    browser = await getSharedBrowser(proxy)
+    browser = await getSharedBrowser()
 
     context = await browser.newContext({
       userAgent:
