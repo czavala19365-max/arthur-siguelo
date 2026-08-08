@@ -275,6 +275,12 @@ async function loginSprlLocal(username: string, password: string) {
     }
 
     const browserCookies = await context.cookies().catch(() => [])
+    console.log('[SPRL verify] Browser cookies:', browserCookies.map(cookie => ({
+      name: cookie.name,
+      domain: cookie.domain,
+      path: cookie.path,
+      valueLength: cookie.value?.length ?? 0,
+    })))
     const sunarpCookies = browserCookies.filter(cookie => /sunarp\.gob\.pe$/i.test(cookie.domain) || /sunarp/i.test(cookie.domain))
     const sunarpCookieHeader = sunarpCookies.map(cookie => `${cookie.name}=${cookie.value}`).join('; ')
 
@@ -378,6 +384,7 @@ export async function POST() {
       refreshToken?: string | null
       sunarpSessionId?: string | null
       sunarpCookieHeader?: string | null
+      tokenSource?: string | null
       error?: string
     }
 
@@ -405,6 +412,17 @@ export async function POST() {
 
       result = await response.json()
     }
+
+    console.log('[SPRL verify] LOGIN RESULT:', {
+    ok: result.ok,
+    tokenLength: result.accessToken?.length ?? 0,
+    tokenStart: result.accessToken?.slice(0, 10) ?? null,
+    tokenEnd: result.accessToken?.slice(-10) ?? null,
+    refreshTokenLength: result.refreshToken?.length ?? 0,
+    sessionIdLength: result.sunarpSessionId?.length ?? 0,
+    remoteCookieLength: result.sunarpCookieHeader?.length ?? 0,
+    tokenSource: result.tokenSource ?? null,
+  })
 
     const loginResponse = NextResponse.json(
       result.ok
