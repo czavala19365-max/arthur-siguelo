@@ -12,26 +12,21 @@ type CatalogRequestBody = {
   tipoCert?: string
 }
 
+
 function getProxyAgent() {
   const proxyHost =
-    process.env.SPRL_PROXY_HOST ||
-    process.env.PROXY_HOST ||
+    process.env.SPRL_PROXY_SERVER ||
     'us.smartproxy.net'
 
   const proxyPort =
     process.env.SPRL_PROXY_PORT ||
-    process.env.PROXY_PORT ||
     '3120'
 
   const proxyUser =
-    process.env.SPRL_PROXY_USER ||
-    process.env.PROXY_USER ||
-    ''
+    process.env.SPRL_PROXY_USERNAME
 
   const proxyPass =
-    process.env.SPRL_PROXY_PASS ||
-    process.env.PROXY_PASS ||
-    ''
+    process.env.SPRL_PROXY_PASSWORD
 
   if (!proxyUser || !proxyPass) {
     throw new Error('Faltan las credenciales de SmartProxy.')
@@ -46,7 +41,6 @@ function getProxyAgent() {
   return new HttpsProxyAgent(proxyUrl, {
     keepAlive: true,
     rejectUnauthorized: false,
-
     headers: {
       'Proxy-Authorization': `Basic ${proxyAuth}`,
     },
@@ -66,13 +60,7 @@ export async function POST(request: NextRequest) {
      * ============================================================
      */
 
-    const token =
-      request.cookies.get('sprl_access_token')?.value ||
-      request.headers
-        .get('authorization')
-        ?.replace(/^Bearer\s+/i, '') ||
-      process.env.SPRL_CATALOGO_TOKEN ||
-      ''
+    const token = request.cookies.get('sprl_access_token')
 
     /*
      * ============================================================
@@ -80,17 +68,14 @@ export async function POST(request: NextRequest) {
      * ============================================================
      */
 
-    const rawCookieHeader =
-      request.cookies.get('sprl_remote_cookie')?.value ||
-      request.cookies.get('sprl_cookie_header')?.value ||
-      ''
+    const rawCookieHeader = request.cookies.get('sprl_remote_cookie')
 
     console.log('[SPRL catalog] incoming request:', {
       codArea,
       tipoCert,
       hasToken: Boolean(token),
-      tokenLength: token.length,
-      rawCookieLength: rawCookieHeader.length,
+      hasCookie: Boolean(rawCookieHeader),
+      cookie: rawCookieHeader,
       cookieNames: request.cookies.getAll().map(
         cookie => cookie.name
       ),
@@ -168,10 +153,14 @@ export async function POST(request: NextRequest) {
      * ============================================================
      */
 
+    const rawCookie = rawCookieHeader?.value
+    if(!rawCookie) {
+      throw new Error('Cookie SPRL no tiene valor.')
+    }
     let cookieHeader: string
 
     try {
-      cookieHeader = decodeURIComponent(rawCookieHeader)
+      cookieHeader = decodeURIComponent(rawCookie)
 
       console.log('[SPRL catalog] Cookie decodificada:', {
         length: cookieHeader.length,
@@ -209,23 +198,19 @@ export async function POST(request: NextRequest) {
 
     console.log('[SPRL catalog] Proxy configurado:', {
       host:
-        process.env.SPRL_PROXY_HOST ||
-        process.env.PROXY_HOST ||
+        process.env.SPRL_PROXY_SERVER ||
         'us.smartproxy.net',
 
       port:
         process.env.SPRL_PROXY_PORT ||
-        process.env.PROXY_PORT ||
         '3120',
 
       hasUser: Boolean(
-        process.env.SPRL_PROXY_USER ||
-        process.env.PROXY_USER
+        process.env.SPRL_PROXY_USERNAME 
       ),
 
       hasPassword: Boolean(
-        process.env.SPRL_PROXY_PASS ||
-        process.env.PROXY_PASS
+        process.env.SPRL_PROXY_PASSWORD 
       ),
     })
 
@@ -257,8 +242,8 @@ export async function POST(request: NextRequest) {
     console.log('[SPRL catalog] Request SUNARP:', {
       codArea,
       tipoCert,
-      tokenLength: token.length,
-      tokenStart: token.slice(0, 10),
+      token: token,
+      cookie: cookieHeader,
       cookieLength: cookieHeader.length,
       hasJSessionId: cookieHeader.includes('JSESSIONID'),
     })
