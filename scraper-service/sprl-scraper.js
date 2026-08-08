@@ -184,7 +184,12 @@ async function loginSPRL(username, password, sessionId = null) {
     applyStealthOnce()
 
     const proxy = buildProxyConfig(sessionId)
-    console.log('[SPRL] Proxy:', proxy ? proxy.server : 'none (direct)')
+    console.log('[SPRL] login start:', {
+      username,
+      sessionId,
+      proxyServer: proxy ? proxy.server : 'none (direct)',
+      proxyUserPrefix: proxy?.username ? String(proxy.username).slice(0, 32) : null,
+    })
 
     browser = await getSharedBrowser(proxy)
 
@@ -249,9 +254,16 @@ async function loginSPRL(username, password, sessionId = null) {
     const loadPage = async url => {
       for (let attempt = 1; attempt <= 3; attempt += 1) {
         try {
+          console.log('[SPRL] page.goto attempt:', { url, attempt })
           await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 })
+          console.log('[SPRL] page.goto ok:', { url, attempt })
           return
         } catch (error) {
+          console.error('[SPRL] page.goto error:', {
+            url,
+            attempt,
+            message: error instanceof Error ? error.message : String(error),
+          })
           if (attempt === 3) throw error
           await page.waitForTimeout(1200)
         }
@@ -340,6 +352,7 @@ async function loginSPRL(username, password, sessionId = null) {
 
     await navPromise
     await page.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => { })
+    console.log('[SPRL] post-login URL:', page.url())
     await page
       .waitForFunction(() => {
         const bodyText = (document.body?.innerText || '').toLowerCase()
@@ -371,6 +384,14 @@ async function loginSPRL(username, password, sessionId = null) {
       const cookieToken = browserCookies.find(cookie => /token|auth/i.test(cookie.name) && cookie.value)?.value || null
       if (cookieToken) accessToken = cookieToken
     }
+
+    console.log('[SPRL] tokens/cookies captured:', {
+      hasAccessToken: Boolean(accessToken),
+      hasRefreshToken: Boolean(refreshToken),
+      hasSunarpSessionId: Boolean(sunarpSessionId),
+      cookiesCount: browserCookies.length,
+      sunarpCookiesCount: sunarpCookies.length,
+    })
 
     const body = await page.evaluate(() => document.body?.textContent || '').catch(() => '')
     const hasHola = body.includes('HOLA!') || body.includes('HOLA ')
@@ -406,6 +427,16 @@ async function loginSPRL(username, password, sessionId = null) {
     if (!isLoggedIn) {
       return { ok: false, error: 'No se pudo confirmar el login en SPRL. Intente nuevamente.' }
     }
+
+    console.log('[SPRL] login ok summary:', {
+      saldo,
+      displayUsername,
+      displayName,
+      hasAccessToken: Boolean(accessToken),
+      hasRefreshToken: Boolean(refreshToken),
+      hasSunarpSessionId: Boolean(sunarpSessionId),
+      sunarpCookieHeaderLength: sunarpCookieHeader.length,
+    })
 
     return {
       ok: true,
