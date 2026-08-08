@@ -349,6 +349,22 @@ async function loginSPRL(username, password) {
 
     console.log('[SPRL DEBUG] Probando catálogo DESDE EL MISMO BROWSER...')
 
+// TEST ============================================================
+page.on('request', request => {
+  if (
+    request.url().includes(
+      'listarPublicidadCertificados'
+    )
+  ) {
+    console.log('[SPRL DEBUG] BROWSER CATALOG REQUEST:', {
+      method: request.method(),
+      url: request.url(),
+      headers: request.headers(),
+      postData: request.postData(),
+    })
+  }
+})
+
 const catalogResponse = await page.evaluate(async (accessToken) => {
   try {
     const response = await fetch(
@@ -382,6 +398,7 @@ const catalogResponse = await page.evaluate(async (accessToken) => {
 
 console.log('[SPRL DEBUG] CATALOG FROM PLAYWRIGHT:', catalogResponse)
 
+// TEST ============================================================
 console.log('[SPRL DEBUG] Probando catálogo DESDE NODE con el mismo token + cookie...')
 
 try {
@@ -456,6 +473,7 @@ console.log('[SPRL DEBUG] Node proxy configured:', {
     error instanceof Error ? error.message : String(error)
   )
 }
+// ============================================================
 
     const body = await page.evaluate(() => document.body?.textContent || '').catch(() => '')
     const hasHola = body.includes('HOLA!') || body.includes('HOLA ')
