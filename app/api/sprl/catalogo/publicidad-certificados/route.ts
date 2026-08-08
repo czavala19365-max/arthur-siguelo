@@ -33,6 +33,14 @@ export async function POST(request: NextRequest) {
     const codArea = String(body.codArea ?? '').trim()
     const tipoCert = String(body.tipoCert ?? '').trim()
 
+    console.log('[SPRL catalog] incoming request:', {
+      codArea,
+      tipoCert,
+      hasCookie: Boolean(request.cookies.get('sprl_access_token')?.value),
+      hasAuthHeader: Boolean(request.headers.get('authorization')),
+      cookieNames: request.cookies.getAll().map(cookie => cookie.name),
+    })
+
     if (!codArea || !tipoCert) {
       return NextResponse.json(
         { success: false, data: null, response: { codigo: '400', titulo: 'ERROR', tipo: 'E', mensaje: 'codArea y tipoCert son requeridos.' } },
@@ -46,7 +54,15 @@ export async function POST(request: NextRequest) {
       process.env.SPRL_CATALOGO_TOKEN ||
       ''
 
+    console.log('[SPRL catalog] token resolution:', {
+      fromCookie: Boolean(request.cookies.get('sprl_access_token')?.value),
+      fromAuthHeader: Boolean(request.headers.get('authorization')),
+      fromEnv: Boolean(process.env.SPRL_CATALOGO_TOKEN),
+      tokenLength: token.length,
+    })
+
     if (!token) {
+      console.log('[SPRL catalog] missing token, returning 401')
       return NextResponse.json(
         { success: false, data: null, response: { codigo: '401', titulo: 'ERROR', tipo: 'E', mensaje: 'Token SPRL expirado o no autenticado.' } },
         { status: 401 },
@@ -66,6 +82,11 @@ export async function POST(request: NextRequest) {
     })
 
     const text = await response.text()
+    console.log('[SPRL catalog] upstream response:', {
+      status: response.status,
+      ok: response.ok,
+      bodyPreview: text.slice(0, 250),
+    })
     let json: unknown = null
     try {
       json = JSON.parse(text)
@@ -85,6 +106,7 @@ export async function POST(request: NextRequest) {
         bodyText.includes('no ingresa un token')
 
       if (tokenExpired) {
+        console.log('[SPRL catalog] token expired or not authenticated detected')
         return NextResponse.json(
           {
             success: false,
@@ -118,6 +140,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(json)
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Error al consultar el catálogo'
+    console.error('[SPRL catalog] error:', message)
     return NextResponse.json(
       { success: false, data: null, response: { codigo: '500', titulo: 'ERROR', tipo: 'E', mensaje: message } },
       { status: 500 },

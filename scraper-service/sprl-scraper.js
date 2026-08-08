@@ -1,5 +1,6 @@
 'use strict'
 
+const crypto = require('crypto')
 const { chromium } = require('playwright-extra')
 const StealthPlugin = require('puppeteer-extra-plugin-stealth')
 
@@ -46,7 +47,29 @@ function applyStealthOnce() {
 const SPRL_LOGIN_URL = 'https://sprl.sunarp.gob.pe/sprl/ingreso'
 const SPRL_AUTH_URL = 'https://im01-autorizacion-sprl-production.apps.paas.sunarp.gob.pe/v1/sunarp-services/im/autorizacion/login'
 
-function parseProxy(proxyUrl) {
+function generateProxySessionId() {
+  return crypto.randomBytes(6).toString('hex')
+}
+
+const SPRL_PROXY_SESSION_ID = process.env.SPRL_PROXY_SESSION_ID || generateProxySessionId()
+
+function buildProxyUsername({ sticky = true, sessionId = null } = {}) {
+  const userBase = String(process.env.PROXY_USER_BASE || '').trim()
+  const area = String(process.env.PROXY_AREA || '').trim()
+  const city = String(process.env.PROXY_CITY || '').trim()
+  if (!userBase || !area || !city) return ''
+
+  const base = `${userBase}_area-${area}_city-${city}`
+
+  if (sticky) {
+    const id = sessionId || SPRL_PROXY_SESSION_ID
+    return `${base}_life-30_session-${id}`
+  }
+
+  return `${base}_session-${generateProxySessionId()}`
+}
+
+function parseProxyUrl(proxyUrl) {
   if (!proxyUrl) return null
   try {
     const match = proxyUrl.match(/^(https?):\/\/([^:]+):([^@]+)@([^:]+):(\d+)$/)
@@ -58,8 +81,27 @@ function parseProxy(proxyUrl) {
       password: decodeURIComponent(rawPass),
     }
   } catch (error) {
-    console.error('[SPRL] parseProxy error:', error.message)
+    console.error('[SPRL] parseProxyUrl error:', error.message)
     return null
+  }
+}
+
+function buildProxyConfig(sessionId = null) {
+  const legacyProxy = parseProxyUrl(process.env.PROXY_URL)
+  if (legacyProxy) return legacyProxy
+
+  const host = String(process.env.PROXY_HOST || '').trim()
+  const port = String(process.env.PROXY_PORT || '').trim()
+  const password = String(process.env.PROXY_PASSWORD || '').trim()
+  if (!host || !port || !password) return null
+
+  const username = buildProxyUsername({ sticky: true, sessionId })
+  if (!username) return null
+
+  return {
+    server: `http://${host}:${port}`,
+    username,
+    password,
   }
 }
 
@@ -133,7 +175,7 @@ async function getSharedBrowser(proxy) {
   return sharedBrowserPromise
 }
 
-async function loginSPRL(username, password) {
+async function loginSPRL(username, password, sessionId = null) {
   let browser = null
   let context = null
   let page = null
@@ -141,8 +183,13 @@ async function loginSPRL(username, password) {
   try {
     applyStealthOnce()
 
-    const proxy = parseProxy(process.env.PROXY_URL)
-    console.log('[SPRL] Proxy:', proxy ? proxy.server : 'none (direct)')
+    const proxy = buildProxyConfig(sessionId)
+    console.log('[SPRL] login start:', {
+      username,
+      sessionId,
+      proxyServer: proxy ? proxy.server : 'none (direct)',
+      proxyUserPrefix: proxy?.username ? String(proxy.username).slice(0, 32) : null,
+    })
 
     browser = await getSharedBrowser(proxy)
 
@@ -207,9 +254,16 @@ async function loginSPRL(username, password) {
     const loadPage = async url => {
       for (let attempt = 1; attempt <= 3; attempt += 1) {
         try {
+          console.log('[SPRL] page.goto attempt:', { url, attempt })
           await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 })
+          console.log('[SPRL] page.goto ok:', { url, attempt })
           return
         } catch (error) {
+          console.error('[SPRL] page.goto error:', {
+            url,
+            attempt,
+            message: error instanceof Error ? error.message : String(error),
+          })
           if (attempt === 3) throw error
           await page.waitForTimeout(1200)
         }
@@ -298,6 +352,7 @@ async function loginSPRL(username, password) {
 
     await navPromise
     await page.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => { })
+    console.log('[SPRL] post-login URL:', page.url())
     await page
       .waitForFunction(() => {
         const bodyText = (document.body?.innerText || '').toLowerCase()
@@ -312,6 +367,31 @@ async function loginSPRL(username, password) {
         )
       }, { timeout: 8000 })
       .catch(() => null)
+
+
+    const browserCookies = await context.cookies().catch(() => [])
+    const sunarpCookies = browserCookies.filter(cookie => /sunarp\.gob\.pe$/i.test(cookie.domain) || /sunarp/i.test(cookie.domain))
+    const sunarpCookieHeader = sunarpCookies.map(cookie => `${cookie.name}=${cookie.value}`).join('; ')
+
+    let sunarpSessionId = null
+    const sessionCookie = browserCookies.find(cookie => {
+      const name = cookie.name.toLowerCase()
+      return (name.includes('sesion') || name.includes('session') || name.includes('sunarp')) && cookie.value
+    })
+    if (sessionCookie?.value) sunarpSessionId = sessionCookie.value
+
+    if (!accessToken) {
+      const cookieToken = browserCookies.find(cookie => /token|auth/i.test(cookie.name) && cookie.value)?.value || null
+      if (cookieToken) accessToken = cookieToken
+    }
+
+    console.log('[SPRL] tokens/cookies captured:', {
+      hasAccessToken: Boolean(accessToken),
+      hasRefreshToken: Boolean(refreshToken),
+      hasSunarpSessionId: Boolean(sunarpSessionId),
+      cookiesCount: browserCookies.length,
+      sunarpCookiesCount: sunarpCookies.length,
+    })
 
     const body = await page.evaluate(() => document.body?.textContent || '').catch(() => '')
     const hasHola = body.includes('HOLA!') || body.includes('HOLA ')
@@ -348,6 +428,16 @@ async function loginSPRL(username, password) {
       return { ok: false, error: 'No se pudo confirmar el login en SPRL. Intente nuevamente.' }
     }
 
+    console.log('[SPRL] login ok summary:', {
+      saldo,
+      displayUsername,
+      displayName,
+      hasAccessToken: Boolean(accessToken),
+      hasRefreshToken: Boolean(refreshToken),
+      hasSunarpSessionId: Boolean(sunarpSessionId),
+      sunarpCookieHeaderLength: sunarpCookieHeader.length,
+    })
+
     return {
       ok: true,
       saldo,
@@ -356,6 +446,8 @@ async function loginSPRL(username, password) {
       accessToken,
       refreshToken,
       tokenSource: accessToken ? 'local-playwright' : null,
+      sunarpSessionId,
+      sunarpCookieHeader: sunarpCookieHeader || null,
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
