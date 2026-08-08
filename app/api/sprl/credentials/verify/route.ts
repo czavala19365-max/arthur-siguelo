@@ -1,10 +1,23 @@
 import { NextResponse } from 'next/server'
-import { chromium } from 'playwright'
+import { chromium } from 'playwright-extra'
+import StealthPlugin from 'puppeteer-extra-plugin-stealth'
 import { getAuthServerClient } from '@/lib/supabase-auth-server'
 import { getDecryptedCredentials, getCredentialByUserId, updateCredentialStatus } from '@/lib/sprl/db'
 
 
 export const runtime = 'nodejs'
+
+let stealthApplied = false
+
+function applyStealthOnce() {
+  if (stealthApplied) return
+  stealthApplied = true
+  try {
+    chromium.use(StealthPlugin())
+  } catch {
+    // If stealth cannot be attached, continue with plain Chromium.
+  }
+}
 
 
 function normalizeServiceUrl(rawUrl?: string | null) {
@@ -26,6 +39,8 @@ const SUBMIT_SELECTOR =
   'button[type="submit"], input[type="submit"], button:has-text("Ingresar"), button:has-text("INGRESAR"), input[value*="Ingresar" i], .btn-login, #btnLogin, #btnIngresar'
 
 async function loginSprlLocal(username: string, password: string) {
+  applyStealthOnce()
+
   const browser = await chromium.launch({
     headless: true,
     executablePath: getChromeExecutablePath(),
@@ -77,7 +92,7 @@ async function loginSprlLocal(username: string, password: string) {
     field = await page.$(LOGIN_FORM_SELECTOR).catch(() => null)
     if (field) return field
 
-    // Some login flows leave us on intermediate pages; navigate directly to the auth login as a final fallback.
+    // Some proxy exits keep us on intermediate pages; navigate directly to the auth login as a final fallback.
     await page.goto(authLoginUrl, { waitUntil: 'domcontentloaded', timeout: 45000 }).catch(() => null)
     await page.waitForSelector(LOGIN_FORM_SELECTOR, { timeout: 20000 }).catch(() => null)
     return page.$(LOGIN_FORM_SELECTOR).catch(() => null)
@@ -147,7 +162,7 @@ async function loginSprlLocal(username: string, password: string) {
 
     if (!usernameField) {
       const bodyText = await page.evaluate(() => document.body?.textContent?.substring(0, 600) || '').catch(() => '')
-      console.error('[SPRL verify] login form missing after login flow. url:', page.url())
+      console.error('[SPRL verify] login form missing after proxy flow. url:', page.url())
       console.error('[SPRL verify] body preview:', bodyText.replace(/\s+/g, ' ').trim().substring(0, 300))
       throw new Error('No se encontró el formulario de login en SPRL.')
     }
