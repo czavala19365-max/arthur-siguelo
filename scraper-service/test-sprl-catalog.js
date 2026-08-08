@@ -13,7 +13,7 @@ const CATALOGO_URL =
 const PROXY_HOST = 'us.smartproxy.net';
 const PROXY_PORT = '3120';
 const PROXY_USER =
-  'smart-jorgeganoza_area-PE_city-LIMA_life-60_session-PBYatf6rVQO';
+  'smart-jorgeganoza_area-PE_city-LIMA_life-60_session-TbYbAGVFoUD';
 const PROXY_PASS = 'Cocoroco20';
 
 const proxyUrl = `http://${PROXY_HOST}:${PROXY_PORT}`;
@@ -35,10 +35,10 @@ const proxyAgent = new HttpsProxyAgent(proxyUrl, {
 // ============================================================
 
 const accessToken =
-  'f1762532-2b8d-41e2-9126-c130caad261f-da0315a5-b81f-4ee6-8547-5699a054f546';
+  '4a75846f-8ec3-4d1d-90b5-de70c092ff19-045a6600-b8e2-4ce1-9a05-e63476d0393f';
 
 const sunarpCookieHeader =
-  'JSESSIONID%3D30E57ACA9A9F01F18BE333BAAE9F3A2F%3B%20_ga%3DGA1.1.1529456524.1786211844%3B%2089c834e13f8e0f3275d54b8fd39e7d35%3D842596026297897415dd4b0819ed1fb8%3B%20_ga_C4XX4CF718%3DGS2.1.s1786211843%24o1%24g1%24t1786211878%24j25%24l0%24h0';
+  'JSESSIONID%3DE11FF3D1E25C50F0C57AAC3DF0FA5FE2%3B%20_ga%3DGA1.1.97612975.1786217369%3B%2089c834e13f8e0f3275d54b8fd39e7d35%3D842596026297897415dd4b0819ed1fb8%3B%20_ga_C4XX4CF718%3DGS2.1.s1786217369%24o1%24g1%24t1786217393%24j36%24l0%24h0';
 
 const codArea = '22000';
 const tipoCert = 'G';
