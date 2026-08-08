@@ -382,6 +382,7 @@ export async function POST() {
       displayUsername?: string | null
       accessToken?: string | null
       refreshToken?: string | null
+      sessionId?: string | null
       sunarpSessionId?: string | null
       sunarpCookieHeader?: string | null
       tokenSource?: string | null
@@ -389,40 +390,42 @@ export async function POST() {
     }
 
     try {
-      console.log('[SPRL verify] Running local Playwright login for user:', user.id)
-      result = await loginSprlLocal(creds.username, creds.password)
+      const scraperUrl = normalizeServiceUrl(process.env.SCRAPER_SERVICE_URL)
+      const shouldUseRemoteLogin = Boolean(scraperUrl) && !/localhost:3001/.test(scraperUrl)
+
+      if (shouldUseRemoteLogin) {
+        console.log('[SPRL verify] Running remote scraper-service login for user:', user.id)
+        const response = await fetch(`${scraperUrl}/sprl/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username: creds.username,
+            password: creds.password,
+          }),
+        })
+
+        result = await response.json()
+      } else {
+        console.log('[SPRL verify] Running local Playwright login for user:', user.id)
+        result = await loginSprlLocal(creds.username, creds.password)
+      }
     } catch (localError) {
       const localMessage = localError instanceof Error ? localError.message : String(localError)
-      console.error('[SPRL verify] Local login failed:', localMessage)
-
-      const scraperUrl = normalizeServiceUrl(process.env.SCRAPER_SERVICE_URL)
-      if (!scraperUrl || /localhost:3001/.test(scraperUrl)) {
-        return NextResponse.json({ error: `Error al intentar login en SPRL: ${localMessage}` }, { status: 500 })
-      }
-
-      console.log('[SPRL verify] Falling back to scraper service:', scraperUrl)
-      const response = await fetch(`${scraperUrl}/sprl/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username: creds.username,
-          password: creds.password,
-        }),
-      })
-
-      result = await response.json()
+      console.error('[SPRL verify] Login failed:', localMessage)
+      return NextResponse.json({ error: `Error al intentar login en SPRL: ${localMessage}` }, { status: 500 })
     }
 
     console.log('[SPRL verify] LOGIN RESULT:', {
-    ok: result.ok,
-    tokenLength: result.accessToken?.length ?? 0,
-    tokenStart: result.accessToken?.slice(0, 10) ?? null,
-    tokenEnd: result.accessToken?.slice(-10) ?? null,
-    refreshTokenLength: result.refreshToken?.length ?? 0,
-    sessionIdLength: result.sunarpSessionId?.length ?? 0,
-    remoteCookieLength: result.sunarpCookieHeader?.length ?? 0,
-    tokenSource: result.tokenSource ?? null,
-  })
+      ok: result.ok,
+      tokenLength: result.accessToken?.length ?? 0,
+      tokenStart: result.accessToken?.slice(0, 10) ?? null,
+      tokenEnd: result.accessToken?.slice(-10) ?? null,
+      refreshTokenLength: result.refreshToken?.length ?? 0,
+      sessionIdLength: result.sessionId?.length ?? 0,
+      sunarpSessionIdLength: result.sunarpSessionId?.length ?? 0,
+      remoteCookieLength: result.sunarpCookieHeader?.length ?? 0,
+      tokenSource: result.tokenSource ?? null,
+    })
 
     const loginResponse = NextResponse.json(
       result.ok
@@ -431,6 +434,7 @@ export async function POST() {
           saldo: result.saldo,
           displayName: result.displayName,
           displayUsername: result.displayUsername,
+          sessionId: result.sessionId,
           sunarpSessionId: result.sunarpSessionId,
           sunarpCookieHeader: result.sunarpCookieHeader,
           message: 'Login SPRL verificado correctamente.',
@@ -446,6 +450,24 @@ export async function POST() {
     if (result.ok) {
       if (result.accessToken) {
         loginResponse.cookies.set('sprl_access_token', result.accessToken, {
+          httpOnly: true,
+          sameSite: 'lax',
+          secure: secureCookie,
+          path: '/',
+          maxAge: 60 * 60 * 8,
+        })
+      }
+
+      loginResponse.cookies.set('sprl_username', creds.username, {
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: secureCookie,
+        path: '/',
+        maxAge: 60 * 60 * 8,
+      })
+
+      if (result.sessionId) {
+        loginResponse.cookies.set('sprl_session_id', result.sessionId, {
           httpOnly: true,
           sameSite: 'lax',
           secure: secureCookie,
@@ -498,6 +520,8 @@ export async function POST() {
     })
 
     loginResponse.cookies.delete('sprl_access_token')
+    loginResponse.cookies.delete('sprl_username')
+    loginResponse.cookies.delete('sprl_session_id')
     loginResponse.cookies.delete('sprl_refresh_token')
     loginResponse.cookies.delete('sunarp_sesion_id')
     loginResponse.cookies.delete('sprl_remote_cookie')

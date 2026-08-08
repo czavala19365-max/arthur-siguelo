@@ -52,11 +52,15 @@ export async function POST(request: NextRequest) {
       request.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ||
       process.env.SPRL_CATALOGO_TOKEN ||
       ''
+    const username = request.cookies.get('sprl_username')?.value || ''
+    const sessionId = request.cookies.get('sprl_session_id')?.value || ''
 
     console.log('[SPRL catalog] token resolution:', {
       fromCookie: Boolean(request.cookies.get('sprl_access_token')?.value),
       fromAuthHeader: Boolean(request.headers.get('authorization')),
       fromEnv: Boolean(process.env.SPRL_CATALOGO_TOKEN),
+      username,
+      sessionId,
       tokenLength: token.length,
       tokenStart: token.slice(0, 10),
       tokenEnd: token.slice(-10),
@@ -101,6 +105,8 @@ const response = await fetch(`${scraperUrl}/sprl/catalogo`, {
   },
   body: JSON.stringify({
     accessToken: token,
+    username,
+    sessionId,
     cookieHeader: request.cookies.get('sprl_remote_cookie')?.value || '',
     codArea,
     tipoCert,
