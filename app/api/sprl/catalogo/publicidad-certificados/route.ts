@@ -1,5 +1,3 @@
-import { createHash } from 'node:crypto'
-
 import { NextRequest, NextResponse } from 'next/server'
 
 export const runtime = 'nodejs'
@@ -29,10 +27,6 @@ type CatalogResponse = {
   }
 }
 
-function fingerprintToken(token: string) {
-  return createHash('sha256').update(token).digest('hex').slice(0, 12)
-}
-
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as CatalogRequestBody
@@ -40,10 +34,6 @@ export async function POST(request: NextRequest) {
     const tipoCert = String(body.tipoCert ?? '').trim()
 
     console.log('[SPRL catalog] incoming request:', {
-      url: request.url,
-      host: request.headers.get('host'),
-      xForwardedHost: request.headers.get('x-forwarded-host'),
-      xForwardedProto: request.headers.get('x-forwarded-proto'),
       codArea,
       tipoCert,
       hasCookie: Boolean(request.cookies.get('sprl_access_token')?.value),
@@ -69,7 +59,6 @@ export async function POST(request: NextRequest) {
       fromAuthHeader: Boolean(request.headers.get('authorization')),
       fromEnv: Boolean(process.env.SPRL_CATALOGO_TOKEN),
       tokenLength: token.length,
-      tokenFingerprint: token ? fingerprintToken(token) : null,
     })
 
     if (!token) {
@@ -115,15 +104,6 @@ export async function POST(request: NextRequest) {
         bodyText.includes('expir') ||
         bodyText.includes('autentic') ||
         bodyText.includes('no ingresa un token')
-
-      console.log('[SPRL catalog] upstream auth classification:', {
-        status,
-        tokenExpired,
-        hasTokenText: bodyText.includes('token'),
-        hasExpiredText: bodyText.includes('expir'),
-        hasAuthText: bodyText.includes('autentic'),
-        hasMissingTokenText: bodyText.includes('no ingresa un token'),
-      })
 
       if (tokenExpired) {
         console.log('[SPRL catalog] token expired or not authenticated detected')
