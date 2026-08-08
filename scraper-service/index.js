@@ -190,7 +190,6 @@ app.post('/sprl/login', async (req, res) => {
   }
 })
 
-const { ProxyAgent } = require('undici')
 
 app.post('/sprl/catalogo', async (req, res) => {
   try {
