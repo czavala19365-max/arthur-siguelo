@@ -29,7 +29,7 @@ function scheduleBrowserIdleClose() {
   browserIdleTimer = setTimeout(async () => {
     const browserToClose = sharedBrowser
     sharedBrowser = null
-    sharedBrowserPromise = null
+    sharedBrowserPromise = null 
     sharedBrowserKey = null
     if (browserToClose) await browserToClose.close().catch(() => { })
   }, DEFAULT_BROWSER_IDLE_MS)
@@ -47,7 +47,12 @@ const SPRL_LOGIN_URL = 'https://sprl.sunarp.gob.pe/sprl/ingreso'
 const SPRL_AUTH_URL = 'https://im01-autorizacion-sprl-production.apps.paas.sunarp.gob.pe/v1/sunarp-services/im/autorizacion/login'
 
 function sprlLaunchOptions() {
-  return {
+  const proxyServer = process.env.SPRL_PROXY_SERVER?.trim()
+  const proxyPort = process.env.SPRL_PROXY_PORT?.trim()
+  const proxyUsername = process.env.SPRL_PROXY_USERNAME?.trim()
+  const proxyPassword = process.env.SPRL_PROXY_PASSWORD?.trim()
+
+  const options = {
     headless: true,
     executablePath: process.env.CHROME_EXECUTABLE_PATH || undefined,
     args: [
@@ -57,11 +62,33 @@ function sprlLaunchOptions() {
       '--ignore-certificate-errors',
     ],
   }
+
+  if (proxyServer && proxyPort) {
+    options.proxy = {
+      server: `http://${proxyServer}:${proxyPort}`,
+      username: proxyUsername || undefined,
+      password: proxyPassword || undefined,
+    }
+
+    console.log('[SPRL] Proxy enabled:', {
+      server: `http://${proxyServer}:${proxyPort}`,
+      username: proxyUsername ? `${proxyUsername.slice(0, 25)}...` : null,
+      hasPassword: Boolean(proxyPassword),
+    })
+  } else {
+    console.log('[SPRL] Proxy disabled: missing proxy environment variables')
+  }
+
+  return options
 }
 
 function getBrowserKey() {
   const chromeKey = process.env.CHROME_EXECUTABLE_PATH || 'default-chrome'
-  return `direct|${chromeKey}`
+  const proxyServer = process.env.SPRL_PROXY_SERVER || 'no-proxy'
+  const proxyPort = process.env.SPRL_PROXY_PORT || 'no-port'
+  const proxyUsername = process.env.SPRL_PROXY_USERNAME || 'no-user'
+
+  return `proxy|${chromeKey}|${proxyServer}|${proxyPort}|${proxyUsername}`
 }
 
 async function getSharedBrowser() {
@@ -115,7 +142,7 @@ async function loginSPRL(username, password) {
 
     console.log('[SPRL] login start:', {
       username,
-      mode: 'direct',
+      mode: 'proxy',
     })
 
     browser = await getSharedBrowser()
