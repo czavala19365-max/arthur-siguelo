@@ -4,6 +4,7 @@ require('dotenv').config({ path: '.env.local' })
 require('dotenv').config()
 
 const express = require('express')
+const { randomUUID } = require('crypto')
 const { scrapeCEJ } = require('./cej-scraper')
 const { chromium } = require('playwright')
 
@@ -112,7 +113,9 @@ app.get('/health/proxy', async (req, res) => {
 // ─── SPRL (Publicidad Registral) ────────────────────────────────
 const { loginSPRL } = require('./sprl-scraper')
 
-const sprlSessions = new Map()
+const sprlSessionsByAccessToken = new Map()
+const sprlSessionsByUsername = new Map()
+const sprlSessionsById = new Map()
 const SPRL_CATALOGO_URL = 'https://api06-catalogo-sunarp-sprl.apps.ocp-prod.sunarp.gob.pe/v1/sunarp-services/catalogo/listarPublicidadCertificados'
 
 async function closeSprlSession(session) {
@@ -120,6 +123,57 @@ async function closeSprlSession(session) {
   try { if (session.page) await session.page.close().catch(() => { }) } catch { }
   try { if (session.context) await session.context.close().catch(() => { }) } catch { }
   try { if (session.browser) await session.browser.close().catch(() => { }) } catch { }
+}
+
+function storeSprlSession(session) {
+  if (!session) return
+  const normalizedToken = String(session.accessToken || '').trim()
+  const normalizedUsername = String(session.username || '').trim().toLowerCase()
+  const normalizedSessionId = String(session.sessionId || '').trim()
+
+  if (normalizedToken) {
+    const previousTokenSession = sprlSessionsByAccessToken.get(normalizedToken)
+    if (previousTokenSession && previousTokenSession !== session) {
+      closeSprlSession(previousTokenSession).catch(() => { })
+    }
+    sprlSessionsByAccessToken.set(normalizedToken, session)
+  }
+
+  if (normalizedUsername) {
+    const previousUsernameSession = sprlSessionsByUsername.get(normalizedUsername)
+    if (previousUsernameSession && previousUsernameSession !== session) {
+      closeSprlSession(previousUsernameSession).catch(() => { })
+    }
+    sprlSessionsByUsername.set(normalizedUsername, session)
+  }
+
+  if (normalizedSessionId) {
+    const previousSession = sprlSessionsById.get(normalizedSessionId)
+    if (previousSession && previousSession !== session) {
+      closeSprlSession(previousSession).catch(() => { })
+    }
+    sprlSessionsById.set(normalizedSessionId, session)
+  }
+}
+
+function getSprlSession({ sessionId, username, accessToken }) {
+  const normalizedSessionId = String(sessionId || '').trim()
+  const normalizedUsername = String(username || '').trim().toLowerCase()
+  const normalizedToken = String(accessToken || '').trim()
+
+  if (normalizedSessionId && sprlSessionsById.has(normalizedSessionId)) {
+    return sprlSessionsById.get(normalizedSessionId)
+  }
+
+  if (normalizedUsername && sprlSessionsByUsername.has(normalizedUsername)) {
+    return sprlSessionsByUsername.get(normalizedUsername)
+  }
+
+  if (normalizedToken && sprlSessionsByAccessToken.has(normalizedToken)) {
+    return sprlSessionsByAccessToken.get(normalizedToken)
+  }
+
+  return null
 }
 
 const CATALOGO_URL =
@@ -138,16 +192,16 @@ app.post('/sprl/login', async (req, res) => {
 
     const result = await loginSPRL(String(username).trim(), String(password).trim(), { keepSession: true })
 
-    if (result.ok && result.session && result.accessToken) {
-      const sessionKey = String(result.accessToken).trim()
-      const previousSession = sprlSessions.get(sessionKey)
-      if (previousSession) {
-        await closeSprlSession(previousSession)
-      }
-      sprlSessions.set(sessionKey, {
+    if (result.ok && result.session) {
+      const sessionId = randomUUID()
+      storeSprlSession({
         ...result.session,
+        username: String(username).trim(),
+        sessionId,
         lastUsedAt: Date.now(),
       })
+
+      result.sessionId = sessionId
     }
 
     console.log('[SPRL TEST] Login result:', {
@@ -164,57 +218,8 @@ app.post('/sprl/login', async (req, res) => {
       return res.json(result)
     }
 
-    console.log('[SPRL TEST] Calling catalog from the live Playwright session...')
-
-    const session = sprlSessions.get(String(result.accessToken).trim())
-    let catalogResponse = null
-    if (session?.page && !session.page.isClosed()) {
-      catalogResponse = await session.page.evaluate(async ({ url, token }) => {
-        try {
-          const response = await fetch(url, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Accept: 'application/json, text/plain, */*',
-              Authorization: `Bearer ${token}`,
-              Origin: 'https://sprl.sunarp.gob.pe',
-              Referer: 'https://sprl.sunarp.gob.pe/',
-            },
-            body: JSON.stringify({ codArea: '22000', tipoCert: 'G' }),
-            credentials: 'include',
-          })
-
-          return {
-            status: response.status,
-            ok: response.ok,
-            body: await response.text(),
-          }
-        } catch (error) {
-          return {
-            error: error instanceof Error ? error.message : String(error),
-          }
-        }
-      }, {
-        url: CATALOGO_URL,
-        token: String(result.accessToken).trim(),
-      })
-    }
-
-    console.log('[SPRL TEST] Catalog response:', {
-      status: catalogResponse?.status,
-      ok: catalogResponse?.ok,
-      error: catalogResponse?.error,
-      body: String(catalogResponse?.body || '').slice(0, 1000),
-    })
-
     return res.json({
       ...result,
-      catalogTest: {
-        status: catalogResponse?.status ?? null,
-        ok: catalogResponse?.ok ?? false,
-        error: catalogResponse?.error ?? null,
-        body: catalogResponse?.body ?? null,
-      },
     })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
@@ -259,7 +264,9 @@ app.post('/sprl/catalogo', async (req, res) => {
       })
     }
 
-    const session = sprlSessions.get(String(accessToken).trim())
+    const username = String(req.body?.username || '').trim()
+    const sessionId = String(req.body?.sessionId || '').trim()
+    const session = getSprlSession({ sessionId, username, accessToken })
     if (!session || !session.page || session.page.isClosed()) {
       return res.status(401).json({
         success: false,
