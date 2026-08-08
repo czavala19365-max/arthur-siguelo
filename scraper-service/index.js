@@ -108,26 +108,97 @@ app.get('/health/proxy', async (req, res) => {
 // ─── SPRL (Publicidad Registral) ────────────────────────────────
 const { loginSPRL } = require('./sprl-scraper')
 
+const CATALOGO_URL =
+  'https://api06-catalogo-sunarp-sprl.apps.ocp-prod.sunarp.gob.pe/v1/sunarp-services/catalogo/listarPublicidadCertificados'
+
 app.post('/sprl/login', async (req, res) => {
   try {
     const { username, password } = req.body || {}
+
     if (!username || !password) {
-      return res.status(400).json({ ok: false, error: 'username y password son requeridos' })
+      return res.status(400).json({
+        ok: false,
+        error: 'username y password son requeridos',
+      })
     }
-    const result = await loginSPRL(String(username).trim(), String(password).trim())
-    res.json(result)
+
+    const result = await loginSPRL(
+      String(username).trim(),
+      String(password).trim()
+    )
+
+    console.log('[SPRL TEST] Login result:', {
+      ok: result.ok,
+      hasAccessToken: Boolean(result.accessToken),
+      accessTokenLength: result.accessToken?.length ?? 0,
+      hasSessionId: Boolean(result.sunarpSessionId),
+      sessionIdLength: result.sunarpSessionId?.length ?? 0,
+      hasCookieHeader: Boolean(result.sunarpCookieHeader),
+      cookieHeaderLength: result.sunarpCookieHeader?.length ?? 0,
+    })
+
+    if (!result.ok) {
+      return res.json(result)
+    }
+
+    console.log('[SPRL TEST] Calling catalog from Railway...')
+
+    const catalogResponse = await fetch(CATALOGO_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/plain, */*',
+        Authorization: `Bearer ${result.accessToken}`,
+        Origin: 'https://sprl.sunarp.gob.pe',
+        Referer: 'https://sprl.sunarp.gob.pe/',
+        ...(result.sunarpCookieHeader
+          ? { Cookie: result.sunarpCookieHeader }
+          : {}),
+      },
+      body: JSON.stringify({
+        codArea: '22000',
+        tipoCert: 'G',
+      }),
+    })
+
+    const catalogText = await catalogResponse.text()
+
+    console.log('[SPRL TEST] Catalog response:', {
+      status: catalogResponse.status,
+      ok: catalogResponse.ok,
+      body: catalogText.slice(0, 1000),
+    })
+
+    return res.json({
+      ...result,
+      catalogTest: {
+        status: catalogResponse.status,
+        ok: catalogResponse.ok,
+        body: catalogText,
+      },
+    })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
+
     console.error('[scraper-service] POST /sprl/login', message)
-    res.status(500).json({ ok: false, error: 'Error al ejecutar login SPRL', details: message })
+
+    res.status(500).json({
+      ok: false,
+      error: 'Error al ejecutar login SPRL',
+      details: message,
+    })
   }
 })
 
 app.get('/sprl/health', (_req, res) => {
-  res.json({ status: 'ok', module: 'sprl' })
+  res.json({
+    status: 'ok',
+    module: 'sprl',
+  })
 })
 
 const PORT = Number(process.env.PORT) || 3001
+
 app.listen(PORT, () => {
   console.log(`[cej-scraper-service] listening on :${PORT}`)
 })
