@@ -387,14 +387,38 @@ console.log('[SPRL DEBUG] Probando catálogo DESDE NODE con el mismo token + coo
 try {
   const { HttpsProxyAgent } = await import('https-proxy-agent')
 
-  const proxyServer = process.env.SPRL_PROXY_SERVER || 'us.smartproxy.net'
-  const proxyPort = process.env.SPRL_PROXY_PORT || '3120'
-  const proxyUsername = process.env.SPRL_PROXY_USERNAME
-  const proxyPassword = process.env.SPRL_PROXY_PASSWORD
+  const proxyServer =
+  process.env.SPRL_PROXY_SERVER || 'us.smartproxy.net'
 
-  const proxyAgent = new HttpsProxyAgent(
-    `http://${proxyUsername}:${proxyPassword}@${proxyServer}:${proxyPort}`
-  )
+const proxyPort =
+  process.env.SPRL_PROXY_PORT || '3120'
+
+const proxyUsername =
+  process.env.SPRL_PROXY_USERNAME
+
+const proxyPassword =
+  process.env.SPRL_PROXY_PASSWORD
+
+const proxyUrl = `http://${proxyServer}:${proxyPort}`
+
+const proxyAuth = Buffer.from(
+  `${proxyUsername}:${proxyPassword}`
+).toString('base64')
+
+const proxyAgent = new HttpsProxyAgent(proxyUrl, {
+  keepAlive: true,
+  rejectUnauthorized: false,
+  headers: {
+    'Proxy-Authorization': `Basic ${proxyAuth}`,
+  },
+})
+
+console.log('[SPRL DEBUG] Node proxy configured:', {
+  proxyUrl,
+  hasUsername: Boolean(proxyUsername),
+  hasPassword: Boolean(proxyPassword),
+  authLength: proxyAuth.length,
+})
 
   const nodeCatalogResponse = await fetch(
     'https://api06-catalogo-sunarp-sprl.apps.ocp-prod.sunarp.gob.pe/v1/sunarp-services/catalogo/listarPublicidadCertificados',
