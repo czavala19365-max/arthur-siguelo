@@ -132,10 +132,12 @@ async function getSharedBrowser() {
   return sharedBrowserPromise
 }
 
-async function loginSPRL(username, password) {
+async function loginSPRL(username, password, options = {}) {
   let browser = null
   let context = null
   let page = null
+  let loginSucceeded = false
+  const keepSession = Boolean(options.keepSession)
 
   try {
     applyStealthOnce()
@@ -427,25 +429,42 @@ console.log('[SPRL DEBUG] CATALOG FROM PLAYWRIGHT:', catalogResponse)
       sunarpCookieHeaderLength: sunarpCookieHeader.length,
     })
 
+    loginSucceeded = true
+
     return {
       ok: true,
-      saldo,
-      displayName: displayName || null,
-      displayUsername: displayUsername || null,
-      accessToken,
-      refreshToken,
-      tokenSource: accessToken ? 'local-playwright' : null,
-      sunarpSessionId,
-      sunarpCookieHeader: sunarpCookieHeader || null,
+  saldo,
+  displayName: displayName || null,
+  displayUsername: displayUsername || null,
+  accessToken,
+  refreshToken,
+  tokenSource: accessToken ? 'local-playwright' : null,
+  sunarpSessionId,
+  sunarpCookieHeader: sunarpCookieHeader || null,
+      session: keepSession
+        ? {
+            browser,
+            context,
+            page,
+            accessToken,
+            refreshToken,
+            sunarpSessionId,
+            sunarpCookieHeader: sunarpCookieHeader || null,
+            username,
+            lastUsedAt: Date.now(),
+          }
+        : null,
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     console.error('[SPRL] Login error:', message)
     return { ok: false, error: 'Error al intentar login en SPRL: ' + message }
   } finally {
-    if (page) await page.close().catch(() => { })
-    if (context) await context.close().catch(() => { })
-    if (browser) scheduleBrowserIdleClose()
+    if (!keepSession || !loginSucceeded) {
+      if (page) await page.close().catch(() => { })
+      if (context) await context.close().catch(() => { })
+      if (browser) scheduleBrowserIdleClose()
+    }
   }
 }
 
