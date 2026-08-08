@@ -86,7 +86,7 @@ function parseProxyUrl(proxyUrl) {
   }
 }
 
-function buildProxyConfig() {
+function buildProxyConfig(sessionId = null) {
   const legacyProxy = parseProxyUrl(process.env.PROXY_URL)
   if (legacyProxy) return legacyProxy
 
@@ -95,7 +95,7 @@ function buildProxyConfig() {
   const password = String(process.env.PROXY_PASSWORD || '').trim()
   if (!host || !port || !password) return null
 
-  const username = buildProxyUsername({ sticky: true })
+  const username = buildProxyUsername({ sticky: true, sessionId })
   if (!username) return null
 
   return {
@@ -175,7 +175,7 @@ async function getSharedBrowser(proxy) {
   return sharedBrowserPromise
 }
 
-async function loginSPRL(username, password) {
+async function loginSPRL(username, password, sessionId = null) {
   let browser = null
   let context = null
   let page = null
@@ -183,7 +183,7 @@ async function loginSPRL(username, password) {
   try {
     applyStealthOnce()
 
-    const proxy = buildProxyConfig()
+    const proxy = buildProxyConfig(sessionId)
     console.log('[SPRL] Proxy:', proxy ? proxy.server : 'none (direct)')
 
     browser = await getSharedBrowser(proxy)

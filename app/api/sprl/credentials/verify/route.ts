@@ -447,6 +447,7 @@ export async function POST() {
         body: JSON.stringify({
           username: creds.username,
           password: creds.password,
+          sessionId,
         }),
       })
 

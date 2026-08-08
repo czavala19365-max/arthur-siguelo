@@ -110,11 +110,11 @@ const { loginSPRL } = require('./sprl-scraper')
 
 app.post('/sprl/login', async (req, res) => {
   try {
-    const { username, password } = req.body || {}
+    const { username, password, sessionId } = req.body || {}
     if (!username || !password) {
       return res.status(400).json({ ok: false, error: 'username y password son requeridos' })
     }
-    const result = await loginSPRL(String(username).trim(), String(password).trim())
+    const result = await loginSPRL(String(username).trim(), String(password).trim(), String(sessionId || '').trim() || null)
     res.json(result)
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
