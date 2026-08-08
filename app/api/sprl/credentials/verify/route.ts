@@ -3,7 +3,6 @@ import { chromium } from 'playwright-extra'
 import StealthPlugin from 'puppeteer-extra-plugin-stealth'
 import { getAuthServerClient } from '@/lib/supabase-auth-server'
 import { getDecryptedCredentials, getCredentialByUserId, updateCredentialStatus } from '@/lib/sprl/db'
-import crypto from 'crypto'
 
 
 export const runtime = 'nodejs'
@@ -20,39 +19,16 @@ function applyStealthOnce() {
   }
 }
 
-function generateProxySessionId() {
-  return crypto.randomBytes(6).toString('hex') // alfanumérico
-}
-
-function getProxyConfig(sessionId?: string) {
-  const host = process.env.PROXY_HOST
-  const port = process.env.PROXY_PORT
-  const userBase = process.env.PROXY_USER_BASE
-  const area = process.env.PROXY_AREA
-  const city = process.env.PROXY_CITY
-  const password = process.env.PROXY_PASSWORD
-
-  if (!host || !port || !userBase || !password) return null
-
-  const id = sessionId || generateProxySessionId()
-  const username = `${userBase}_area-${area}_city-${city}_life-30_session-${id}`
-
-  return {
-    server: `http://${host}:${port}`,
-    username,
-    password,
-  }
-}
-
-function getChromeExecutablePath() {
-  const chromePath = process.env.CHROME_EXECUTABLE_PATH?.trim()
-  return chromePath ? chromePath : undefined
-}
 
 function normalizeServiceUrl(rawUrl?: string | null) {
   const value = String(rawUrl || '').trim().replace(/\/$/, '')
   if (!value) return ''
   return /^https?:\/\//i.test(value) ? value : `https://${value}`
+}
+
+function getChromeExecutablePath() {
+  const chromePath = process.env.CHROME_EXECUTABLE_PATH?.trim()
+  return chromePath ? chromePath : undefined
 }
 
 const LOGIN_FORM_SELECTOR =
@@ -62,62 +38,9 @@ const PASSWORD_SELECTOR =
 const SUBMIT_SELECTOR =
   'button[type="submit"], input[type="submit"], button:has-text("Ingresar"), button:has-text("INGRESAR"), input[value*="Ingresar" i], .btn-login, #btnLogin, #btnIngresar'
 
-
-type SprlLoginResult = {
-  ok: boolean
-  saldo?: number | null
-  displayName?: string | null
-  displayUsername?: string | null
-  accessToken?: string | null
-  refreshToken?: string | null
-  sunarpSessionId?: string | null
-  sunarpCookieHeader?: string | null
-  error?: string
-}
-
-async function loginSPRL(username: string, password: string, sessionId: string): Promise<SprlLoginResult> {
-  const scraperUrl = normalizeServiceUrl(process.env.SCRAPER_SERVICE_URL)
-
-  // Si NO hay scraper service configurado -> corre local (dev)
-  if (!scraperUrl) {
-    return loginSprlLocal(username, password, sessionId)
-  }
-
-  console.log('===== FETCH SPRL LOGIN =====')
-  console.log('URL:', scraperUrl)
-  console.log('sessionId:', sessionId)
-
-  const inicio = Date.now()
-
-  const url = `${scraperUrl}/sprl/login`
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password, sessionId }),
-    signal: AbortSignal.timeout(180_000),
-  })
-
-  console.log('Tiempo fetch:', Date.now() - inicio)
-  console.log('Status:', res.status)
-
-  let data: SprlLoginResult = { ok: false }
-  try {
-    data = await res.json()
-  } catch {
-    data = { ok: false, error: `Respuesta inválida del scraper service (status ${res.status})` }
-  }
-
-  if (!res.ok && !data.error) {
-    data.error = `Error del scraper service (status ${res.status})`
-  }
-
-  return data
-}
-
-async function loginSprlLocal(username: string, password: string, sessionId: string) {
+async function loginSprlLocal(username: string, password: string) {
   applyStealthOnce()
 
-  const proxy = getProxyConfig(sessionId)
   const browser = await chromium.launch({
     headless: true,
     executablePath: getChromeExecutablePath(),
@@ -127,7 +50,6 @@ async function loginSprlLocal(username: string, password: string, sessionId: str
       '--disable-dev-shm-usage',
       '--ignore-certificate-errors',
     ],
-    ...(proxy ? { proxy } : {}),
   })
 
   const context = await browser.newContext({
@@ -152,6 +74,29 @@ async function loginSprlLocal(username: string, password: string, sessionId: str
   let accessToken: string | null = null
   let refreshToken: string | null = null
   let sunarpSessionId: string | null = null
+
+  const waitForLoginForm = async () => {
+    await page.waitForSelector(`${LOGIN_FORM_SELECTOR}, button:has-text("INGRESAR")`, { timeout: 20000 }).catch(() => null)
+
+    let field = await page.$(LOGIN_FORM_SELECTOR).catch(() => null)
+    if (field) return field
+
+    const ingresarButton = page.locator('button:has-text("INGRESAR")').first()
+    await Promise.all([
+      page.waitForURL(new RegExp(authLoginUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), { timeout: 15000 }).catch(() => null),
+      ingresarButton.click({ timeout: 6000 }).catch(() => null),
+    ])
+
+    await page.waitForLoadState('domcontentloaded').catch(() => null)
+    await page.waitForSelector(LOGIN_FORM_SELECTOR, { timeout: 20000 }).catch(() => null)
+    field = await page.$(LOGIN_FORM_SELECTOR).catch(() => null)
+    if (field) return field
+
+    // Some proxy exits keep us on intermediate pages; navigate directly to the auth login as a final fallback.
+    await page.goto(authLoginUrl, { waitUntil: 'domcontentloaded', timeout: 45000 }).catch(() => null)
+    await page.waitForSelector(LOGIN_FORM_SELECTOR, { timeout: 20000 }).catch(() => null)
+    return page.$(LOGIN_FORM_SELECTOR).catch(() => null)
+  }
 
   const captureTokenPayload = (raw: string) => {
     if (!raw) return
@@ -208,23 +153,17 @@ async function loginSprlLocal(username: string, password: string, sessionId: str
 
     if (!navSuccess) throw new Error('No se pudo cargar la página de SPRL')
 
-    await page.waitForSelector(`${LOGIN_FORM_SELECTOR}, button:has-text("INGRESAR")`, { timeout: 10000 }).catch(() => null)
-
-    let usernameField = await page.$(LOGIN_FORM_SELECTOR).catch(() => null)
+    let usernameField = await waitForLoginForm()
 
     if (!usernameField) {
-      const ingresarButton = page.locator('button:has-text("INGRESAR")').first()
-      await Promise.all([
-        page.waitForURL(new RegExp(authLoginUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), { timeout: 15000 }).catch(() => null),
-        ingresarButton.click({ timeout: 5000 }).catch(() => null),
-      ])
-
-      await page.waitForLoadState('domcontentloaded').catch(() => null)
-      await page.waitForSelector(LOGIN_FORM_SELECTOR, { timeout: 10000 }).catch(() => null)
-      usernameField = await page.$(LOGIN_FORM_SELECTOR).catch(() => null)
+      await page.waitForTimeout(3500)
+      usernameField = await waitForLoginForm()
     }
 
     if (!usernameField) {
+      const bodyText = await page.evaluate(() => document.body?.textContent?.substring(0, 600) || '').catch(() => '')
+      console.error('[SPRL verify] login form missing after proxy flow. url:', page.url())
+      console.error('[SPRL verify] body preview:', bodyText.replace(/\s+/g, ' ').trim().substring(0, 300))
       throw new Error('No se encontró el formulario de login en SPRL.')
     }
 
@@ -424,27 +363,34 @@ export async function POST() {
       )
     }
 
-    const sessionId = user.id.replace(/-/g, '').slice(0, 12)
 
     const credRecord = await getCredentialByUserId(user.id)
     if (!credRecord) {
       return NextResponse.json({ error: 'Registro de credenciales no encontrado' }, { status: 404 })
     }
 
-    let result: SprlLoginResult
-
-    try {
-      result = await loginSPRL(creds.username, creds.password, sessionId)
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      console.error('[SPRL verify] Login failed:', message)
-      return NextResponse.json({ error: `Error al intentar login en SPRL: ${message}` }, { status: 500 })
+    let result: {
+      ok: boolean
+      saldo?: number | null
+      displayName?: string | null
+      displayUsername?: string | null
+      accessToken?: string | null
+      refreshToken?: string | null
+      sunarpSessionId?: string | null
+      sunarpCookieHeader?: string | null
+      error?: string
     }
 
-    if (!result.ok) {
-      const scraperUrl = process.env.SCRAPER_SERVICE_URL
+    try {
+      console.log('[SPRL verify] Running local Playwright login for user:', user.id)
+      result = await loginSprlLocal(creds.username, creds.password)
+    } catch (localError) {
+      const localMessage = localError instanceof Error ? localError.message : String(localError)
+      console.error('[SPRL verify] Local login failed:', localMessage)
+
+      const scraperUrl = normalizeServiceUrl(process.env.SCRAPER_SERVICE_URL)
       if (!scraperUrl || /localhost:3001/.test(scraperUrl)) {
-        return NextResponse.json({ error: 'Error al intentar login en SPRL' }, { status: 500 })
+        return NextResponse.json({ error: `Error al intentar login en SPRL: ${localMessage}` }, { status: 500 })
       }
 
       console.log('[SPRL verify] Falling back to scraper service:', scraperUrl)
@@ -454,20 +400,10 @@ export async function POST() {
         body: JSON.stringify({
           username: creds.username,
           password: creds.password,
-          sessionId,
         }),
       })
 
       result = await response.json()
-      console.log('[SPRL verify] scraper result:', {
-        ok: result.ok,
-        hasAccessToken: Boolean(result.accessToken),
-        hasRefreshToken: Boolean(result.refreshToken),
-        hasSunarpSessionId: Boolean(result.sunarpSessionId),
-        hasSunarpCookieHeader: Boolean(result.sunarpCookieHeader),
-        saldo: result.saldo ?? null,
-        displayUsername: result.displayUsername ?? null,
-      })
     }
 
     const loginResponse = NextResponse.json(
@@ -490,13 +426,6 @@ export async function POST() {
     const secureCookie = process.env.NODE_ENV === 'production'
 
     if (result.ok) {
-      console.log('[SPRL verify] setting cookies:', {
-        hasAccessToken: Boolean(result.accessToken),
-        hasRefreshToken: Boolean(result.refreshToken),
-        hasSunarpSessionId: Boolean(result.sunarpSessionId),
-        hasSunarpCookieHeader: Boolean(result.sunarpCookieHeader),
-      })
-
       if (result.accessToken) {
         loginResponse.cookies.set('sprl_access_token', result.accessToken, {
           httpOnly: true,
@@ -549,8 +478,6 @@ export async function POST() {
     await updateCredentialStatus(credRecord.id, 'error', {
       error_mensaje: result.error || 'Error desconocido al verificar login',
     })
-
-    console.log('[SPRL verify] login result not ok:', result.error || 'unknown')
 
     loginResponse.cookies.delete('sprl_access_token')
     loginResponse.cookies.delete('sprl_refresh_token')
