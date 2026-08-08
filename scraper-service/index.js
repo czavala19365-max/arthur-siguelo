@@ -1,8 +1,11 @@
 'use strict'
 
+require('dotenv').config({ path: '.env.local' })
+require('dotenv').config()
+
 const express = require('express')
 const { scrapeCEJ } = require('./cej-scraper')
-const { ProxyAgent } = require('undici')
+const { chromium } = require('playwright')
 
 const app = express()
 app.use(express.json({ limit: '1mb' }))
@@ -109,6 +112,16 @@ app.get('/health/proxy', async (req, res) => {
 // ─── SPRL (Publicidad Registral) ────────────────────────────────
 const { loginSPRL } = require('./sprl-scraper')
 
+const sprlSessions = new Map()
+const SPRL_CATALOGO_URL = 'https://api06-catalogo-sunarp-sprl.apps.ocp-prod.sunarp.gob.pe/v1/sunarp-services/catalogo/listarPublicidadCertificados'
+
+async function closeSprlSession(session) {
+  if (!session) return
+  try { if (session.page) await session.page.close().catch(() => { }) } catch { }
+  try { if (session.context) await session.context.close().catch(() => { }) } catch { }
+  try { if (session.browser) await session.browser.close().catch(() => { }) } catch { }
+}
+
 const CATALOGO_URL =
   'https://api06-catalogo-sunarp-sprl.apps.ocp-prod.sunarp.gob.pe/v1/sunarp-services/catalogo/listarPublicidadCertificados'
 
@@ -123,10 +136,19 @@ app.post('/sprl/login', async (req, res) => {
       })
     }
 
-    const result = await loginSPRL(
-      String(username).trim(),
-      String(password).trim()
-    )
+    const result = await loginSPRL(String(username).trim(), String(password).trim(), { keepSession: true })
+
+    if (result.ok && result.session && result.accessToken) {
+      const sessionKey = String(result.accessToken).trim()
+      const previousSession = sprlSessions.get(sessionKey)
+      if (previousSession) {
+        await closeSprlSession(previousSession)
+      }
+      sprlSessions.set(sessionKey, {
+        ...result.session,
+        lastUsedAt: Date.now(),
+      })
+    }
 
     console.log('[SPRL TEST] Login result:', {
       ok: result.ok,
@@ -142,40 +164,56 @@ app.post('/sprl/login', async (req, res) => {
       return res.json(result)
     }
 
-    console.log('[SPRL TEST] Calling catalog from Railway...')
+    console.log('[SPRL TEST] Calling catalog from the live Playwright session...')
 
-    const catalogResponse = await fetch(CATALOGO_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json, text/plain, */*',
-        Authorization: `Bearer ${result.accessToken}`,
-        Origin: 'https://sprl.sunarp.gob.pe',
-        Referer: 'https://sprl.sunarp.gob.pe/',
-        ...(result.sunarpCookieHeader
-          ? { Cookie: result.sunarpCookieHeader }
-          : {}),
-      },
-      body: JSON.stringify({
-        codArea: '22000',
-        tipoCert: 'G',
-      }),
-    })
+    const session = sprlSessions.get(String(result.accessToken).trim())
+    let catalogResponse = null
+    if (session?.page && !session.page.isClosed()) {
+      catalogResponse = await session.page.evaluate(async ({ url, token }) => {
+        try {
+          const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Accept: 'application/json, text/plain, */*',
+              Authorization: `Bearer ${token}`,
+              Origin: 'https://sprl.sunarp.gob.pe',
+              Referer: 'https://sprl.sunarp.gob.pe/',
+            },
+            body: JSON.stringify({ codArea: '22000', tipoCert: 'G' }),
+            credentials: 'include',
+          })
 
-    const catalogText = await catalogResponse.text()
+          return {
+            status: response.status,
+            ok: response.ok,
+            body: await response.text(),
+          }
+        } catch (error) {
+          return {
+            error: error instanceof Error ? error.message : String(error),
+          }
+        }
+      }, {
+        url: CATALOGO_URL,
+        token: String(result.accessToken).trim(),
+      })
+    }
 
     console.log('[SPRL TEST] Catalog response:', {
-      status: catalogResponse.status,
-      ok: catalogResponse.ok,
-      body: catalogText.slice(0, 1000),
+      status: catalogResponse?.status,
+      ok: catalogResponse?.ok,
+      error: catalogResponse?.error,
+      body: String(catalogResponse?.body || '').slice(0, 1000),
     })
 
     return res.json({
       ...result,
       catalogTest: {
-        status: catalogResponse.status,
-        ok: catalogResponse.ok,
-        body: catalogText,
+        status: catalogResponse?.status ?? null,
+        ok: catalogResponse?.ok ?? false,
+        error: catalogResponse?.error ?? null,
+        body: catalogResponse?.body ?? null,
       },
     })
   } catch (err) {
@@ -191,34 +229,19 @@ app.post('/sprl/login', async (req, res) => {
   }
 })
 
-
 app.post('/sprl/catalogo', async (req, res) => {
   try {
-    const {
-      accessToken,
-      cookieHeader,
-      codArea,
-      tipoCert,
-    } = req.body || {}
-
-    console.log('[SPRL catalog Railway] incoming request:', {
-      hasAccessToken: Boolean(accessToken),
-      accessTokenLength: accessToken?.length || 0,
-      hasCookieHeader: Boolean(cookieHeader),
-      cookieHeaderLength: cookieHeader?.length || 0,
-      codArea,
-      tipoCert,
-    })
+    const { accessToken, codArea, tipoCert } = req.body || {}
 
     if (!accessToken) {
-      return res.status(401).json({
+      return res.status(400).json({
         success: false,
         data: null,
         response: {
-          codigo: '401',
+          codigo: '400',
           titulo: 'ERROR',
           tipo: 'E',
-          mensaje: 'No se recibió accessToken.',
+          mensaje: 'accessToken es requerido.',
         },
       })
     }
@@ -236,20 +259,56 @@ app.post('/sprl/catalogo', async (req, res) => {
       })
     }
 
-    /*
-     * IMPORTANTE:
-     * Usamos exactamente el mismo proxy que utiliza
-     * el login de SPRL.
-     *
-     * Cambia los nombres de estas dos variables SOLO si
-     * en sprl-scraper.js tienes otros nombres.
-     */
-    const proxyUsername = process.env.SPRL_PROXY_USERNAME
-    const proxyPassword = process.env.SPRL_PROXY_PASSWORD
+    const session = sprlSessions.get(String(accessToken).trim())
+    if (!session || !session.page || session.page.isClosed()) {
+      return res.status(401).json({
+        success: false,
+        data: null,
+        response: {
+          codigo: '401',
+          titulo: 'ERROR',
+          tipo: 'E',
+          mensaje: 'Sesión SPRL no encontrada o expirada.',
+        },
+      })
+    }
 
-    if (!proxyUsername || !proxyPassword) {
-      console.error('[SPRL catalog Railway] Faltan credenciales SmartProxy')
+    session.lastUsedAt = Date.now()
 
+    const catalogResult = await session.page.evaluate(async ({ url, token, area, tipo }) => {
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json, text/plain, */*',
+            Authorization: `Bearer ${token}`,
+            Origin: 'https://sprl.sunarp.gob.pe',
+            Referer: 'https://sprl.sunarp.gob.pe/',
+          },
+          body: JSON.stringify({ codArea: area, tipoCert: tipo }),
+          credentials: 'include',
+        })
+
+        const body = await response.text()
+        return {
+          status: response.status,
+          ok: response.ok,
+          body,
+        }
+      } catch (error) {
+        return {
+          error: error instanceof Error ? error.message : String(error),
+        }
+      }
+    }, {
+      url: SPRL_CATALOGO_URL,
+      token: String(accessToken).trim(),
+      area: String(codArea).trim(),
+      tipo: String(tipoCert).trim(),
+    })
+
+    if (catalogResult.error) {
       return res.status(500).json({
         success: false,
         data: null,
@@ -257,80 +316,37 @@ app.post('/sprl/catalogo', async (req, res) => {
           codigo: '500',
           titulo: 'ERROR',
           tipo: 'E',
-          mensaje: 'No están configuradas las credenciales SmartProxy.',
+          mensaje: catalogResult.error,
         },
       })
     }
 
-    const proxyUrl =
-      `http://${encodeURIComponent(proxyUsername)}:${encodeURIComponent(proxyPassword)}@us.smartproxy.net:3120`
-
-    const proxyAgent = new ProxyAgent(proxyUrl)
-
-    const CATALOGO_URL =
-      'https://api06-catalogo-sunarp-sprl.apps.ocp-prod.sunarp.gob.pe/v1/sunarp-services/catalogo/listarPublicidadCertificados'
-
-    console.log('[SPRL catalog Railway] Calling SUNARP through SmartProxy...')
-
-    const response = await fetch(CATALOGO_URL, {
-      method: 'POST',
-
-      dispatcher: proxyAgent,
-
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json, text/plain, */*',
-        Authorization: `Bearer ${accessToken}`,
-
-        ...(cookieHeader
-          ? { Cookie: cookieHeader }
-          : {}),
-
-        Origin: 'https://sprl.sunarp.gob.pe',
-        Referer: 'https://sprl.sunarp.gob.pe/',
-      },
-
-      body: JSON.stringify({
-        codArea,
-        tipoCert,
-      }),
+    console.log('[SPRL catalog Railway] Catalog response:', {
+      status: catalogResult.status,
+      ok: catalogResult.ok,
+      bodyPreview: String(catalogResult.body || '').slice(0, 250),
     })
 
-    const text = await response.text()
-
-    console.log('[SPRL catalog Railway] SUNARP response:', {
-      status: response.status,
-      ok: response.ok,
-      bodyPreview: text.slice(0, 300),
-    })
-
-    let json
-
+    let parsed = null
     try {
-      json = JSON.parse(text)
+      parsed = JSON.parse(catalogResult.body || 'null')
     } catch {
-      json = null
+      parsed = null
     }
 
-    return res
-      .status(response.status)
-      .json(
-        json || {
-          success: false,
-          data: null,
-          response: {
-            codigo: String(response.status),
-            titulo: 'ERROR',
-            tipo: 'E',
-            mensaje: text || 'Respuesta inválida de SUNARP.',
-          },
-        }
-      )
+    return res.status(catalogResult.status).json(parsed ?? {
+      success: false,
+      data: null,
+      response: {
+        codigo: String(catalogResult.status),
+        titulo: 'ERROR',
+        tipo: 'E',
+        mensaje: catalogResult.body || 'Respuesta inválida del catálogo SUNARP.',
+      },
+    })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-
     console.error('[SPRL catalog Railway] ERROR:', message)
-
     return res.status(500).json({
       success: false,
       data: null,
@@ -343,6 +359,7 @@ app.post('/sprl/catalogo', async (req, res) => {
     })
   }
 })
+
 
 app.get('/sprl/health', (_req, res) => {
   res.json({
