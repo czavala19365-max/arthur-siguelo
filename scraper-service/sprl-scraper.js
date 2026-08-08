@@ -132,12 +132,10 @@ async function getSharedBrowser() {
   return sharedBrowserPromise
 }
 
-async function loginSPRL(username, password, options = {}) {
+async function loginSPRL(username, password) {
   let browser = null
   let context = null
   let page = null
-  let loginSucceeded = false
-  const keepSession = Boolean(options.keepSession)
 
   try {
     applyStealthOnce()
@@ -349,6 +347,41 @@ async function loginSPRL(username, password, options = {}) {
       sunarpCookiesCount: sunarpCookies.length,
     })
 
+    console.log('[SPRL DEBUG] Probando catálogo DESDE EL MISMO BROWSER...')
+
+const catalogResponse = await page.evaluate(async (accessToken) => {
+  try {
+    const response = await fetch(
+      'https://api06-catalogo-sunarp-sprl.apps.ocp-prod.sunarp.gob.pe/v1/sunarp-services/catalogo/listarPublicidadCertificados',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/plain, */*',
+          'Authorization': `Bearer ${accessToken}`,
+          'Origin': 'https://sprl.sunarp.gob.pe',
+          'Referer': 'https://sprl.sunarp.gob.pe/',
+        },
+        body: JSON.stringify({
+          codArea: '22000',
+          tipoCert: 'G',
+        }),
+      }
+    )
+
+    return {
+      status: response.status,
+      body: await response.text(),
+    }
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : String(error),
+    }
+  }
+}, accessToken)
+
+console.log('[SPRL DEBUG] CATALOG FROM PLAYWRIGHT:', catalogResponse)
+
     const body = await page.evaluate(() => document.body?.textContent || '').catch(() => '')
     const hasHola = body.includes('HOLA!') || body.includes('HOLA ')
     const hasSaldo = body.includes('SALDO DISPONIBLE') || body.includes('Saldo')
@@ -394,8 +427,6 @@ async function loginSPRL(username, password, options = {}) {
       sunarpCookieHeaderLength: sunarpCookieHeader.length,
     })
 
-    loginSucceeded = true
-
     return {
       ok: true,
   saldo,
@@ -406,30 +437,15 @@ async function loginSPRL(username, password, options = {}) {
   tokenSource: accessToken ? 'local-playwright' : null,
   sunarpSessionId,
   sunarpCookieHeader: sunarpCookieHeader || null,
-      session: keepSession
-        ? {
-            browser,
-            context,
-            page,
-            accessToken,
-            refreshToken,
-            sunarpSessionId,
-            sunarpCookieHeader: sunarpCookieHeader || null,
-            username,
-            lastUsedAt: Date.now(),
-          }
-        : null,
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     console.error('[SPRL] Login error:', message)
     return { ok: false, error: 'Error al intentar login en SPRL: ' + message }
   } finally {
-    if (!keepSession || !loginSucceeded) {
-      if (page) await page.close().catch(() => { })
-      if (context) await context.close().catch(() => { })
-      if (browser) scheduleBrowserIdleClose()
-    }
+    if (page) await page.close().catch(() => { })
+    if (context) await context.close().catch(() => { })
+    if (browser) scheduleBrowserIdleClose()
   }
 }
 
