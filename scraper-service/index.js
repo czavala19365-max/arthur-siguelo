@@ -2,6 +2,7 @@
 
 const express = require('express')
 const { scrapeCEJ } = require('./cej-scraper')
+const { ProxyAgent } = require('undici')
 
 const app = express()
 app.use(express.json({ limit: '1mb' }))
