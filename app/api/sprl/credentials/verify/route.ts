@@ -49,6 +49,12 @@ function getChromeExecutablePath() {
   return chromePath ? chromePath : undefined
 }
 
+function normalizeServiceUrl(rawUrl?: string | null) {
+  const value = String(rawUrl || '').trim().replace(/\/$/, '')
+  if (!value) return ''
+  return /^https?:\/\//i.test(value) ? value : `https://${value}`
+}
+
 const LOGIN_FORM_SELECTOR =
   'input[name="username"], input[placeholder="Username"], input[aria-label="Username"], input[name*="user" i], input[id*="user" i], input[type="text"]:not([name*="captcha" i])'
 const PASSWORD_SELECTOR =
@@ -57,7 +63,7 @@ const SUBMIT_SELECTOR =
   'button[type="submit"], input[type="submit"], button:has-text("Ingresar"), button:has-text("INGRESAR"), input[value*="Ingresar" i], .btn-login, #btnLogin, #btnIngresar'
 
 
-  type SprlLoginResult = {
+type SprlLoginResult = {
   ok: boolean
   saldo?: number | null
   displayName?: string | null
@@ -70,7 +76,7 @@ const SUBMIT_SELECTOR =
 }
 
 async function loginSPRL(username: string, password: string, sessionId: string): Promise<SprlLoginResult> {
-  const scraperUrl = process.env.SCRAPER_SERVICE_URL?.trim()
+  const scraperUrl = normalizeServiceUrl(process.env.SCRAPER_SERVICE_URL)
 
   // Si NO hay scraper service configurado -> corre local (dev)
   if (!scraperUrl) {
@@ -79,14 +85,15 @@ async function loginSPRL(username: string, password: string, sessionId: string):
 
   console.log('===== FETCH SPRL LOGIN =====')
   console.log('URL:', scraperUrl)
+  console.log('sessionId:', sessionId)
 
   const inicio = Date.now()
 
-  const url = `${scraperUrl.replace(/\/$/, '')}/sprl/login`
+  const url = `${scraperUrl}/sprl/login`
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({ username, password, sessionId }),
     signal: AbortSignal.timeout(180_000),
   })
 
@@ -452,6 +459,15 @@ export async function POST() {
       })
 
       result = await response.json()
+      console.log('[SPRL verify] scraper result:', {
+        ok: result.ok,
+        hasAccessToken: Boolean(result.accessToken),
+        hasRefreshToken: Boolean(result.refreshToken),
+        hasSunarpSessionId: Boolean(result.sunarpSessionId),
+        hasSunarpCookieHeader: Boolean(result.sunarpCookieHeader),
+        saldo: result.saldo ?? null,
+        displayUsername: result.displayUsername ?? null,
+      })
     }
 
     const loginResponse = NextResponse.json(
@@ -474,6 +490,13 @@ export async function POST() {
     const secureCookie = process.env.NODE_ENV === 'production'
 
     if (result.ok) {
+      console.log('[SPRL verify] setting cookies:', {
+        hasAccessToken: Boolean(result.accessToken),
+        hasRefreshToken: Boolean(result.refreshToken),
+        hasSunarpSessionId: Boolean(result.sunarpSessionId),
+        hasSunarpCookieHeader: Boolean(result.sunarpCookieHeader),
+      })
+
       if (result.accessToken) {
         loginResponse.cookies.set('sprl_access_token', result.accessToken, {
           httpOnly: true,
@@ -526,6 +549,8 @@ export async function POST() {
     await updateCredentialStatus(credRecord.id, 'error', {
       error_mensaje: result.error || 'Error desconocido al verificar login',
     })
+
+    console.log('[SPRL verify] login result not ok:', result.error || 'unknown')
 
     loginResponse.cookies.delete('sprl_access_token')
     loginResponse.cookies.delete('sprl_refresh_token')
