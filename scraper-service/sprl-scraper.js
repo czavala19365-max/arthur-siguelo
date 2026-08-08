@@ -382,6 +382,57 @@ const catalogResponse = await page.evaluate(async (accessToken) => {
 
 console.log('[SPRL DEBUG] CATALOG FROM PLAYWRIGHT:', catalogResponse)
 
+console.log('[SPRL DEBUG] Probando catálogo DESDE NODE con el mismo token + cookie...')
+
+try {
+  const { HttpsProxyAgent } = await import('https-proxy-agent')
+
+  const proxyServer = process.env.SPRL_PROXY_SERVER || 'us.smartproxy.net'
+  const proxyPort = process.env.SPRL_PROXY_PORT || '3120'
+  const proxyUsername = process.env.SPRL_PROXY_USERNAME
+  const proxyPassword = process.env.SPRL_PROXY_PASSWORD
+
+  const proxyAgent = new HttpsProxyAgent(
+    `http://${proxyUsername}:${proxyPassword}@${proxyServer}:${proxyPort}`
+  )
+
+  const nodeCatalogResponse = await fetch(
+    'https://api06-catalogo-sunarp-sprl.apps.ocp-prod.sunarp.gob.pe/v1/sunarp-services/catalogo/listarPublicidadCertificados',
+    {
+      method: 'POST',
+      agent: proxyAgent,
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/plain, */*',
+        Authorization: `Bearer ${accessToken}`,
+        Cookie: sunarpCookieHeader,
+        Origin: 'https://sprl.sunarp.gob.pe',
+        Referer: 'https://sprl.sunarp.gob.pe/',
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      },
+      body: JSON.stringify({
+        codArea: '22000',
+        tipoCert: 'G',
+      }),
+      timeout: 30000,
+    }
+  )
+
+  const nodeCatalogText = await nodeCatalogResponse.text()
+
+  console.log('[SPRL DEBUG] CATALOG FROM NODE:', {
+    status: nodeCatalogResponse.status,
+    ok: nodeCatalogResponse.ok,
+    body: nodeCatalogText.slice(0, 1000),
+  })
+} catch (error) {
+  console.error(
+    '[SPRL DEBUG] CATALOG FROM NODE ERROR:',
+    error instanceof Error ? error.message : String(error)
+  )
+}
+
     const body = await page.evaluate(() => document.body?.textContent || '').catch(() => '')
     const hasHola = body.includes('HOLA!') || body.includes('HOLA ')
     const hasSaldo = body.includes('SALDO DISPONIBLE') || body.includes('Saldo')
