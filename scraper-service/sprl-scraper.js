@@ -347,6 +347,41 @@ async function loginSPRL(username, password) {
       sunarpCookiesCount: sunarpCookies.length,
     })
 
+    console.log('[SPRL DEBUG] Probando catálogo DESDE EL MISMO BROWSER...')
+
+const catalogResponse = await page.evaluate(async (accessToken) => {
+  try {
+    const response = await fetch(
+      'https://api06-catalogo-sunarp-sprl.apps.ocp-prod.sunarp.gob.pe/v1/sunarp-services/catalogo/listarPublicidadCertificados',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/plain, */*',
+          'Authorization': `Bearer ${accessToken}`,
+          'Origin': 'https://sprl.sunarp.gob.pe',
+          'Referer': 'https://sprl.sunarp.gob.pe/',
+        },
+        body: JSON.stringify({
+          codArea: '22000',
+          tipoCert: 'G',
+        }),
+      }
+    )
+
+    return {
+      status: response.status,
+      body: await response.text(),
+    }
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : String(error),
+    }
+  }
+}, accessToken)
+
+console.log('[SPRL DEBUG] CATALOG FROM PLAYWRIGHT:', catalogResponse)
+
     const body = await page.evaluate(() => document.body?.textContent || '').catch(() => '')
     const hasHola = body.includes('HOLA!') || body.includes('HOLA ')
     const hasSaldo = body.includes('SALDO DISPONIBLE') || body.includes('Saldo')
