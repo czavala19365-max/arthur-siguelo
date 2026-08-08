@@ -190,6 +190,160 @@ app.post('/sprl/login', async (req, res) => {
   }
 })
 
+const { ProxyAgent } = require('undici')
+
+app.post('/sprl/catalogo', async (req, res) => {
+  try {
+    const {
+      accessToken,
+      cookieHeader,
+      codArea,
+      tipoCert,
+    } = req.body || {}
+
+    console.log('[SPRL catalog Railway] incoming request:', {
+      hasAccessToken: Boolean(accessToken),
+      accessTokenLength: accessToken?.length || 0,
+      hasCookieHeader: Boolean(cookieHeader),
+      cookieHeaderLength: cookieHeader?.length || 0,
+      codArea,
+      tipoCert,
+    })
+
+    if (!accessToken) {
+      return res.status(401).json({
+        success: false,
+        data: null,
+        response: {
+          codigo: '401',
+          titulo: 'ERROR',
+          tipo: 'E',
+          mensaje: 'No se recibió accessToken.',
+        },
+      })
+    }
+
+    if (!codArea || !tipoCert) {
+      return res.status(400).json({
+        success: false,
+        data: null,
+        response: {
+          codigo: '400',
+          titulo: 'ERROR',
+          tipo: 'E',
+          mensaje: 'codArea y tipoCert son requeridos.',
+        },
+      })
+    }
+
+    /*
+     * IMPORTANTE:
+     * Usamos exactamente el mismo proxy que utiliza
+     * el login de SPRL.
+     *
+     * Cambia los nombres de estas dos variables SOLO si
+     * en sprl-scraper.js tienes otros nombres.
+     */
+    const proxyUsername = process.env.SPRL_PROXY_USERNAME
+    const proxyPassword = process.env.SPRL_PROXY_PASSWORD
+
+    if (!proxyUsername || !proxyPassword) {
+      console.error('[SPRL catalog Railway] Faltan credenciales SmartProxy')
+
+      return res.status(500).json({
+        success: false,
+        data: null,
+        response: {
+          codigo: '500',
+          titulo: 'ERROR',
+          tipo: 'E',
+          mensaje: 'No están configuradas las credenciales SmartProxy.',
+        },
+      })
+    }
+
+    const proxyUrl =
+      `http://${encodeURIComponent(proxyUsername)}:${encodeURIComponent(proxyPassword)}@us.smartproxy.net:3120`
+
+    const proxyAgent = new ProxyAgent(proxyUrl)
+
+    const CATALOGO_URL =
+      'https://api06-catalogo-sunarp-sprl.apps.ocp-prod.sunarp.gob.pe/v1/sunarp-services/catalogo/listarPublicidadCertificados'
+
+    console.log('[SPRL catalog Railway] Calling SUNARP through SmartProxy...')
+
+    const response = await fetch(CATALOGO_URL, {
+      method: 'POST',
+
+      dispatcher: proxyAgent,
+
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/plain, */*',
+        Authorization: `Bearer ${accessToken}`,
+
+        ...(cookieHeader
+          ? { Cookie: cookieHeader }
+          : {}),
+
+        Origin: 'https://sprl.sunarp.gob.pe',
+        Referer: 'https://sprl.sunarp.gob.pe/',
+      },
+
+      body: JSON.stringify({
+        codArea,
+        tipoCert,
+      }),
+    })
+
+    const text = await response.text()
+
+    console.log('[SPRL catalog Railway] SUNARP response:', {
+      status: response.status,
+      ok: response.ok,
+      bodyPreview: text.slice(0, 300),
+    })
+
+    let json
+
+    try {
+      json = JSON.parse(text)
+    } catch {
+      json = null
+    }
+
+    return res
+      .status(response.status)
+      .json(
+        json || {
+          success: false,
+          data: null,
+          response: {
+            codigo: String(response.status),
+            titulo: 'ERROR',
+            tipo: 'E',
+            mensaje: text || 'Respuesta inválida de SUNARP.',
+          },
+        }
+      )
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+
+    console.error('[SPRL catalog Railway] ERROR:', message)
+
+    return res.status(500).json({
+      success: false,
+      data: null,
+      response: {
+        codigo: '500',
+        titulo: 'ERROR',
+        tipo: 'E',
+        mensaje: message,
+      },
+    })
+  }
+})
+
 app.get('/sprl/health', (_req, res) => {
   res.json({
     status: 'ok',

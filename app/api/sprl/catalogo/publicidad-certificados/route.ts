@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export const runtime = 'nodejs'
 
-const CATALOGO_URL =
-  'https://api06-catalogo-sunarp-sprl.apps.ocp-prod.sunarp.gob.pe/v1/sunarp-services/catalogo/listarPublicidadCertificados'
+
 
 type CatalogRequestBody = {
   codArea?: string
@@ -73,17 +72,40 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const response = await fetch(CATALOGO_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json, text/plain, */*',
-        Authorization: `Bearer ${token}`,
-        Origin: 'https://sprl.sunarp.gob.pe',
-        Referer: 'https://sprl.sunarp.gob.pe/',
+    const scraperUrl = process.env.SCRAPER_SERVICE_URL
+
+if (!scraperUrl) {
+  console.error('[SPRL catalog] SCRAPER_SERVICE_URL no está configurado')
+
+  return NextResponse.json(
+    {
+      success: false,
+      data: null,
+      response: {
+        codigo: '500',
+        titulo: 'ERROR',
+        tipo: 'E',
+        mensaje: 'SCRAPER_SERVICE_URL no está configurado.',
       },
-      body: JSON.stringify({ codArea, tipoCert }),
-    })
+    },
+    { status: 500 },
+  )
+}
+
+console.log('[SPRL catalog] Calling Railway scraper:', scraperUrl)
+
+const response = await fetch(`${scraperUrl}/sprl/catalogo`, {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    accessToken: token,
+    cookieHeader: request.cookies.get('sprl_remote_cookie')?.value || '',
+    codArea,
+    tipoCert,
+  }),
+})
 
     const text = await response.text()
     console.log('[SPRL catalog] upstream response:', {
