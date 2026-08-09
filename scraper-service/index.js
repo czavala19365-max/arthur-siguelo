@@ -107,7 +107,7 @@ app.get('/health/proxy', async (req, res) => {
 })
 
 // ─── SPRL (Publicidad Registral) ────────────────────────────────
-const { loginSPRL } = require('./sprl-scraper')
+const { loginSPRL, catalogSPRL } = require('./sprl-scraper')
 
 app.post('/sprl/login', async (req, res) => {
   try {
@@ -156,20 +156,12 @@ app.post('/sprl/login', async (req, res) => {
 
 app.post('/sprl/catalog', async (req, res) => {
   try {
-    const { codArea, tipoCert, accessToken, sunarpCookieHeader } = req.body || {}
+    const { codArea, tipoCert } = req.body || {}
 
-    console.log('[SPRL catalog] Incoming request:', {
+    console.log('[SPRL catalog] Request:', {
       codArea,
       tipoCert,
-      hasAccessToken: Boolean(accessToken),
-      accessTokenLength: accessToken?.length ?? 0,
-      hasCookie: Boolean(sunarpCookieHeader),
-      cookieLength: sunarpCookieHeader?.length ?? 0,
     })
-
-    // ============================================================
-    // 1. VALIDACIONES
-    // ============================================================
 
     if (!codArea || !tipoCert) {
       return res.status(400).json({
@@ -184,196 +176,61 @@ app.post('/sprl/catalog', async (req, res) => {
       })
     }
 
-    if (!accessToken) {
-      console.log('[SPRL catalog] No hay accessToken')
-
-      return res.status(401).json({
-        success: false,
-        data: null,
-        response: {
-          codigo: '401',
-          titulo: 'ERROR',
-          tipo: 'E',
-          mensaje: 'Token SPRL no disponible.',
-        },
-      })
-    }
-
-    if (!sunarpCookieHeader) {
-      console.log('[SPRL catalog] No hay cookie SPRL')
-
-      return res.status(401).json({
-        success: false,
-        data: null,
-        response: {
-          codigo: '401',
-          titulo: 'ERROR',
-          tipo: 'E',
-          mensaje: 'Cookie SPRL no disponible.',
-        },
-      })
-    }
-
-    // ============================================================
-    // 2. DECODIFICAR COOKIE
-    // ============================================================
-
-    let cookieHeader
-
-    try {
-      cookieHeader = decodeURIComponent(String(sunarpCookieHeader))
-
-      console.log('[SPRL catalog] Cookie decodificada:', {
-        length: cookieHeader.length,
-        hasJSessionId: cookieHeader.includes('JSESSIONID'),
-        preview: cookieHeader.slice(0, 60),
-      })
-    } catch (error) {
-      console.error(
-        '[SPRL catalog] Error decodificando cookie:',
-        error instanceof Error ? error.message : String(error)
-      )
-
-      return res.status(400).json({
-        success: false,
-        data: null,
-        response: {
-          codigo: '400',
-          titulo: 'ERROR',
-          tipo: 'E',
-          mensaje: 'La cookie SPRL no tiene un formato válido.',
-        },
-      })
-    }
-
-    // ============================================================
-    // 3. PROXY
-    // ============================================================
-
-    const proxyHost =
-      process.env.SPRL_PROXY_SERVER || 'us.smartproxy.net'
-
-    const proxyPort =
-      process.env.SPRL_PROXY_PORT || '3120'
-
-    const proxyUser =
-      process.env.SPRL_PROXY_USERNAME
-
-    const proxyPass =
-      process.env.SPRL_PROXY_PASSWORD
-
-    if (!proxyUser || !proxyPass) {
-      throw new Error(
-        'Faltan SPRL_PROXY_USERNAME o SPRL_PROXY_PASSWORD en Railway.'
-      )
-    }
-
-    const proxyUrl = `http://${proxyHost}:${proxyPort}`
-
-    const proxyAuth = Buffer.from(
-      `${proxyUser}:${proxyPass}`
-    ).toString('base64')
-
-    const { HttpsProxyAgent } = await import('https-proxy-agent')
-
-    const proxyAgent = new HttpsProxyAgent(proxyUrl, {
-      keepAlive: true,
-      rejectUnauthorized: false,
-      headers: {
-        'Proxy-Authorization': `Basic ${proxyAuth}`,
-      },
-    })
-
-    console.log('[SPRL catalog] Proxy configurado:', {
-      host: proxyHost,
-      port: proxyPort,
-      hasUser: Boolean(proxyUser),
-      hasPassword: Boolean(proxyPass),
-    })
-
-    // ============================================================
-    // 4. HEADERS
-    // ============================================================
-
-    const requestHeaders = {
-      'Content-Type': 'application/json',
-      Accept: 'application/json, text/plain, */*',
-      Authorization: `Bearer ${accessToken}`,
-      Cookie: cookieHeader,
-      Origin: 'https://sprl.sunarp.gob.pe',
-      Referer: 'https://sprl.sunarp.gob.pe/',
-      'User-Agent':
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    }
-
-    console.log('[SPRL catalog] Calling SUNARP catalog...')
-
-    // ============================================================
-    // 5. FETCH
-    // ============================================================
-
-    const response = await fetch(
-      'https://api06-catalogo-sunarp-sprl.apps.ocp-prod.sunarp.gob.pe/v1/sunarp-services/catalogo/listarPublicidadCertificados',
-      {
-        method: 'POST',
-        agent: proxyAgent,
-        headers: requestHeaders,
-        body: JSON.stringify({
-          codArea: String(codArea).trim(),
-          tipoCert: String(tipoCert).trim(),
-        }),
-        timeout: 30000,
-      }
+    const result = await catalogSPRL(
+      String(codArea).trim(),
+      String(tipoCert).trim()
     )
 
-    // ============================================================
-    // 6. RESPUESTA
-    // ============================================================
-
-    const text = await response.text()
-
-    console.log('[SPRL catalog] SUNARP response:', {
-      status: response.status,
-      ok: response.ok,
-      bodyLength: text.length,
-      bodyPreview: text.slice(0, 300),
+    console.log('[SPRL catalog] Response:', {
+      status: result.status,
+      error: result.error,
     })
 
-    let json = null
+    if (result.error) {
+      return res.status(500).json({
+        success: false,
+        data: null,
+        response: {
+          codigo: '500',
+          titulo: 'ERROR',
+          tipo: 'E',
+          mensaje: result.error,
+        },
+      })
+    }
+
+    let json
 
     try {
-      json = JSON.parse(text)
+      json = JSON.parse(result.body)
     } catch {
       json = null
     }
 
-    // ============================================================
-    // 7. DEVOLVER RESPUESTA
-    // ============================================================
-
     if (json !== null) {
-      return res.status(response.status).json(json)
+      return res.status(result.status).json(json)
     }
 
-    return res.status(response.status).json({
+    return res.status(result.status).json({
       success: false,
       data: null,
       response: {
-        codigo: String(response.status),
+        codigo: String(result.status),
         titulo: 'ERROR',
         tipo: 'E',
-        mensaje:
-          text || 'SUNARP devolvió una respuesta vacía.',
+        mensaje: result.body,
       },
     })
-
   } catch (error) {
     const message =
       error instanceof Error
         ? error.message
         : String(error)
 
-    console.error('[SPRL catalog] ERROR:', message)
+    console.error(
+      '[SPRL catalog] ERROR:',
+      message
+    )
 
     return res.status(500).json({
       success: false,
@@ -385,7 +242,6 @@ app.post('/sprl/catalog', async (req, res) => {
         mensaje: message,
       },
     })
-
   }
 })
 

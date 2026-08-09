@@ -8,6 +8,8 @@ let sharedBrowser = null
 let sharedBrowserPromise = null
 let sharedBrowserKey = null
 let browserIdleTimer = null
+let sharedSprlContext = null
+let sharedSprlPage = null
 
 const DEFAULT_BROWSER_IDLE_MS = Number(process.env.SPRL_BROWSER_IDLE_MS || 120000)
 const LOGIN_FORM_SELECTOR =
@@ -349,21 +351,6 @@ async function loginSPRL(username, password) {
 
     console.log('[SPRL DEBUG] Probando catálogo DESDE EL MISMO BROWSER...')
 
-// TEST ============================================================
-page.on('request', request => {
-  if (
-    request.url().includes(
-      'listarPublicidadCertificados'
-    )
-  ) {
-    console.log('[SPRL DEBUG] BROWSER CATALOG REQUEST:', {
-      method: request.method(),
-      url: request.url(),
-      headers: request.headers(),
-      postData: request.postData(),
-    })
-  }
-})
 
 const catalogResponse = await page.evaluate(async (accessToken) => {
   try {
@@ -398,82 +385,6 @@ const catalogResponse = await page.evaluate(async (accessToken) => {
 
 console.log('[SPRL DEBUG] CATALOG FROM PLAYWRIGHT:', catalogResponse)
 
-// TEST ============================================================
-console.log('[SPRL DEBUG] Probando catálogo DESDE NODE con el mismo token + cookie...')
-
-try {
-  const { HttpsProxyAgent } = await import('https-proxy-agent')
-
-  const proxyServer =
-  process.env.SPRL_PROXY_SERVER || 'us.smartproxy.net'
-
-const proxyPort =
-  process.env.SPRL_PROXY_PORT || '3120'
-
-const proxyUsername =
-  process.env.SPRL_PROXY_USERNAME
-
-const proxyPassword =
-  process.env.SPRL_PROXY_PASSWORD
-
-const proxyUrl = `http://${proxyServer}:${proxyPort}`
-
-const proxyAuth = Buffer.from(
-  `${proxyUsername}:${proxyPassword}`
-).toString('base64')
-
-const proxyAgent = new HttpsProxyAgent(proxyUrl, {
-  keepAlive: true,
-  rejectUnauthorized: false,
-  headers: {
-    'Proxy-Authorization': `Basic ${proxyAuth}`,
-  },
-})
-
-console.log('[SPRL DEBUG] Node proxy configured:', {
-  proxyUrl,
-  hasUsername: Boolean(proxyUsername),
-  hasPassword: Boolean(proxyPassword),
-  authLength: proxyAuth.length,
-})
-
-  const nodeCatalogResponse = await fetch(
-    'https://api06-catalogo-sunarp-sprl.apps.ocp-prod.sunarp.gob.pe/v1/sunarp-services/catalogo/listarPublicidadCertificados',
-    {
-      method: 'POST',
-      agent: proxyAgent,
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json, text/plain, */*',
-        Authorization: `Bearer ${accessToken}`,
-        Cookie: sunarpCookieHeader,
-        Origin: 'https://sprl.sunarp.gob.pe',
-        Referer: 'https://sprl.sunarp.gob.pe/',
-        'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      },
-      body: JSON.stringify({
-        codArea: '22000',
-        tipoCert: 'G',
-      }),
-      timeout: 30000,
-    }
-  )
-
-  const nodeCatalogText = await nodeCatalogResponse.text()
-
-  console.log('[SPRL DEBUG] CATALOG FROM NODE:', {
-    status: nodeCatalogResponse.status,
-    ok: nodeCatalogResponse.ok,
-    body: nodeCatalogText.slice(0, 1000),
-  })
-} catch (error) {
-  console.error(
-    '[SPRL DEBUG] CATALOG FROM NODE ERROR:',
-    error instanceof Error ? error.message : String(error)
-  )
-}
-// ============================================================
 
     const body = await page.evaluate(() => document.body?.textContent || '').catch(() => '')
     const hasHola = body.includes('HOLA!') || body.includes('HOLA ')
@@ -536,10 +447,74 @@ console.log('[SPRL DEBUG] Node proxy configured:', {
     console.error('[SPRL] Login error:', message)
     return { ok: false, error: 'Error al intentar login en SPRL: ' + message }
   } finally {
-    if (page) await page.close().catch(() => { })
-    if (context) await context.close().catch(() => { })
-    if (browser) scheduleBrowserIdleClose()
+    if (page) {
+      sharedSprlPage = page
+    }
+
+    if (context) {
+      sharedSprlContext = context
+    }
+
+    if (browser) {
+      scheduleBrowserIdleClose()
+    }
   }
 }
 
-module.exports = { loginSPRL }
+async function catalogSPRL(codArea, tipoCert) {
+  if (!sharedSprlPage || !sharedSprlContext) {
+    throw new Error('No existe una sesión SPRL activa.')
+  }
+
+  if (sharedSprlPage.isClosed()) {
+    throw new Error('La sesión SPRL ya no está activa.')
+  }
+
+  const result = await sharedSprlPage.evaluate(
+    async ({ codArea, tipoCert }) => {
+      try {
+        const response = await fetch(
+          'https://api06-catalogo-sunarp-sprl.apps.ocp-prod.sunarp.gob.pe/v1/sunarp-services/catalogo/listarPublicidadCertificados',
+          {
+            method: 'POST',
+
+            headers: {
+              'Content-Type': 'application/json',
+              Accept: 'application/json, text/plain, */*',
+              Origin: 'https://sprl.sunarp.gob.pe',
+              Referer: 'https://sprl.sunarp.gob.pe/',
+            },
+
+            body: JSON.stringify({
+              codArea: String(codArea).trim(),
+              tipoCert: String(tipoCert).trim(),
+            }),
+          }
+        )
+
+        return {
+          status: response.status,
+          body: await response.text(),
+        }
+      } catch (error) {
+        return {
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      }
+    },
+    {
+      codArea,
+      tipoCert,
+    }
+  )
+
+  return result
+}
+
+module.exports = {
+  loginSPRL,
+  catalogSPRL,
+}
