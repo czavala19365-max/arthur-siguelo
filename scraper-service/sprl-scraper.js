@@ -385,6 +385,12 @@ const catalogResponse = await page.evaluate(async (accessToken) => {
 
 console.log('[SPRL DEBUG] CATALOG FROM PLAYWRIGHT:', catalogResponse)
 
+console.log('[SPRL DEBUG] Guardando sesión para catálogo:', {
+  hasPage: Boolean(page),
+  pageClosed: page?.isClosed(),
+  hasContext: Boolean(context),
+})
+
 
     const body = await page.evaluate(() => document.body?.textContent || '').catch(() => '')
     const hasHola = body.includes('HOLA!') || body.includes('HOLA ')
@@ -447,21 +453,33 @@ console.log('[SPRL DEBUG] CATALOG FROM PLAYWRIGHT:', catalogResponse)
     console.error('[SPRL] Login error:', message)
     return { ok: false, error: 'Error al intentar login en SPRL: ' + message }
   } finally {
-    if (page) {
-      sharedSprlPage = page
-    }
+      console.log('[SPRL DEBUG] FINAL LOGIN:', {
+        pageExists: Boolean(page),
+        pageClosed: page?.isClosed(),
+        contextExists: Boolean(context),
+      })
 
-    if (context) {
-      sharedSprlContext = context
-    }
+      if (page && !page.isClosed()) {
+        sharedSprlPage = page
+      }
 
-    if (browser) {
-      scheduleBrowserIdleClose()
+      if (context) {
+        sharedSprlContext = context
+      }
+
+      if (browser) {
+        scheduleBrowserIdleClose()
+      }
     }
-  }
 }
 
 async function catalogSPRL(codArea, tipoCert) {
+  console.log('[SPRL DEBUG] CATALOG SESSION:', {
+  hasPage: Boolean(sharedSprlPage),
+  pageClosed: sharedSprlPage?.isClosed(),
+  hasContext: Boolean(sharedSprlContext),
+  pageUrl: sharedSprlPage ? sharedSprlPage.url() : null,
+})
   if (!sharedSprlPage || !sharedSprlContext) {
     throw new Error('No existe una sesión SPRL activa.')
   }
