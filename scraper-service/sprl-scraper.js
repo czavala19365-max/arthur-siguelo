@@ -462,6 +462,17 @@ console.log('[SPRL DEBUG] Guardando sesión para catálogo:', {
       if (page && !page.isClosed()) {
         sharedSprlPage = page
       }
+      await sharedSprlPage.evaluate((token) => {
+  window.__SPRL_ACCESS_TOKEN__ = token
+}, accessToken)
+
+console.log('[SPRL DEBUG] Token guardado en página:', {
+  hasToken: Boolean(
+    await sharedSprlPage.evaluate(
+      () => window.__SPRL_ACCESS_TOKEN__
+    )
+  ),
+})
 
       if (context) {
         sharedSprlContext = context
@@ -486,6 +497,14 @@ async function catalogSPRL(codArea, tipoCert) {
   const result = await sharedSprlPage.evaluate(
     async ({ codArea, tipoCert }) => {
       try {
+        const token = window.__SPRL_ACCESS_TOKEN__
+
+        if (!token) {
+          return {
+            error: 'No existe access token dentro de la página.',
+          }
+        }
+
         const response = await fetch(
           'https://api06-catalogo-sunarp-sprl.apps.ocp-prod.sunarp.gob.pe/v1/sunarp-services/catalogo/listarPublicidadCertificados',
           {
@@ -494,6 +513,7 @@ async function catalogSPRL(codArea, tipoCert) {
             headers: {
               'Content-Type': 'application/json',
               Accept: 'application/json, text/plain, */*',
+              Authorization: `Bearer ${token}`,
               Origin: 'https://sprl.sunarp.gob.pe',
               Referer: 'https://sprl.sunarp.gob.pe/',
             },
