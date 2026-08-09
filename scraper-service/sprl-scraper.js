@@ -474,19 +474,14 @@ console.log('[SPRL DEBUG] Guardando sesión para catálogo:', {
 }
 
 async function catalogSPRL(codArea, tipoCert) {
-  console.log('[SPRL DEBUG] CATALOG SESSION:', {
-  hasPage: Boolean(sharedSprlPage),
-  pageClosed: sharedSprlPage?.isClosed(),
-  hasContext: Boolean(sharedSprlContext),
-  pageUrl: sharedSprlPage ? sharedSprlPage.url() : null,
-})
-  if (!sharedSprlPage || !sharedSprlContext) {
+  if (!sharedSprlPage || sharedSprlPage.isClosed()) {
     throw new Error('No existe una sesión SPRL activa.')
   }
 
-  if (sharedSprlPage.isClosed()) {
-    throw new Error('La sesión SPRL ya no está activa.')
-  }
+  console.log('[SPRL DEBUG] CATALOG SESSION:', {
+    pageClosed: sharedSprlPage.isClosed(),
+    pageUrl: sharedSprlPage.url(),
+  })
 
   const result = await sharedSprlPage.evaluate(
     async ({ codArea, tipoCert }) => {
@@ -502,6 +497,8 @@ async function catalogSPRL(codArea, tipoCert) {
               Origin: 'https://sprl.sunarp.gob.pe',
               Referer: 'https://sprl.sunarp.gob.pe/',
             },
+
+            credentials: 'include',
 
             body: JSON.stringify({
               codArea: String(codArea).trim(),
@@ -528,6 +525,12 @@ async function catalogSPRL(codArea, tipoCert) {
       tipoCert,
     }
   )
+
+  console.log('[SPRL DEBUG] CATALOG RESULT:', {
+    status: result.status,
+    error: result.error,
+    bodyPreview: result.body?.slice(0, 300),
+  })
 
   return result
 }
