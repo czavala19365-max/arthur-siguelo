@@ -4,14 +4,18 @@ import { Solver } from '@2captcha/captcha-solver'
 import CryptoJS from 'crypto-js'
 import type { PagoSunarp, DetalleCronologiaEntry } from '@/types'
 
-const SIGUELO_URL  = 'https://siguelo.sunarp.gob.pe/siguelo/'
+const SIGUELO_URL = 'https://siguelo.sunarp.gob.pe/siguelo/'
 const CONSULTA_API = 'https://api-gateway.sunarp.gob.pe:9443/sunarp/siguelo/siguelo-tracking/tracking/api/consultaTitulo'
-const ESQUELA_API  = 'https://api-gateway.sunarp.gob.pe:9443/sunarp/siguelo/siguelo-esquela/listarEsquela'
+const ESQUELA_API = 'https://api-gateway.sunarp.gob.pe:9443/sunarp/siguelo/siguelo-esquela/listarEsquela'
 
 // Extraídos del bundle main-es2015.js de SIGUELO
 const TURNSTILE_SITE_KEY = '0x4AAAAAABjHwQpFgHGVKCei'
-const IBM_CLIENT_ID      = '30a3fd982c6f85a3a70b44fa1f302488'
-const AES_KEY            = 'sV2zUWiuNo@3uv8nu9ir4'
+const IBM_CLIENT_ID = '30a3fd982c6f85a3a70b44fa1f302488'
+const AES_KEY = 'sV2zUWiuNo@3uv8nu9ir4'
+
+const COOKIES_TTL_MS = 10 * 60 * 1000
+let cachedSigueloCookies: { value: string; expiresAt: number } | null = null
+let cachedSigueloCookiesPromise: Promise<string> | null = null
 
 // Helpers de encriptado (CryptoJS AES, idéntico al cyService de Angular)
 const encrypt = (data: string): string => CryptoJS.AES.encrypt(data, AES_KEY).toString()
@@ -25,38 +29,60 @@ const decrypt = (data: string): string => {
  * Reutilizado por consultarTitulo y detalleTituloSunarp para evitar bloqueos geo-IP.
  */
 async function obtenerCookiesSiguelo(): Promise<string> {
-  const executablePath =
-    process.env.CHROME_EXECUTABLE_PATH ??
-    (await chromium.executablePath(
-      'https://github.com/Sparticuz/chromium/releases/download/v123.0.1/chromium-v123.0.1-pack.tar'
-    ))
+  const now = Date.now()
+  if (cachedSigueloCookies && cachedSigueloCookies.expiresAt > now) {
+    return cachedSigueloCookies.value
+  }
 
-  const browser = await puppeteer.launch({
-    args: chromium.args,
-    executablePath,
-    headless: true,
-    defaultViewport: { width: 1280, height: 720 },
+  if (cachedSigueloCookiesPromise) {
+    return cachedSigueloCookiesPromise
+  }
+
+  cachedSigueloCookiesPromise = (async () => {
+    const executablePath =
+      process.env.CHROME_EXECUTABLE_PATH ??
+      (await chromium.executablePath(
+        'https://github.com/Sparticuz/chromium/releases/download/v123.0.1/chromium-v123.0.1-pack.tar'
+      ))
+
+    const browser = await puppeteer.launch({
+      args: chromium.args,
+      executablePath,
+      headless: true,
+      defaultViewport: { width: 1280, height: 720 },
+    })
+
+    try {
+      const page = await browser.newPage()
+      await page.setUserAgent(
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+      )
+      await page.goto(SIGUELO_URL, { waitUntil: 'networkidle2', timeout: 30_000 })
+
+      // Aceptar modal de términos si aparece
+      await page.waitForSelector('.btn-sunarp-cyan', { timeout: 8_000 })
+        .then(() => page.click('.btn-sunarp-cyan'))
+        .catch(() => { /* Modal no presente */ })
+
+      await new Promise(r => setTimeout(r, 1_500))
+
+      const cookieList = await page.cookies()
+      const cookieString = cookieList.map(c => `${c.name}=${c.value}`).join('; ')
+      cachedSigueloCookies = {
+        value: cookieString,
+        expiresAt: Date.now() + COOKIES_TTL_MS,
+      }
+      return cookieString
+    } finally {
+      await browser.close().catch(() => { })
+      cachedSigueloCookiesPromise = null
+    }
+  })().catch((error) => {
+    cachedSigueloCookiesPromise = null
+    throw error
   })
 
-  try {
-    const page = await browser.newPage()
-    await page.setUserAgent(
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
-    )
-    await page.goto(SIGUELO_URL, { waitUntil: 'networkidle2', timeout: 30_000 })
-
-    // Aceptar modal de términos si aparece
-    await page.waitForSelector('.btn-sunarp-cyan', { timeout: 8_000 })
-      .then(() => page.click('.btn-sunarp-cyan'))
-      .catch(() => { /* Modal no presente */ })
-
-    await new Promise(r => setTimeout(r, 1_500))
-
-    const cookieList = await page.cookies()
-    return cookieList.map(c => `${c.name}=${c.value}`).join('; ')
-  } finally {
-    await browser.close().catch(() => {})
-  }
+  return cachedSigueloCookiesPromise
 }
 
 /**
@@ -65,65 +91,65 @@ async function obtenerCookiesSiguelo(): Promise<string> {
  * Formato: nombreOficina → { zona, oficina } (2 dígitos cada uno)
  */
 const OFICINAS: Record<string, { zona: string; oficina: string }> = {
-  'ABANCAY':                     { zona: '06', oficina: '02' },
-  'ANDAHUAYLAS':                 { zona: '06', oficina: '07' },
-  'AREQUIPA':                    { zona: '03', oficina: '01' },
-  'AYACUCHO':                    { zona: '14', oficina: '01' },
-  'BAGUA':                       { zona: '11', oficina: '04' },
-  'BARRANCA':                    { zona: '01', oficina: '06' },
-  'CAJAMARCA':                   { zona: '11', oficina: '02' },
-  'CALLAO':                      { zona: '01', oficina: '02' },
-  'CAMANA':                      { zona: '03', oficina: '02' },
-  'CASMA':                       { zona: '04', oficina: '02' },
-  'CASTILLA _ APLAO':            { zona: '03', oficina: '03' },
-  'CAÑETE':                      { zona: '01', oficina: '05' },
-  'CHACHAPOYAS':                 { zona: '11', oficina: '05' },
-  'CHEPEN':                      { zona: '08', oficina: '02' },
-  'CHICLAYO':                    { zona: '11', oficina: '01' },
-  'CHIMBOTE':                    { zona: '04', oficina: '03' },
-  'CHINCHA':                     { zona: '10', oficina: '02' },
-  'CHOTA':                       { zona: '11', oficina: '06' },
-  'CUSCO':                       { zona: '06', oficina: '01' },
-  'ESPINAR':                     { zona: '06', oficina: '06' },
-  'HUACHO':                      { zona: '01', oficina: '04' },
-  'HUAMACHUCO':                  { zona: '08', oficina: '03' },
-  'HUANCAVELICA':                { zona: '02', oficina: '09' },
-  'HUANCAYO':                    { zona: '02', oficina: '01' },
-  'HUANTA':                      { zona: '14', oficina: '02' },
-  'HUANUCO':                     { zona: '02', oficina: '02' },
-  'HUARAL':                      { zona: '01', oficina: '03' },
-  'HUARAZ':                      { zona: '04', oficina: '01' },
-  'ICA':                         { zona: '10', oficina: '01' },
-  'ILO':                         { zona: '07', oficina: '02' },
-  'ISLAY _ MOLLENDO':            { zona: '03', oficina: '04' },
-  'JAEN':                        { zona: '11', oficina: '03' },
-  'JUANJUI':                     { zona: '12', oficina: '03' },
-  'JULIACA':                     { zona: '07', oficina: '03' },
-  'LA MERCED (SELVA CENTRAL)':   { zona: '02', oficina: '06' },
-  'LIMA':                        { zona: '01', oficina: '01' },
-  'MADRE DE DIOS':               { zona: '06', oficina: '03' },
-  'MAYNAS':                      { zona: '09', oficina: '01' },
-  'MOQUEGUA':                    { zona: '07', oficina: '04' },
-  'MOYOBAMBA':                   { zona: '12', oficina: '01' },
-  'NAZCA':                       { zona: '10', oficina: '04' },
-  'OTUZCO':                      { zona: '08', oficina: '04' },
-  'PASCO':                       { zona: '02', oficina: '04' },
-  'PISCO':                       { zona: '10', oficina: '03' },
-  'PIURA':                       { zona: '05', oficina: '01' },
-  'PUCALLPA':                    { zona: '13', oficina: '01' },
-  'PUNO':                        { zona: '07', oficina: '05' },
-  'QUILLABAMBA':                 { zona: '06', oficina: '04' },
-  'SAN PEDRO':                   { zona: '08', oficina: '05' },
-  'SATIPO':                      { zona: '02', oficina: '05' },
-  'SICUANI':                     { zona: '06', oficina: '05' },
-  'SULLANA':                     { zona: '05', oficina: '02' },
-  'TACNA':                       { zona: '07', oficina: '01' },
-  'TARAPOTO':                    { zona: '12', oficina: '02' },
-  'TARMA':                       { zona: '02', oficina: '07' },
-  'TINGO MARIA':                 { zona: '02', oficina: '08' },
-  'TRUJILLO':                    { zona: '08', oficina: '01' },
-  'TUMBES':                      { zona: '05', oficina: '03' },
-  'YURIMAGUAS':                  { zona: '12', oficina: '04' },
+  'ABANCAY': { zona: '06', oficina: '02' },
+  'ANDAHUAYLAS': { zona: '06', oficina: '07' },
+  'AREQUIPA': { zona: '03', oficina: '01' },
+  'AYACUCHO': { zona: '14', oficina: '01' },
+  'BAGUA': { zona: '11', oficina: '04' },
+  'BARRANCA': { zona: '01', oficina: '06' },
+  'CAJAMARCA': { zona: '11', oficina: '02' },
+  'CALLAO': { zona: '01', oficina: '02' },
+  'CAMANA': { zona: '03', oficina: '02' },
+  'CASMA': { zona: '04', oficina: '02' },
+  'CASTILLA _ APLAO': { zona: '03', oficina: '03' },
+  'CAÑETE': { zona: '01', oficina: '05' },
+  'CHACHAPOYAS': { zona: '11', oficina: '05' },
+  'CHEPEN': { zona: '08', oficina: '02' },
+  'CHICLAYO': { zona: '11', oficina: '01' },
+  'CHIMBOTE': { zona: '04', oficina: '03' },
+  'CHINCHA': { zona: '10', oficina: '02' },
+  'CHOTA': { zona: '11', oficina: '06' },
+  'CUSCO': { zona: '06', oficina: '01' },
+  'ESPINAR': { zona: '06', oficina: '06' },
+  'HUACHO': { zona: '01', oficina: '04' },
+  'HUAMACHUCO': { zona: '08', oficina: '03' },
+  'HUANCAVELICA': { zona: '02', oficina: '09' },
+  'HUANCAYO': { zona: '02', oficina: '01' },
+  'HUANTA': { zona: '14', oficina: '02' },
+  'HUANUCO': { zona: '02', oficina: '02' },
+  'HUARAL': { zona: '01', oficina: '03' },
+  'HUARAZ': { zona: '04', oficina: '01' },
+  'ICA': { zona: '10', oficina: '01' },
+  'ILO': { zona: '07', oficina: '02' },
+  'ISLAY _ MOLLENDO': { zona: '03', oficina: '04' },
+  'JAEN': { zona: '11', oficina: '03' },
+  'JUANJUI': { zona: '12', oficina: '03' },
+  'JULIACA': { zona: '07', oficina: '03' },
+  'LA MERCED (SELVA CENTRAL)': { zona: '02', oficina: '06' },
+  'LIMA': { zona: '01', oficina: '01' },
+  'MADRE DE DIOS': { zona: '06', oficina: '03' },
+  'MAYNAS': { zona: '09', oficina: '01' },
+  'MOQUEGUA': { zona: '07', oficina: '04' },
+  'MOYOBAMBA': { zona: '12', oficina: '01' },
+  'NAZCA': { zona: '10', oficina: '04' },
+  'OTUZCO': { zona: '08', oficina: '04' },
+  'PASCO': { zona: '02', oficina: '04' },
+  'PISCO': { zona: '10', oficina: '03' },
+  'PIURA': { zona: '05', oficina: '01' },
+  'PUCALLPA': { zona: '13', oficina: '01' },
+  'PUNO': { zona: '07', oficina: '05' },
+  'QUILLABAMBA': { zona: '06', oficina: '04' },
+  'SAN PEDRO': { zona: '08', oficina: '05' },
+  'SATIPO': { zona: '02', oficina: '05' },
+  'SICUANI': { zona: '06', oficina: '05' },
+  'SULLANA': { zona: '05', oficina: '02' },
+  'TACNA': { zona: '07', oficina: '01' },
+  'TARAPOTO': { zona: '12', oficina: '02' },
+  'TARMA': { zona: '02', oficina: '07' },
+  'TINGO MARIA': { zona: '02', oficina: '08' },
+  'TRUJILLO': { zona: '08', oficina: '01' },
+  'TUMBES': { zona: '05', oficina: '03' },
+  'YURIMAGUAS': { zona: '12', oficina: '04' },
 }
 
 export type ScraperParams = {
@@ -194,17 +220,17 @@ export async function consultarTitulo(params: ScraperParams): Promise<ScraperRes
   const numeroTitulo = params.numero_titulo.padStart(8, '0')
 
   const innerPayload = {
-    codigoZona:    oficina.zona,
+    codigoZona: oficina.zona,
     codigoOficina: oficina.oficina,
-    anioTitulo:    String(params.anio_titulo),
+    anioTitulo: String(params.anio_titulo),
     numeroTitulo,
-    ip:            ipPc,
-    userApp:       'sigue+',
-    userCrea:      'sigue+',
-    status:        'A',
-    idioma:        'es',
-    tipoConsulta:  'N',
-    dG9rZW4:       turnstileToken,   // base64("token") — campo del captcha
+    ip: ipPc,
+    userApp: 'sigue+',
+    userCrea: 'sigue+',
+    status: 'A',
+    idioma: 'es',
+    tipoConsulta: 'N',
+    dG9rZW4: turnstileToken,   // base64("token") — campo del captcha
   }
 
   const encryptedBody = { dmFsdWU: encrypt(JSON.stringify(innerPayload)) }  // dmFsdWU = base64("value")
@@ -215,9 +241,9 @@ export async function consultarTitulo(params: ScraperParams): Promise<ScraperRes
     headers: {
       'Content-Type': 'application/json',
       'X-IBM-Client-Id': IBM_CLIENT_ID,
-      Cookie:   cookies,
-      Origin:   'https://siguelo.sunarp.gob.pe',
-      Referer:  SIGUELO_URL,
+      Cookie: cookies,
+      Origin: 'https://siguelo.sunarp.gob.pe',
+      Referer: SIGUELO_URL,
     },
     body: JSON.stringify(encryptedBody),
   })
@@ -263,7 +289,7 @@ export async function consultarTitulo(params: ScraperParams): Promise<ScraperRes
     (data.detalle as string) ??
     null
 
-  const areaRegistral  = tituloEntry?.areaRegistral  ?? null
+  const areaRegistral = tituloEntry?.areaRegistral ?? null
 
   // Log para encontrar el campo exacto de partida en la respuesta de SUNARP
   if (tituloEntry) {
@@ -300,14 +326,14 @@ export async function consultarTitulo(params: ScraperParams): Promise<ScraperRes
     consultadoEn: new Date().toISOString(),
     rawResponse: data,
     fechaHoraPresentacion: (tituloEntry?.fechaHoraPresentacion as string) ?? null,
-    fechaVencimiento:      (tituloEntry?.fechaVencimiento      as string) ?? null,
-    lugarPresentacion:     (tituloEntry?.lugarPresentacion     as string) ?? null,
-    nombrePresentante:     (tituloEntry?.nombrePresentante     as string) ?? null,
-    tipoRegistro:          (tituloEntry?.tipoRegistro          as string) ?? null,
-    montoDevo:             (tituloEntry?.montoDevo             as string) ?? null,
-    indiPror:              (tituloEntry?.indiPror              as string) ?? null,
-    indiSusp:              (tituloEntry?.indiSusp              as string) ?? null,
-    lstPagos:  (data.lstPagos  as PagoSunarp[]  | undefined) ?? null,
+    fechaVencimiento: (tituloEntry?.fechaVencimiento as string) ?? null,
+    lugarPresentacion: (tituloEntry?.lugarPresentacion as string) ?? null,
+    nombrePresentante: (tituloEntry?.nombrePresentante as string) ?? null,
+    tipoRegistro: (tituloEntry?.tipoRegistro as string) ?? null,
+    montoDevo: (tituloEntry?.montoDevo as string) ?? null,
+    indiPror: (tituloEntry?.indiPror as string) ?? null,
+    indiSusp: (tituloEntry?.indiSusp as string) ?? null,
+    lstPagos: (data.lstPagos as PagoSunarp[] | undefined) ?? null,
     lstActos,
   }
 }
@@ -316,8 +342,8 @@ export async function consultarTitulo(params: ScraperParams): Promise<ScraperRes
 const TIPO_ESQUELA: Record<string, string> = {
   'OBSERVADO': 'O',
   'LIQUIDADO': 'L',
-  'TACHADO':   'T',
-  'INSCRITO':  'I',
+  'TACHADO': 'T',
+  'INSCRITO': 'I',
 }
 
 export type EsquelaParams = {
@@ -345,18 +371,18 @@ export async function descargarEsquela(params: EsquelaParams): Promise<string[]>
   }
 
   const payload = {
-    codigoZona:     oficina.zona,
-    codigoOficina:  oficina.oficina,
-    anioTitulo:     String(params.anio_titulo),
-    numeroTitulo:   params.numero_titulo.padStart(8, '0'),
+    codigoZona: oficina.zona,
+    codigoOficina: oficina.oficina,
+    anioTitulo: String(params.anio_titulo),
+    numeroTitulo: params.numero_titulo.padStart(8, '0'),
     idAreaRegistro: params.area_registral,
-    idioma:         'es',
-    ip:             '0.0.0.0',
-    status:         'A',
-    tipoConsulta:   'E',
+    idioma: 'es',
+    ip: '0.0.0.0',
+    status: 'A',
+    tipoConsulta: 'E',
     tipoEsquela,
-    userApp:        'extranet',
-    userCrea:       'Siguelo',
+    userApp: 'extranet',
+    userCrea: 'Siguelo',
   }
 
   const response = await fetch(ESQUELA_API, {
@@ -364,7 +390,7 @@ export async function descargarEsquela(params: EsquelaParams): Promise<string[]>
     headers: {
       'Content-Type': 'application/json',
       'X-IBM-Client-Id': IBM_CLIENT_ID,
-      Origin:  'https://siguelo.sunarp.gob.pe',
+      Origin: 'https://siguelo.sunarp.gob.pe',
       Referer: SIGUELO_URL,
     },
     body: JSON.stringify(payload),
@@ -389,7 +415,7 @@ export async function descargarEsquela(params: EsquelaParams): Promise<string[]>
 }
 
 const PARTIDAS_API = 'https://api-gateway.sunarp.gob.pe:9443/sunarp/siguelo/asientoinscripcion/listarPartidas'
-const ASIENTO_API  = 'https://api-gateway.sunarp.gob.pe:9443/sunarp/siguelo/asientoinscripcion/listarAsientos'
+const ASIENTO_API = 'https://api-gateway.sunarp.gob.pe:9443/sunarp/siguelo/asientoinscripcion/listarAsientos'
 
 export type AsientoParams = {
   oficina_registral: string
@@ -411,7 +437,7 @@ async function apiPost(url: string, payload: object): Promise<string> {
     headers: {
       'Content-Type': 'application/json',
       'X-IBM-Client-Id': IBM_CLIENT_ID,
-      Origin:  'https://siguelo.sunarp.gob.pe',
+      Origin: 'https://siguelo.sunarp.gob.pe',
       Referer: SIGUELO_URL,
     },
     body: JSON.stringify({ dmFsdWU: encrypt(JSON.stringify(payload)) }),
@@ -438,16 +464,16 @@ export async function descargarAsiento(
   if (!oficina) throw new Error(`Oficina no reconocida: "${params.oficina_registral}"`)
 
   const basePayload = {
-    codigoZona:     oficina.zona,
-    codigoOficina:  oficina.oficina,
-    anioTitulo:     String(params.anio_titulo),
-    numeroTitulo:   params.numero_titulo.padStart(8, '0'),
+    codigoZona: oficina.zona,
+    codigoOficina: oficina.oficina,
+    anioTitulo: String(params.anio_titulo),
+    numeroTitulo: params.numero_titulo.padStart(8, '0'),
     idAreaRegistro: params.area_registral,
-    idioma:         'es',
-    ip:             '0.0.0.0',
-    status:         'A',
-    userApp:        'siguelo',
-    userCrea:       'siguelo',
+    idioma: 'es',
+    ip: '0.0.0.0',
+    status: 'A',
+    userApp: 'siguelo',
+    userCrea: 'siguelo',
   }
 
   // ── Paso 1: obtener numeroPartida ─────────────────────────────────────────
@@ -528,16 +554,16 @@ export async function detalleTituloSunarp(params: {
   // SUNARP espera areaRegistral como tipoRegistro (confirmado en bundle Angular de SIGUELO:
   // obtenerDetalleTitulo(e) se llama con e = lstTitulo[0].areaRegistral y asigna a.tipoRegistro = e)
   const innerPayload = {
-    codigoZona:    oficina.zona,
+    codigoZona: oficina.zona,
     codigoOficina: oficina.oficina,
-    anioTitulo:    String(params.anio_titulo),
+    anioTitulo: String(params.anio_titulo),
     numeroTitulo,
-    tipoRegistro:  params.area_registral ?? params.tipo_registro ?? '',
-    ip:            '0.0.0.0',
-    userApp:       'sigue+',
-    userCrea:      'sigue+',
-    status:        'A',
-    token:         null,
+    tipoRegistro: params.area_registral ?? params.tipo_registro ?? '',
+    ip: '0.0.0.0',
+    userApp: 'sigue+',
+    userCrea: 'sigue+',
+    status: 'A',
+    token: null,
   }
 
   // Obtener cookies de sesión de Cloudflare — necesarias para que SUNARP acepte
@@ -547,11 +573,11 @@ export async function detalleTituloSunarp(params: {
   const response = await fetch(DETALLE_TITULO_API, {
     method: 'POST',
     headers: {
-      'Content-Type':    'application/json',
+      'Content-Type': 'application/json',
       'X-IBM-Client-Id': IBM_CLIENT_ID,
-      Cookie:            cookies,
-      Origin:            'https://siguelo.sunarp.gob.pe',
-      Referer:           SIGUELO_URL,
+      Cookie: cookies,
+      Origin: 'https://siguelo.sunarp.gob.pe',
+      Referer: SIGUELO_URL,
     },
     body: JSON.stringify({ dmFsdWU: encrypt(JSON.stringify(innerPayload)) }),
   })
@@ -583,7 +609,7 @@ export async function detalleTituloSunarp(params: {
   return (data.lstDetalleTitulo as DetalleCronologiaEntry[]) ?? []
 }
 
-const ESQUELA_DESCARGAR_API ='https://api-gateway.sunarp.gob.pe:9443/sunarp/siguelo/siguelo-esquela/listarEsquela'
+const ESQUELA_DESCARGAR_API = 'https://api-gateway.sunarp.gob.pe:9443/sunarp/siguelo/siguelo-esquela/listarEsquela'
 
 export async function obtenerEsquelaSunarp(params: {
   oficina_registral: string
