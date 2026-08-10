@@ -1,0 +1,452 @@
+'use client';
+
+import { useEffect, useMemo, useState, useCallback, type MouseEvent } from 'react';
+import Link from 'next/link';
+import CalendarButtons from '@/components/CalendarButtons';
+import { formatPartesDisplay } from '@/lib/format-partes-judicial';
+import JudicialRedaccion from '@/components/JudicialRedaccion';
+
+type Tab = 'resumen' | 'movimientos' | 'documentos' | 'agenda' | 'arthur';
+
+interface Movimiento {
+  id: number;
+  fecha: string | null;
+  acto: string | null;
+  folio: string | null;
+  sumilla: string | null;
+  urgencia: 'alta' | 'normal' | 'info';
+  ai_sugerencia: string | null;
+  tiene_documento: boolean;
+  documento_url: string | null;
+}
+
+/** Documentos locales (estáticos) o proxy para URLs antiguas de Cloudinary. */
+function getCloudinaryDownloadUrl(url: string): string {
+  if (url.startsWith('/documentos/')) return url;
+  if (url.startsWith('https://res.cloudinary.com')) {
+    return `/api/documentos?url=${encodeURIComponent(url)}`;
+  }
+  try {
+    const { hostname } = new URL(url);
+    if (hostname.includes('cloudinary.com')) {
+      return `/api/documentos?url=${encodeURIComponent(url)}`;
+    }
+  } catch {
+    return url;
+  }
+  return url;
+}
+
+async function downloadCloudinaryJudicialDoc(e: MouseEvent<HTMLAnchorElement>, rawUrl: string) {
+  const href = getCloudinaryDownloadUrl(rawUrl);
+  if (!href.startsWith('/api/documentos')) return;
+  e.preventDefault();
+  try {
+    const res = await fetch(href, { mode: 'cors', credentials: 'omit' });
+    if (!res.ok) throw new Error(String(res.status));
+    const blob = await res.blob();
+    let name = 'documento.pdf';
+    try {
+      const seg = new URL(href).pathname.split('/').pop();
+      if (seg) name = decodeURIComponent(seg.split('?')[0]);
+    } catch {
+      /* usar default */
+    }
+    const objUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = objUrl;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(objUrl);
+  } catch {
+    window.open(href, '_blank', 'noopener,noreferrer');
+  }
+}
+
+interface Audiencia { id: number; descripcion: string; fecha: string; tipo: string | null; }
+interface Escrito { id: number; tipo: string; contenido: string; created_at: string; }
+interface CasoDetail {
+  id: number;
+  numero_expediente: string;
+  distrito_judicial: string;
+  organo_jurisdiccional: string | null;
+  juez: string | null;
+  tipo_proceso: string | null;
+  etapa_procesal: string | null;
+  partes: string | null;
+  cliente: string | null;
+  alias: string | null;
+  monto: string | null;
+  prioridad: 'alta' | 'media' | 'baja';
+  ultimo_movimiento: string | null;
+  ultimo_movimiento_fecha: string | null;
+  movimientos: Movimiento[];
+  audiencias: Audiencia[];
+  escritos: Escrito[];
+}
+
+function colorUrgencia(u: string) {
+  if (u === 'alta') return '#991b1b';
+  if (u === 'normal') return '#92400e';
+  return '#6b6560';
+}
+
+function daysUntil(dateStr: string): number {
+  return Math.ceil((new Date(dateStr).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+}
+
+interface JudicialCaseDetailClientProps {
+  id: string;
+  initialCaso: unknown;
+}
+
+export default function JudicialCaseDetailClient({ id, initialCaso }: JudicialCaseDetailClientProps) {
+  const [caso, setCaso] = useState<CasoDetail | null>(initialCaso as CasoDetail | null);
+  const [loading, setLoading] = useState(false);
+  const [tab, setTab] = useState<Tab>('resumen');
+  const [demoStep, setDemoStep] = useState<string | null>(null);
+  const [showRedaccion, setShowRedaccion] = useState(false);
+  const [editingDocumentId, setEditingDocumentId] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState<null | 'docx' | 'xlsx'>(null);
+
+  useEffect(() => {
+    setCaso(initialCaso as CasoDetail | null);
+  }, [initialCaso, id]);
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/casos/${id}`, { cache: 'no-store' });
+      if (res.ok) setCaso(await res.json() as CasoDetail);
+      else setCaso(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
+
+  const movimientosSortedDesc = useMemo(() => {
+    const list = caso?.movimientos;
+    if (!list?.length) return [];
+    const ts = (s: string | null) => {
+      if (!s) return 0;
+      const m = s.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      if (m) {
+        const ms = new Date(parseInt(m[3], 10), parseInt(m[2], 10) - 1, parseInt(m[1], 10)).getTime();
+        return Number.isNaN(ms) ? 0 : ms;
+      }
+      const u = new Date(s).getTime();
+      return Number.isNaN(u) ? 0 : u;
+    };
+    return [...list].sort((a, b) => ts(b.fecha) - ts(a.fecha));
+  }, [caso?.movimientos]);
+
+  const lastMov = movimientosSortedDesc[0] || null;
+  const totalMov = caso?.movimientos?.length || 0;
+  const daysInProcess = useMemo(() => {
+    if (!caso?.ultimo_movimiento_fecha) return 0;
+    return Math.max(1, Math.floor((Date.now() - new Date(caso.ultimo_movimiento_fecha).getTime()) / (1000 * 60 * 60 * 24)));
+  }, [caso?.ultimo_movimiento_fecha]);
+
+  async function handleReviewNow() {
+    setDemoStep('Conectando con CEJ...');
+    try {
+      await new Promise(r => setTimeout(r, 800));
+      setDemoStep('Obteniendo movimientos...');
+
+      const res = await fetch(`/api/casos/${id}/poll-now`, { method: 'POST' });
+
+      if (!res.ok) {
+        setDemoStep(null);
+        alert('Error al actualizar el caso. Intenta nuevamente.');
+        return;
+      }
+
+      setDemoStep('Extrayendo fechas de documentos...');
+      await new Promise(r => setTimeout(r, 1200));
+
+      setDemoStep('Analizando con Arthur-IA...');
+      await new Promise(r => setTimeout(r, 800));
+
+      await loadData();
+
+      setDemoStep('✓ Caso actualizado');
+      await new Promise(r => setTimeout(r, 1000));
+      setDemoStep(null);
+    } catch (err) {
+      console.error('[Actualizar] Error:', err);
+      setDemoStep(null);
+      alert('Error al actualizar el caso. Revisa la consola.');
+    }
+  }
+
+  async function downloadAyudaMemoria(format: 'docx' | 'xlsx') {
+    if (downloading) return;
+    setDownloading(format);
+    try {
+      const res = await fetch(`/api/casos/${id}/ayuda-memoria`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ format }),
+      });
+      if (!res.ok) return;
+      const blob = await res.blob();
+      const cd = res.headers.get('content-disposition') || '';
+      const match = cd.match(/filename="([^"]+)"/i);
+      const filename = match?.[1] || `Ayuda_Memoria_${id}.${format}`;
+      const objUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(objUrl);
+    } finally {
+      setDownloading(null);
+    }
+  }
+
+  if (loading) return <div style={{ padding: '48px 64px', fontFamily: 'var(--font-mono)', fontSize: '11px', textTransform: 'uppercase', color: 'var(--muted)' }}>Cargando caso...</div>;
+  if (!caso) return <div style={{ padding: '48px 64px', fontFamily: 'var(--font-display)', fontSize: '24px' }}>Caso no encontrado</div>;
+
+  if (showRedaccion) {
+    return (
+      <JudicialRedaccion
+        expedienteId={String(caso.id)}
+        documentId={editingDocumentId || undefined}
+        onBack={() => {
+          setShowRedaccion(false);
+          setEditingDocumentId(null);
+          void loadData();
+        }}
+      />
+    );
+  }
+
+  return (
+    <div style={{ padding: '48px 64px', background: 'var(--paper)', minHeight: '100vh' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div>
+          <Link href="/judicial" style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', textTransform: 'uppercase', color: 'var(--muted)' }}>← Mis Procesos</Link>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '8px' }}>
+            <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '44px', fontWeight: 400 }}>{caso.alias || caso.cliente || `Caso ${caso.id}`}</h1>
+            <span style={{ border: '1px solid var(--line-strong)', padding: '4px 10px', fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase' }}>{caso.prioridad}</span>
+            <span style={{ border: '1px solid var(--line-strong)', padding: '4px 10px', fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', color: colorUrgencia(lastMov?.urgencia || 'info') }}>
+              {lastMov?.urgencia || 'info'}
+            </span>
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <button
+            onClick={() => void downloadAyudaMemoria('docx')}
+            disabled={!!downloading || !!demoStep}
+            style={{ background: 'transparent', border: '1px solid var(--line-strong)', padding: '10px 14px', fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', cursor: downloading || demoStep ? 'not-allowed' : 'pointer', opacity: downloading || demoStep ? 0.7 : 1 }}
+            title="Descargar Ayuda Memoria en Word"
+          >
+            {downloading === 'docx' ? 'Descargando...' : 'Ayuda Memoria (Word)'}
+          </button>
+          <button
+            onClick={() => void downloadAyudaMemoria('xlsx')}
+            disabled={!!downloading || !!demoStep}
+            style={{ background: 'transparent', border: '1px solid var(--line-strong)', padding: '10px 14px', fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', cursor: downloading || demoStep ? 'not-allowed' : 'pointer', opacity: downloading || demoStep ? 0.7 : 1 }}
+            title="Descargar Ayuda Memoria en Excel"
+          >
+            {downloading === 'xlsx' ? 'Descargando...' : 'Ayuda Memoria (Excel)'}
+          </button>
+          <button
+            onClick={() => void handleReviewNow()}
+            disabled={!!demoStep || !!downloading}
+            style={{
+              background: demoStep ? 'var(--accent-navy)' : 'var(--accent-navy)',
+              color: 'white',
+              border: '1px solid var(--accent-navy)',
+              padding: '10px 20px',
+              fontFamily: 'var(--font-mono)',
+              fontSize: '10px',
+              textTransform: 'uppercase',
+              fontWeight: 600,
+              letterSpacing: '0.1em',
+              cursor: demoStep || downloading ? 'not-allowed' : 'pointer',
+              opacity: demoStep || downloading ? 0.6 : 1,
+              transition: 'all 0.2s ease'
+            }}
+            onMouseEnter={(e) => {
+              if (!demoStep && !downloading) {
+                e.currentTarget.style.background = 'rgba(1, 40, 80, 0.9)';
+                e.currentTarget.style.boxShadow = '0 2px 8px rgba(1, 40, 80, 0.3)';
+              }
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'var(--accent-navy)';
+              e.currentTarget.style.boxShadow = 'none';
+            }}
+            title="Rescraping del expediente para obtener últimos movimientos"
+          >
+            {demoStep ? `⟳ ${demoStep}` : '⟳ Actualizar caso'}
+          </button>
+        </div>
+      </div>
+      <div style={{ width: '60px', height: '2px', background: 'var(--accent)', marginTop: '16px', marginBottom: '28px' }} />
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: '12px', marginBottom: '24px' }}>
+        {[
+          ['JUZGADO', caso.organo_jurisdiccional || '—'],
+          ['JUEZ', caso.juez || '—'],
+          ['ETAPA', caso.etapa_procesal || '—'],
+          ['MONTO', caso.monto || '—'],
+          ['DISTRITO', caso.distrito_judicial || '—'],
+        ].map(item => (
+          <div key={item[0]} style={{ background: 'var(--surface)', border: '1px solid var(--line)', padding: '14px 16px' }}>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--muted)' }}>{item[0]}</div>
+            <div style={{ fontFamily: 'var(--font-body)', fontSize: '14px', fontWeight: 600, marginTop: '6px' }}>{item[1]}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', borderBottom: '1px solid var(--line)' }}>
+        {[
+          ['resumen', 'Resumen'],
+          ['movimientos', `Movimientos (${caso.movimientos.length})`],
+          ['documentos', `Documentos (${caso.escritos.length})`],
+          ['agenda', 'Agenda'],
+          ['arthur', 'Arthur IA'],
+        ].map(([key, label]) => (
+          <button key={key} onClick={() => setTab(key as Tab)} style={{ background: 'none', border: 'none', borderBottom: tab === key ? '2px solid var(--accent-navy)' : '2px solid transparent', padding: '10px 8px', fontFamily: 'var(--font-mono)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.1em', color: tab === key ? 'var(--ink)' : 'var(--muted)', cursor: 'pointer' }}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'resumen' && (
+        <div>
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', padding: '20px 24px', marginBottom: '16px' }}>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: '8px' }}>Último movimiento</div>
+            <div style={{ fontFamily: 'var(--font-body)', fontSize: '14px', fontWeight: 600 }}>{lastMov?.acto || caso.ultimo_movimiento || 'Sin movimientos'}</div>
+            <div style={{ fontFamily: 'var(--font-body)', fontSize: '13px', color: 'var(--muted)', marginTop: '6px' }}>{lastMov?.sumilla || ''}</div>
+          </div>
+          {lastMov?.ai_sugerencia && (
+            <div style={{ background: lastMov.urgencia === 'alta' ? '#1a3a5c' : 'var(--accent-light)', color: lastMov.urgencia === 'alta' ? 'white' : 'var(--ink)', padding: '20px 24px', marginBottom: '16px' }}>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', marginBottom: '8px', opacity: 0.8 }}>Arthur-IA sugiere</div>
+              <p style={{ fontFamily: 'var(--font-body)', fontSize: '14px', lineHeight: 1.6, margin: 0 }}>{lastMov.ai_sugerencia}</p>
+            </div>
+          )}
+          {lastMov?.urgencia === 'alta' && (
+            <Link href={`/judicial/${caso.id}/redactar`} style={{ display: 'inline-block', background: 'var(--accent-navy)', color: 'white', padding: '10px 18px', fontFamily: 'var(--font-mono)', fontSize: '11px', textTransform: 'uppercase' }}>
+              Redactar escrito →
+            </Link>
+          )}
+          <div style={{ marginTop: '18px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', padding: '18px' }}>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 8 }}>Partes</div>
+              <div style={{ fontFamily: 'var(--font-body)', fontSize: '13px', lineHeight: 1.55 }}>
+                {formatPartesDisplay(caso.partes) || (caso.partes && !String(caso.partes).trim().startsWith('[') ? caso.partes : '') || 'No registradas'}
+              </div>
+            </div>
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', padding: '18px' }}>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 8 }}>Quick stats</div>
+              <div style={{ fontFamily: 'var(--font-body)', fontSize: '13px' }}>Total movimientos: {totalMov} · Días en proceso: {daysInProcess}</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tab === 'movimientos' && (
+        <div style={{ paddingLeft: '20px', borderLeft: '1px solid var(--line-mid)' }}>
+          {movimientosSortedDesc.map(m => (
+            <div key={m.id} style={{ position: 'relative', padding: '0 0 22px 14px' }}>
+              <div style={{ position: 'absolute', left: '-5px', top: '6px', width: '9px', height: '9px', borderRadius: '50%', background: colorUrgencia(m.urgencia) }} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px' }}>
+                <div>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--muted)' }}>{m.fecha || 'Sin fecha'}</div>
+                  <span style={{ display: 'inline-block', marginTop: '6px', border: `1px solid ${colorUrgencia(m.urgencia)}`, color: colorUrgencia(m.urgencia), padding: '3px 8px', fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase' }}>{m.acto || 'Movimiento'}</span>
+                  <p style={{ fontFamily: 'var(--font-body)', fontSize: '14px', marginTop: '8px' }}>{m.sumilla}</p>
+                  {m.ai_sugerencia && <p style={{ fontFamily: 'var(--font-body)', fontSize: '13px', color: 'var(--accent-navy)', fontStyle: 'italic' }}>Arthur-IA: {m.ai_sugerencia}</p>}
+                  {m.tiene_documento === true && m.documento_url ? (
+                    <a href={getCloudinaryDownloadUrl(m.documento_url)} target="_blank" rel="noopener noreferrer" onClick={e => void downloadCloudinaryJudicialDoc(e, m.documento_url!)} style={{ display: 'inline-block', marginTop: '6px', border: '1px solid var(--accent-navy)', color: 'var(--accent-navy)', padding: '4px 10px', fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', textDecoration: 'none', cursor: 'pointer' }}>
+                      Ver documento
+                    </a>
+                  ) : m.tiene_documento === false ? (
+                    <span style={{ display: 'inline-block', marginTop: '6px', fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--muted)' }}>Documento no disponible</span>
+                  ) : null}
+                </div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--muted)', whiteSpace: 'nowrap' }}>Folio: {m.folio || '—'}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {tab === 'documentos' && (
+        <div>
+          {caso.escritos.length === 0 ? (
+            <div style={{ color: 'var(--muted)', fontFamily: 'var(--font-body)' }}>No hay escritos generados aún.</div>
+          ) : caso.escritos.map(e => (
+            <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', border: '1px solid var(--line)', background: 'var(--surface)', marginBottom: '8px' }}>
+              <div style={{ fontFamily: 'var(--font-body)', fontSize: '14px' }}>{e.tipo} · {new Date(e.created_at).toLocaleString('es-PE')}</div>
+              <button
+                onClick={() => {
+                  setEditingDocumentId(String(e.id));
+                  setShowRedaccion(true);
+                }}
+                style={{ border: '1px solid var(--line-strong)', background: 'transparent', padding: '6px 10px', fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', cursor: 'pointer' }}
+              >
+                Ver
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={() => {
+              setEditingDocumentId(null);
+              setShowRedaccion(true);
+            }}
+            style={{ display: 'inline-block', marginTop: '10px', background: 'var(--ink)', color: 'white', padding: '10px 16px', fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', border: 'none', cursor: 'pointer' }}
+          >
+            + Redactar nuevo escrito
+          </button>
+        </div>
+      )}
+
+      {tab === 'agenda' && (
+        <div>
+          {caso.audiencias.length === 0 ? (
+            <div style={{ color: 'var(--muted)', fontFamily: 'var(--font-body)' }}>No hay audiencias/plazos cargados.</div>
+          ) : caso.audiencias.map(a => {
+            const d = daysUntil(a.fecha);
+            const border = d < 7 ? '#991b1b' : d < 15 ? '#d97706' : 'var(--line-mid)';
+            return (
+              <div key={a.id} style={{ borderLeft: `4px solid ${border}`, background: 'var(--surface)', border: '1px solid var(--line)', padding: '14px 16px', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontFamily: 'var(--font-body)', fontWeight: 600 }}>{a.descripcion}</div>
+                  <div style={{ fontFamily: 'var(--font-body)', fontSize: '13px', color: 'var(--muted)' }}>{a.fecha} · {a.tipo || 'evento'}</div>
+                </div>
+                <CalendarButtons
+                  title={caso.alias || caso.numero_expediente}
+                  date={a.fecha}
+                  description={a.descripcion || 'Proceso judicial - arthur.ia'}
+                />
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {tab === 'arthur' && (
+        <div>
+          <p style={{ fontFamily: 'var(--font-body)', color: 'var(--muted)', marginBottom: '12px' }}>
+            Chat judicial para redactar escritos con contexto del expediente.
+          </p>
+          <Link href={`/judicial/${caso.id}/redactar`} style={{ display: 'inline-block', background: 'var(--accent-navy)', color: 'white', padding: '10px 18px', fontFamily: 'var(--font-mono)', fontSize: '11px', textTransform: 'uppercase' }}>
+            Abrir Arthur IA →
+          </Link>
+        </div>
+      )}
+
+      <button onClick={() => void handleReviewNow()} disabled={!!demoStep} style={{ marginTop: '24px', width: '100%', background: 'var(--ink)', color: 'var(--paper)', border: 'none', padding: '20px', fontFamily: 'var(--font-display)', fontStyle: 'italic', fontSize: '20px', cursor: demoStep ? 'not-allowed' : 'pointer' }}>
+        {demoStep || 'Actualizar caso ahora'}
+      </button>
+    </div>
+  );
+}
