@@ -191,7 +191,7 @@ Estado actual:
 - Nombres: ${currentState.nombres || '[vacío]'}
 - Declaración: ${currentState.declarationAccepted ? 'aceptada' : 'pendiente'}
 
-Si falta un dato, formula la siguiente pregunta concreta sobre el siguiente campo pendiente. Si ya están todos los datos, pide confirmación para abrir el resumen y continuar con la solicitud.
+Si faltan datos, enumera todos los campos pendientes en un solo mensaje para que el usuario pueda responderlos juntos. Si ya están todos los datos, pide confirmación para abrir el resumen y continuar con la solicitud.
 `,
     userMessages: args.messages,
     missingFields,

@@ -8,6 +8,8 @@ let sharedBrowser = null
 let sharedBrowserPromise = null
 let sharedBrowserKey = null
 let browserIdleTimer = null
+let sharedSprlContext = null
+let sharedSprlPage = null
 
 const DEFAULT_BROWSER_IDLE_MS = Number(process.env.SPRL_BROWSER_IDLE_MS || 120000)
 const LOGIN_FORM_SELECTOR =
@@ -29,7 +31,7 @@ function scheduleBrowserIdleClose() {
   browserIdleTimer = setTimeout(async () => {
     const browserToClose = sharedBrowser
     sharedBrowser = null
-    sharedBrowserPromise = null
+    sharedBrowserPromise = null 
     sharedBrowserKey = null
     if (browserToClose) await browserToClose.close().catch(() => { })
   }, DEFAULT_BROWSER_IDLE_MS)
@@ -46,25 +48,13 @@ function applyStealthOnce() {
 const SPRL_LOGIN_URL = 'https://sprl.sunarp.gob.pe/sprl/ingreso'
 const SPRL_AUTH_URL = 'https://im01-autorizacion-sprl-production.apps.paas.sunarp.gob.pe/v1/sunarp-services/im/autorizacion/login'
 
-function parseProxy(proxyUrl) {
-  if (!proxyUrl) return null
-  try {
-    const match = proxyUrl.match(/^(https?):\/\/([^:]+):([^@]+)@([^:]+):(\d+)$/)
-    if (!match) return null
-    const [, protocol, rawUser, rawPass, host, port] = match
-    return {
-      server: `${protocol}://${host}:${port}`,
-      username: decodeURIComponent(rawUser),
-      password: decodeURIComponent(rawPass),
-    }
-  } catch (error) {
-    console.error('[SPRL] parseProxy error:', error.message)
-    return null
-  }
-}
+function sprlLaunchOptions() {
+  const proxyServer = process.env.SPRL_PROXY_SERVER?.trim()
+  const proxyPort = process.env.SPRL_PROXY_PORT?.trim()
+  const proxyUsername = process.env.SPRL_PROXY_USERNAME?.trim()
+  const proxyPassword = process.env.SPRL_PROXY_PASSWORD?.trim()
 
-function sprlLaunchOptions(proxy) {
-  const opts = {
+  const options = {
     headless: true,
     executablePath: process.env.CHROME_EXECUTABLE_PATH || undefined,
     args: [
@@ -75,25 +65,36 @@ function sprlLaunchOptions(proxy) {
     ],
   }
 
-  if (proxy) {
-    opts.proxy = {
-      server: proxy.server,
-      username: proxy.username,
-      password: proxy.password,
+  if (proxyServer && proxyPort) {
+    options.proxy = {
+      server: `http://${proxyServer}:${proxyPort}`,
+      username: proxyUsername || undefined,
+      password: proxyPassword || undefined,
     }
+
+    console.log('[SPRL] Proxy enabled:', {
+      server: `http://${proxyServer}:${proxyPort}`,
+      username: proxyUsername ? `${proxyUsername.slice(0, 25)}...` : null,
+      hasPassword: Boolean(proxyPassword),
+    })
+  } else {
+    console.log('[SPRL] Proxy disabled: missing proxy environment variables')
   }
 
-  return opts
+  return options
 }
 
-function getBrowserKey(proxy) {
-  const proxyKey = proxy ? `${proxy.server}|${proxy.username || ''}` : 'direct'
+function getBrowserKey() {
   const chromeKey = process.env.CHROME_EXECUTABLE_PATH || 'default-chrome'
-  return `${proxyKey}|${chromeKey}`
+  const proxyServer = process.env.SPRL_PROXY_SERVER || 'no-proxy'
+  const proxyPort = process.env.SPRL_PROXY_PORT || 'no-port'
+  const proxyUsername = process.env.SPRL_PROXY_USERNAME || 'no-user'
+
+  return `proxy|${chromeKey}|${proxyServer}|${proxyPort}|${proxyUsername}`
 }
 
-async function getSharedBrowser(proxy) {
-  const currentKey = getBrowserKey(proxy)
+async function getSharedBrowser() {
+  const currentKey = getBrowserKey()
 
   if (sharedBrowser && sharedBrowser.isConnected() && sharedBrowserKey === currentKey) {
     clearBrowserIdleTimer()
@@ -111,7 +112,7 @@ async function getSharedBrowser(proxy) {
   }
 
   sharedBrowserKey = currentKey
-  sharedBrowserPromise = chromium.launch(sprlLaunchOptions(proxy))
+  sharedBrowserPromise = chromium.launch(sprlLaunchOptions())
     .then(browser => {
       browser.on('disconnected', () => {
         if (sharedBrowser === browser) {
@@ -141,10 +142,12 @@ async function loginSPRL(username, password) {
   try {
     applyStealthOnce()
 
-    const proxy = parseProxy(process.env.PROXY_URL)
-    console.log('[SPRL] Proxy:', proxy ? proxy.server : 'none (direct)')
+    console.log('[SPRL] login start:', {
+      username,
+      mode: 'proxy',
+    })
 
-    browser = await getSharedBrowser(proxy)
+    browser = await getSharedBrowser()
 
     context = await browser.newContext({
       userAgent:
@@ -207,9 +210,16 @@ async function loginSPRL(username, password) {
     const loadPage = async url => {
       for (let attempt = 1; attempt <= 3; attempt += 1) {
         try {
+          console.log('[SPRL] page.goto attempt:', { url, attempt })
           await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 })
+          console.log('[SPRL] page.goto ok:', { url, attempt })
           return
         } catch (error) {
+          console.error('[SPRL] page.goto error:', {
+            url,
+            attempt,
+            message: error instanceof Error ? error.message : String(error),
+          })
           if (attempt === 3) throw error
           await page.waitForTimeout(1200)
         }
@@ -298,6 +308,7 @@ async function loginSPRL(username, password) {
 
     await navPromise
     await page.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => { })
+    console.log('[SPRL] post-login URL:', page.url())
     await page
       .waitForFunction(() => {
         const bodyText = (document.body?.innerText || '').toLowerCase()
@@ -312,6 +323,74 @@ async function loginSPRL(username, password) {
         )
       }, { timeout: 8000 })
       .catch(() => null)
+
+
+    const browserCookies = await context.cookies().catch(() => [])
+    const sunarpCookies = browserCookies.filter(cookie => /sunarp\.gob\.pe$/i.test(cookie.domain) || /sunarp/i.test(cookie.domain))
+    const sunarpCookieHeader = sunarpCookies.map(cookie => `${cookie.name}=${cookie.value}`).join('; ')
+
+    let sunarpSessionId = null
+    const sessionCookie = browserCookies.find(cookie => {
+      const name = cookie.name.toLowerCase()
+      return (name.includes('sesion') || name.includes('session') || name.includes('sunarp')) && cookie.value
+    })
+    if (sessionCookie?.value) sunarpSessionId = sessionCookie.value
+
+    if (!accessToken) {
+      const cookieToken = browserCookies.find(cookie => /token|auth/i.test(cookie.name) && cookie.value)?.value || null
+      if (cookieToken) accessToken = cookieToken
+    }
+
+    console.log('[SPRL] tokens/cookies captured:', {
+      hasAccessToken: Boolean(accessToken),
+      hasRefreshToken: Boolean(refreshToken),
+      hasSunarpSessionId: Boolean(sunarpSessionId),
+      cookiesCount: browserCookies.length,
+      sunarpCookiesCount: sunarpCookies.length,
+    })
+
+    console.log('[SPRL DEBUG] Probando catálogo DESDE EL MISMO BROWSER...')
+
+
+const catalogResponse = await page.evaluate(async (accessToken) => {
+  try {
+    const response = await fetch(
+      'https://api06-catalogo-sunarp-sprl.apps.ocp-prod.sunarp.gob.pe/v1/sunarp-services/catalogo/listarPublicidadCertificados',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/plain, */*',
+          'Authorization': `Bearer ${accessToken}`,
+          'Origin': 'https://sprl.sunarp.gob.pe',
+          'Referer': 'https://sprl.sunarp.gob.pe/',
+        },
+        body: JSON.stringify({
+          codArea: '22000',
+          tipoCert: 'G',
+        }),
+      }
+    )
+
+    return {
+      status: response.status,
+      body: await response.text(),
+    }
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : String(error),
+    }
+  }
+}, accessToken)
+
+console.log('[SPRL DEBUG] CATALOG FROM PLAYWRIGHT:', catalogResponse)
+
+console.log('[SPRL DEBUG] Guardando sesión para catálogo:', {
+  hasPage: Boolean(page),
+  pageClosed: page?.isClosed(),
+  hasContext: Boolean(context),
+})
+
 
     const body = await page.evaluate(() => document.body?.textContent || '').catch(() => '')
     const hasHola = body.includes('HOLA!') || body.includes('HOLA ')
@@ -348,24 +427,135 @@ async function loginSPRL(username, password) {
       return { ok: false, error: 'No se pudo confirmar el login en SPRL. Intente nuevamente.' }
     }
 
+    console.log('[SPRL] login ok summary:', {
+      saldo,
+      displayUsername,
+      displayName,
+      hasAccessToken: Boolean(accessToken),
+      hasRefreshToken: Boolean(refreshToken),
+      hasSunarpSessionId: Boolean(sunarpSessionId),
+      sunarpCookieHeaderLength: sunarpCookieHeader.length,
+    })
+
     return {
       ok: true,
-      saldo,
-      displayName: displayName || null,
-      displayUsername: displayUsername || null,
-      accessToken,
-      refreshToken,
-      tokenSource: accessToken ? 'local-playwright' : null,
+  saldo,
+  displayName: displayName || null,
+  displayUsername: displayUsername || null,
+  accessToken,
+  refreshToken,
+  tokenSource: accessToken ? 'local-playwright' : null,
+  sunarpSessionId,
+  sunarpCookieHeader: sunarpCookieHeader || null,
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     console.error('[SPRL] Login error:', message)
     return { ok: false, error: 'Error al intentar login en SPRL: ' + message }
   } finally {
-    if (page) await page.close().catch(() => { })
-    if (context) await context.close().catch(() => { })
-    if (browser) scheduleBrowserIdleClose()
-  }
+      console.log('[SPRL DEBUG] FINAL LOGIN:', {
+        pageExists: Boolean(page),
+        pageClosed: page?.isClosed(),
+        contextExists: Boolean(context),
+      })
+
+      if (page && !page.isClosed()) {
+        sharedSprlPage = page
+      }
+      await sharedSprlPage.evaluate((token) => {
+  window.__SPRL_ACCESS_TOKEN__ = token
+}, accessToken)
+
+console.log('[SPRL DEBUG] Token guardado en página:', {
+  hasToken: Boolean(
+    await sharedSprlPage.evaluate(
+      () => window.__SPRL_ACCESS_TOKEN__
+    )
+  ),
+})
+
+      if (context) {
+        sharedSprlContext = context
+      }
+
+      if (browser) {
+        scheduleBrowserIdleClose()
+      }
+    }
 }
 
-module.exports = { loginSPRL }
+async function catalogSPRL(codArea, tipoCert) {
+  if (!sharedSprlPage || sharedSprlPage.isClosed()) {
+    throw new Error('No existe una sesión SPRL activa.')
+  }
+
+  console.log('[SPRL DEBUG] CATALOG SESSION:', {
+    pageClosed: sharedSprlPage.isClosed(),
+    pageUrl: sharedSprlPage.url(),
+  })
+
+  const result = await sharedSprlPage.evaluate(
+    async ({ codArea, tipoCert }) => {
+      try {
+        const token = window.__SPRL_ACCESS_TOKEN__
+
+        if (!token) {
+          return {
+            error: 'No existe access token dentro de la página.',
+          }
+        }
+
+        const response = await fetch(
+          'https://api06-catalogo-sunarp-sprl.apps.ocp-prod.sunarp.gob.pe/v1/sunarp-services/catalogo/listarPublicidadCertificados',
+          {
+            method: 'POST',
+
+            headers: {
+              'Content-Type': 'application/json',
+              Accept: 'application/json, text/plain, */*',
+              Authorization: `Bearer ${token}`,
+              Origin: 'https://sprl.sunarp.gob.pe',
+              Referer: 'https://sprl.sunarp.gob.pe/',
+            },
+
+            credentials: 'include',
+
+            body: JSON.stringify({
+              codArea: String(codArea).trim(),
+              tipoCert: String(tipoCert).trim(),
+            }),
+          }
+        )
+
+        return {
+          status: response.status,
+          body: await response.text(),
+        }
+      } catch (error) {
+        return {
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        }
+      }
+    },
+    {
+      codArea,
+      tipoCert,
+    }
+  )
+
+  console.log('[SPRL DEBUG] CATALOG RESULT:', {
+    status: result.status,
+    error: result.error,
+    bodyPreview: result.body?.slice(0, 300),
+  })
+
+  return result
+}
+
+module.exports = {
+  loginSPRL,
+  catalogSPRL,
+}
