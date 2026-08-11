@@ -2,9 +2,9 @@
 
 import { useMemo, useState } from 'react'
 import {
-  CHECKLIST_TYPES,
+  TRANSACTION_TYPES,
   CHECKLIST_STATUSES,
-  getChecklistTemplate,
+  getPartyFieldLabels,
   type ChecklistData,
   type ChecklistSection,
   type ChecklistItem,
@@ -12,291 +12,269 @@ import {
 import { buildWordTableHtml, downloadAsWord } from '@/lib/legal/word-export'
 import { legalStyles } from '@/lib/legal/styles'
 
-export default function ClosingChecklistBuilder() {
-  const [selectedType, setSelectedType] = useState<string | null>(null)
-  const [checklist, setChecklist] = useState<ChecklistData | null>(null)
-  const [projectName, setProjectName] = useState('')
+const emptyItem = (): ChecklistItem => ({
+  description: '',
+  status: 'Pendiente',
+  responsible: '',
+  dueDate: '',
+  notes: '',
+})
 
-  const typeInfo = useMemo(
-    () => CHECKLIST_TYPES.find(t => t.value === selectedType),
-    [selectedType],
-  )
+export default function ClosingChecklistBuilder() {
+  const [dealName, setDealName] = useState('')
+  const [transactionType, setTransactionType] = useState('ma_share')
+  const [buyer, setBuyer] = useState('')
+  const [seller, setSeller] = useState('')
+  const [leadCounsel, setLeadCounsel] = useState('')
+  const [targetClosingDate, setTargetClosingDate] = useState('')
+  const [checklist, setChecklist] = useState<ChecklistData | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const partyLabels = useMemo(() => getPartyFieldLabels(transactionType), [transactionType])
 
   const progress = useMemo(() => {
     if (!checklist) return 0
     const items = checklist.sections.flatMap(s => s.items)
     if (items.length === 0) return 0
-    const done = items.filter(i => i.status === 'Completo' || i.status === 'N/A').length
+    const done = items.filter(i =>
+      ['Completo', 'N/A', 'Renunciado', 'Complete', 'Waived'].includes(i.status),
+    ).length
     return Math.round((done / items.length) * 100)
   }, [checklist])
 
-  const totalItems = useMemo(
-    () => checklist?.sections.reduce((n, s) => n + s.items.length, 0) ?? 0,
-    [checklist],
-  )
-
-  function selectType(type: string) {
-    setSelectedType(type)
-    const template = getChecklistTemplate(type)
-    const deep: ChecklistData = JSON.parse(JSON.stringify(template))
-    setChecklist(deep)
+  async function generate() {
+    if (!dealName.trim()) {
+      setError('El nombre del negocio es obligatorio')
+      return
+    }
+    setError('')
+    setLoading(true)
+    try {
+      const res = await fetch('/api/legal/checklist/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          dealName,
+          transactionType,
+          transactionTypeValue: transactionType,
+          buyer,
+          seller,
+          leadCounsel,
+          targetClosingDate,
+        }),
+      })
+      const data = (await res.json()) as ChecklistData & { error?: string }
+      if (!res.ok) throw new Error(data.error || 'Error al generar')
+      const sections = (data.sections || []).map(s => ({
+        ...s,
+        items: (s.items || []).map(it => ({
+          ...it,
+          status: it.status === 'Pending' ? 'Pendiente' : it.status,
+        })),
+      }))
+      setChecklist({ sections })
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error')
+    } finally {
+      setLoading(false)
+    }
   }
 
-  function reset() {
-    setSelectedType(null)
-    setChecklist(null)
-    setProjectName('')
+  function updateSection(si: number, patch: Partial<ChecklistSection>) {
+    if (!checklist) return
+    const sections = [...checklist.sections]
+    sections[si] = { ...sections[si], ...patch }
+    setChecklist({ sections })
   }
 
   function updateItem(si: number, ii: number, patch: Partial<ChecklistItem>) {
     if (!checklist) return
-    const sections = checklist.sections.map((s, sIdx) => {
-      if (sIdx !== si) return s
-      return {
-        ...s,
-        items: s.items.map((it, iIdx) => (iIdx === ii ? { ...it, ...patch } : it)),
-      }
-    })
-    setChecklist({ sections })
-  }
-
-  function removeItem(si: number, ii: number) {
-    if (!checklist) return
-    const sections = checklist.sections.map((s, sIdx) => {
-      if (sIdx !== si) return s
-      return { ...s, items: s.items.filter((_, i) => i !== ii) }
-    })
-    setChecklist({ sections })
-  }
-
-  function addItem(si: number) {
-    if (!checklist) return
-    const blank: ChecklistItem = {
-      description: '',
-      responsible: '',
-      timeline: '',
-      status: 'Pendiente',
-      notes: '',
-    }
-    const sections = checklist.sections.map((s, sIdx) => {
-      if (sIdx !== si) return s
-      return { ...s, items: [...s.items, blank] }
-    })
-    setChecklist({ sections })
-  }
-
-  function addSection() {
-    if (!checklist) return
-    setChecklist({
-      sections: [
-        ...checklist.sections,
-        {
-          title: 'Nueva sección',
-          items: [{ description: '', responsible: '', timeline: '', status: 'Pendiente', notes: '' }],
-        },
-      ],
-    })
-  }
-
-  function removeSection(si: number) {
-    if (!checklist) return
-    setChecklist({ sections: checklist.sections.filter((_, i) => i !== si) })
-  }
-
-  function updateSectionTitle(si: number, title: string) {
-    if (!checklist) return
-    const sections = checklist.sections.map((s, i) => (i === si ? { ...s, title } : s))
+    const sections = [...checklist.sections]
+    const items = [...sections[si].items]
+    items[ii] = { ...items[ii], ...patch }
+    sections[si] = { ...sections[si], items }
     setChecklist({ sections })
   }
 
   function exportWord() {
     if (!checklist) return
-    const label = typeInfo?.label ?? 'checklist'
     const html = buildWordTableHtml(
       checklist.sections.map(s => ({
         title: s.title,
         rows: s.items.map(it => ({
-          descripcion: it.description + (it.details ? `\n${it.details}` : ''),
-          responsable: it.responsible,
-          plazo: it.timeline,
+          descripcion: it.description,
           estado: it.status,
+          responsable: it.responsible,
+          fecha: it.dueDate,
           notas: it.notes,
         })),
       })),
       [
-        { key: 'descripcion', label: 'Acto / Procedimiento' },
-        { key: 'responsable', label: 'Responsable' },
-        { key: 'plazo', label: 'Plazo' },
+        { key: 'descripcion', label: 'Descripción' },
         { key: 'estado', label: 'Estado' },
+        { key: 'responsable', label: 'Responsable' },
+        { key: 'fecha', label: 'Fecha límite' },
         { key: 'notas', label: 'Notas' },
       ],
-      projectName || `Checklist - ${label}`,
+      dealName || 'checklist',
     )
-    downloadAsWord(html, `checklist-${projectName || label}`)
-  }
-
-  if (!selectedType || !checklist) {
-    return (
-      <div style={{ ...legalStyles.page, paddingTop: 48 }}>
-        <h1 style={legalStyles.h1}>Checklist</h1>
-        <p style={{ color: 'var(--muted)', fontSize: 14, marginBottom: 32, maxWidth: 600 }}>
-          Selecciona un tipo de operación societaria para obtener el checklist de pasos y documentos requeridos bajo la legislación peruana.
-        </p>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
-          {CHECKLIST_TYPES.map(t => (
-            <button
-              key={t.value}
-              type="button"
-              onClick={() => selectType(t.value)}
-              style={{
-                textAlign: 'left',
-                background: 'var(--surface)',
-                border: '1px solid var(--line)',
-                padding: 24,
-                cursor: 'pointer',
-                color: 'inherit',
-                transition: 'border-color 0.15s',
-              }}
-              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent)' }}
-              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--line)' }}
-            >
-              <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 8 }}>
-                {t.label}
-              </div>
-              <p style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.5, margin: 0 }}>
-                {t.description}
-              </p>
-            </button>
-          ))}
-        </div>
-      </div>
-    )
+    downloadAsWord(html, `checklist-${dealName || 'cierre'}`)
   }
 
   return (
     <div style={{ ...legalStyles.page, paddingTop: 48 }}>
-      <h1 style={legalStyles.h1}>Checklist</h1>
+      <h1 style={legalStyles.h1}>Checklist de cierre</h1>
+      <p style={{ color: 'var(--muted)', fontSize: 14, marginBottom: 24 }}>
+        Genera y edita checklists de cierre para transacciones corporativas.
+      </p>
 
-      {/* Header bar */}
-      <div style={{ ...legalStyles.card, marginBottom: 24 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16 }}>
-          <div style={{ flex: 1, minWidth: 200 }}>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 6 }}>
-              {typeInfo?.label}
+      {!checklist ? (
+        <div style={legalStyles.card}>
+          <div style={{ display: 'grid', gap: 16 }}>
+            <div>
+              <label style={legalStyles.label}>Nombre del negocio *</label>
+              <input style={legalStyles.input} value={dealName} onChange={e => setDealName(e.target.value)} />
             </div>
-            <input
-              placeholder="Nombre del proyecto (opcional)"
-              style={{ ...legalStyles.input, maxWidth: 360 }}
-              value={projectName}
-              onChange={e => setProjectName(e.target.value)}
-            />
-            <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 8 }}>
-              {totalItems} items — Progreso: {progress}%
+            <div>
+              <label style={legalStyles.label}>Tipo de transacción</label>
+              <select style={legalStyles.input} value={transactionType} onChange={e => setTransactionType(e.target.value)}>
+                {TRANSACTION_TYPES.map(t => (
+                  <option key={t.value} value={t.value}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
             </div>
-            <div style={{ maxWidth: 320, height: 6, background: 'var(--line-faint)', marginTop: 6 }}>
-              <div
-                style={{
-                  width: `${progress}%`,
-                  height: '100%',
-                  background: progress === 100 ? '#22c55e' : 'var(--accent)',
-                  transition: 'width 0.3s',
-                }}
+            <div>
+              <label style={legalStyles.label}>{partyLabels.party1Label}</label>
+              <input
+                placeholder={partyLabels.party1Placeholder}
+                style={legalStyles.input}
+                value={buyer}
+                onChange={e => setBuyer(e.target.value)}
               />
             </div>
+            <div>
+              <label style={legalStyles.label}>{partyLabels.party2Label}</label>
+              <input
+                placeholder={partyLabels.party2Placeholder}
+                style={legalStyles.input}
+                value={seller}
+                onChange={e => setSeller(e.target.value)}
+              />
+            </div>
+            <input placeholder="Abogado líder" style={legalStyles.input} value={leadCounsel} onChange={e => setLeadCounsel(e.target.value)} />
+            <div>
+              <label style={legalStyles.label}>Fecha objetivo de cierre</label>
+              <input type="date" style={legalStyles.input} value={targetClosingDate} onChange={e => setTargetClosingDate(e.target.value)} />
+            </div>
           </div>
-          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-            <button type="button" style={legalStyles.btnSecondary} onClick={reset}>
-              Cambiar tipo
-            </button>
-            <button type="button" style={legalStyles.btnSecondary} onClick={exportWord}>
-              Exportar Word
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Sections */}
-      {checklist.sections.map((section, si) => (
-        <div key={si} style={{ ...legalStyles.card, marginBottom: 20 }}>
-          <div style={{ display: 'flex', gap: 12, marginBottom: 16, alignItems: 'center' }}>
-            <input
-              style={{ ...legalStyles.input, fontWeight: 600, flex: 1 }}
-              value={section.title}
-              onChange={e => updateSectionTitle(si, e.target.value)}
-            />
-            <button type="button" style={{ ...legalStyles.btnSecondary, fontSize: 10, whiteSpace: 'nowrap' }} onClick={() => removeSection(si)}>
-              Eliminar
-            </button>
-          </div>
-
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 700 }}>
-              <thead>
-                <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--line)' }}>
-                  <th style={{ padding: 8 }}>Acto / Procedimiento</th>
-                  <th style={{ padding: 8, width: 130 }}>Responsable</th>
-                  <th style={{ padding: 8, width: 120 }}>Plazo</th>
-                  <th style={{ padding: 8, width: 110 }}>Estado</th>
-                  <th style={{ padding: 8, width: 130 }}>Notas</th>
-                  <th style={{ padding: 8, width: 36 }} />
-                </tr>
-              </thead>
-              <tbody>
-                {section.items.map((it, ii) => (
-                  <tr key={ii} style={{ borderBottom: '1px solid var(--line-faint)', verticalAlign: 'top' }}>
-                    <td style={{ padding: 8 }}>
-                      <input
-                        style={{ ...legalStyles.input, fontSize: 12, marginBottom: it.details ? 4 : 0 }}
-                        value={it.description}
-                        onChange={e => updateItem(si, ii, { description: e.target.value })}
-                      />
-                      {it.details && (
-                        <div style={{ fontSize: 11, color: 'var(--muted)', lineHeight: 1.4, padding: '2px 4px' }}>
-                          {it.details}
-                        </div>
-                      )}
-                    </td>
-                    <td style={{ padding: 8 }}>
-                      <input style={{ ...legalStyles.input, fontSize: 12 }} value={it.responsible} onChange={e => updateItem(si, ii, { responsible: e.target.value })} />
-                    </td>
-                    <td style={{ padding: 8 }}>
-                      <input style={{ ...legalStyles.input, fontSize: 12 }} value={it.timeline} onChange={e => updateItem(si, ii, { timeline: e.target.value })} />
-                    </td>
-                    <td style={{ padding: 8 }}>
-                      <select style={{ ...legalStyles.input, fontSize: 12 }} value={it.status} onChange={e => updateItem(si, ii, { status: e.target.value })}>
-                        {CHECKLIST_STATUSES.map(s => (
-                          <option key={s} value={s}>{s}</option>
-                        ))}
-                      </select>
-                    </td>
-                    <td style={{ padding: 8 }}>
-                      <input style={{ ...legalStyles.input, fontSize: 12 }} value={it.notes} onChange={e => updateItem(si, ii, { notes: e.target.value })} />
-                    </td>
-                    <td style={{ padding: 8 }}>
-                      <button
-                        type="button"
-                        onClick={() => removeItem(si, ii)}
-                        style={{ fontSize: 11, background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer' }}
-                      >
-                        ✕
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <button type="button" style={{ ...legalStyles.btnSecondary, marginTop: 12, fontSize: 10 }} onClick={() => addItem(si)}>
-            + Agregar paso
+          {error && <p style={{ color: '#b91c1c', marginTop: 12 }}>{error}</p>}
+          <button type="button" style={{ ...legalStyles.btnPrimary, marginTop: 20 }} disabled={loading} onClick={() => void generate()}>
+            {loading ? 'Generando...' : 'Generar checklist con IA'}
           </button>
         </div>
-      ))}
+      ) : (
+        <>
+          <div style={{ ...legalStyles.card, marginBottom: 20 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+              <div>
+                <strong>{dealName}</strong>
+                <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 4 }}>Progreso: {progress}%</div>
+              </div>
+              <div style={{ flex: 1, maxWidth: 320, height: 8, background: 'var(--line-faint)' }}>
+                <div style={{ width: `${progress}%`, height: '100%', background: 'var(--accent)', transition: 'width 0.3s' }} />
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button type="button" style={legalStyles.btnSecondary} onClick={() => setChecklist(null)}>
+                  Nuevo
+                </button>
+                <button type="button" style={legalStyles.btnSecondary} onClick={exportWord}>
+                  Word
+                </button>
+              </div>
+            </div>
+          </div>
 
-      <button type="button" style={legalStyles.btnSecondary} onClick={addSection}>
-        + Nueva sección
-      </button>
+          {checklist.sections.map((section, si) => (
+            <div key={si} style={{ ...legalStyles.card, marginBottom: 20 }}>
+              <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
+                <input
+                  style={{ ...legalStyles.input, fontWeight: 600 }}
+                  value={section.title}
+                  onChange={e => updateSection(si, { title: e.target.value })}
+                />
+                <button
+                  type="button"
+                  style={legalStyles.btnSecondary}
+                  onClick={() => {
+                    const sections = checklist.sections.filter((_, i) => i !== si)
+                    setChecklist({ sections })
+                  }}
+                >
+                  Eliminar sección
+                </button>
+              </div>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--line)' }}>
+                    <th style={{ padding: 8 }}>Descripción</th>
+                    <th style={{ padding: 8, width: 120 }}>Estado</th>
+                    <th style={{ padding: 8, width: 120 }}>Responsable</th>
+                    <th style={{ padding: 8, width: 110 }}>Fecha</th>
+                    <th style={{ padding: 8 }}>Notas</th>
+                    <th style={{ padding: 8, width: 40 }} />
+                  </tr>
+                </thead>
+                <tbody>
+                  {section.items.map((item, ii) => (
+                    <tr key={ii} style={{ borderBottom: '1px solid var(--line-faint)' }}>
+                      <td style={{ padding: 8 }}>
+                        <input style={{ ...legalStyles.input, fontSize: 12 }} value={item.description} onChange={e => updateItem(si, ii, { description: e.target.value })} />
+                      </td>
+                      <td style={{ padding: 8 }}>
+                        <select style={{ ...legalStyles.input, fontSize: 12 }} value={item.status} onChange={e => updateItem(si, ii, { status: e.target.value })}>
+                          {CHECKLIST_STATUSES.map(s => (
+                            <option key={s} value={s}>
+                              {s}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td style={{ padding: 8 }}>
+                        <input style={{ ...legalStyles.input, fontSize: 12 }} value={item.responsible} onChange={e => updateItem(si, ii, { responsible: e.target.value })} />
+                      </td>
+                      <td style={{ padding: 8 }}>
+                        <input type="date" style={{ ...legalStyles.input, fontSize: 12 }} value={item.dueDate} onChange={e => updateItem(si, ii, { dueDate: e.target.value })} />
+                      </td>
+                      <td style={{ padding: 8 }}>
+                        <input style={{ ...legalStyles.input, fontSize: 12 }} value={item.notes} onChange={e => updateItem(si, ii, { notes: e.target.value })} />
+                      </td>
+                      <td style={{ padding: 8 }}>
+                        <button type="button" onClick={() => updateSection(si, { items: section.items.filter((_, i) => i !== ii) })} style={{ fontSize: 11 }}>
+                          ✕
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <button type="button" style={{ ...legalStyles.btnSecondary, marginTop: 12 }} onClick={() => updateSection(si, { items: [...section.items, emptyItem()] })}>
+                + Añadir ítem
+              </button>
+            </div>
+          ))}
+
+          <button
+            type="button"
+            style={legalStyles.btnSecondary}
+            onClick={() => setChecklist({ sections: [...checklist.sections, { title: 'Nueva sección', items: [emptyItem()] }] })}
+          >
+            + Nueva sección
+          </button>
+        </>
+      )}
     </div>
   )
 }
