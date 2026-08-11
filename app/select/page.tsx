@@ -365,7 +365,7 @@ export default function SelectModulePage() {
                 marginTop: '16px',
               }}
             >
-              Contratos internacionales, actas JGA, redline y checklists de cierre con IA.
+              Contratos, actas JGA, redline y checklists societarios con IA.
             </p>
             <div
               style={{
