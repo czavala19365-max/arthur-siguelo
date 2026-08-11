@@ -329,13 +329,8 @@ export async function POST(request: Request) {
       console.log('[API] 🎯 Iniciando extracción de audiencias de documentos...')
       const movimientos = await getMovimientosByCaso(caso.id)
       if (movimientos.length > 0) {
-        void extraerYGuardarAudienciasDeMovimientos(caso.id, movimientos)
-          .then(audienciasCreadas => {
-            console.log(`[API] ✅ Se crearon ${audienciasCreadas} audiencias`)
-          })
-          .catch(err => {
-            console.error('[API] Error extrayendo audiencias:', err instanceof Error ? err.message : String(err))
-          })
+        const audienciasCreadas = await extraerYGuardarAudienciasDeMovimientos(caso.id, movimientos)
+        console.log(`[API] ✅ Se crearon ${audienciasCreadas} audiencias`)
       }
     } catch (err) {
       console.error('[API] Error extrayendo audiencias:', err instanceof Error ? err.message : String(err))
