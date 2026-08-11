@@ -34,7 +34,7 @@ async function fetchCejFromScraperService(numero: string, parte: string, scrapeC
       'x-cej-disable-callback': '1',
     },
     body: JSON.stringify({ numero, parte }),
-    signal: AbortSignal.timeout(180_000),
+    signal: AbortSignal.timeout(15_000),
   })
 
   console.log("Tiempo fetch:", Date.now() - inicio);
