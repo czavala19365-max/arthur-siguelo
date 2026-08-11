@@ -18,7 +18,7 @@ async function notifyNextPostprocess({ numero, parte, result }) {
     return
   }
 
-  const controller = AbortSignal.timeout(Number(process.env.CEJ_POSTPROCESS_TIMEOUT_MS) || 15_000)
+  const controller = AbortSignal.timeout(Number(process.env.CEJ_POSTPROCESS_TIMEOUT_MS) || 180_000)
   const response = await fetch(callbackUrl, {
     method: 'POST',
     headers: {
