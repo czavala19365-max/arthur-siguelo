@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getTituloById } from '@/lib/supabase'
-import { detalleTituloSunarp, obtenerEsquelaSunarp} from '@/lib/scraper'
-import { analizarEsquelasRegistrales } from '@/lib/registral-documento-extractor'
+import { detalleTituloSunarp, obtenerEsquelaSunarp } from '@/lib/scraper'
+
+type CachedCronologia = {
+  expiresAt: number
+  payload: { entries: unknown[] }
+}
+
+const CRONOLOGIA_CACHE_TTL_MS = 45_000
+const cronologiaCache = new Map<string, CachedCronologia>()
 
 /**
  * GET /api/siguelo/detalle-cronologia?id={tituloId}
@@ -22,23 +29,34 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Título no encontrado.' }, { status: 404 })
   }
 
+  const cached = cronologiaCache.get(id)
+  if (cached && cached.expiresAt > Date.now()) {
+    return NextResponse.json(cached.payload)
+  }
+
   try {
     const entries = await detalleTituloSunarp({
       oficina_registral: titulo.oficina_registral,
-      anio_titulo:       titulo.anio_titulo,
-      numero_titulo:     titulo.numero_titulo,
-      tipo_registro:     titulo.tipo_registro,
-      area_registral:    titulo.area_registral,
-    })
-
-    const esquelaResponse = await obtenerEsquelaSunarp({
-      oficina_registral: titulo.oficina_registral,
       anio_titulo: titulo.anio_titulo,
       numero_titulo: titulo.numero_titulo,
+      tipo_registro: titulo.tipo_registro,
       area_registral: titulo.area_registral,
     })
 
-    const esquelas = esquelaResponse.lstEsquela ?? esquelaResponse
+    const requiresEsquela = entries.some(
+      (mov) => mov.desEstado === 'OBSERVADO' && mov.etapa === 'SECCION REGISTRAL'
+    )
+
+    const esquelaResponse = requiresEsquela
+      ? await obtenerEsquelaSunarp({
+        oficina_registral: titulo.oficina_registral,
+        anio_titulo: titulo.anio_titulo,
+        numero_titulo: titulo.numero_titulo,
+        area_registral: titulo.area_registral,
+      }).catch(() => null)
+      : null
+
+    const esquelas = esquelaResponse ? (esquelaResponse.lstEsquela ?? esquelaResponse) : []
 
     let esquelaIndex = 0
     const entriesConPdf = entries.map((mov) => {
@@ -59,21 +77,15 @@ export async function GET(request: NextRequest) {
 
       return mov
     })
-    // Filtrar solo los que tienen PDF
-    const entriesConPdfValido = entriesConPdf.filter((e) => 'pdfBase64' in e)
+    const entriesFinal = entriesConPdf
 
-    // Analizar solo los que tienen PDF
-    //const entriesAnalizados = await analizarEsquelasRegistrales(entriesConPdfValido)
+    const payload = { entries: entriesFinal }
+    cronologiaCache.set(id, {
+      expiresAt: Date.now() + CRONOLOGIA_CACHE_TTL_MS,
+      payload,
+    })
 
-    // Combinar: analizados + sin PDF
-    const entriesFinal = entriesConPdf.map((entry) => 
-      //entriesAnalizados.find((a) => a.secuencia === entry.secuencia) ?? entry
-      entry
-    )
-
-    return NextResponse.json({ 
-      entries: entriesFinal
-})
+    return NextResponse.json(payload)
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Error al obtener cronología.'
     return NextResponse.json({ error: msg }, { status: 422 })

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { formatPartesDisplay } from '@/lib/format-partes-judicial';
@@ -120,15 +120,13 @@ export default function JudicialDashboardPage() {
   const [viewingUser, setViewingUser] = useState<AdminViewingUser | null>(null);
   const [casos, setCasos] = useState<Caso[]>([]);
   const [stats, setStats] = useState({ total: 0, activos: 0, conAlerta: 0, proximasAudiencias: 0 });
-  const [details, setDetails] = useState<Record<number, { movimientos: Movimiento[]; audiencias: Audiencia[] }>>({});
   const [loading, setLoading] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [pollingId, setPollingId] = useState<number | null>(null);
-  const [calendarHoverId, setCalendarHoverId] = useState<number | null>(null);
 
   // Tabbed form state
   const [activeTab, setActiveTab] = useState<'codigo' | 'filtros'>('codigo');
-  const [expFields, setExpFields] = useState({ sec: '', ano: CURRENT_YEAR, dist: '', tipo: '', esp: '', juz: '' });
+  const [expFields, setExpFields] = useState({ sec: '', ano: CURRENT_YEAR, intermedio: '', dist: '', tipo: '', esp: '', juz: '' });
   const [form, setForm] = useState({
     parte_procesal: '',
     filtro_distrito: 'Lima',
@@ -148,6 +146,7 @@ export default function JudicialDashboardPage() {
   // Refs for auto-advance in tab 1
   const refSec = useRef<HTMLInputElement>(null);
   const refAno = useRef<HTMLInputElement>(null);
+  const refIntermedio = useRef<HTMLInputElement>(null);
   const refDist = useRef<HTMLInputElement>(null);
   const refTipo = useRef<HTMLInputElement>(null);
   const refEsp = useRef<HTMLInputElement>(null);
@@ -213,21 +212,6 @@ export default function JudicialDashboardPage() {
 
       setCasos(casosList);
       setStats(statsData);
-
-      const map: Record<number, { movimientos: Movimiento[]; audiencias: Audiencia[] }> = {};
-      await Promise.all(
-        casosList.map(async (c) => {
-          try {
-            const r = await fetch(`/api/casos/${c.id}${query}`);
-            if (!r.ok) return;
-            const d = await r.json() as { movimientos?: Movimiento[]; audiencias?: Audiencia[] };
-            map[c.id] = { movimientos: d.movimientos || [], audiencias: d.audiencias || [] };
-          } catch (e) {
-            console.error(e);
-          }
-        })
-      );
-      setDetails(map);
     } finally {
       setLoading(false);
     }
@@ -253,16 +237,9 @@ export default function JudicialDashboardPage() {
     []
   );
 
-  const highAlertCase = useMemo(() => {
-    const list = Array.isArray(casos) ? casos : [];
-    return list.find(c =>
-      (details[c.id]?.movimientos || []).some(m => m.es_nuevo === 1 && m.urgencia === 'alta')
-    );
-  }, [casos, details]);
-
   function resetForm() {
     setActiveTab('codigo');
-    setExpFields({ sec: '', ano: CURRENT_YEAR, dist: '', tipo: '', esp: '', juz: '' });
+    setExpFields({ sec: '', ano: CURRENT_YEAR, intermedio: '', dist: '', tipo: '', esp: '', juz: '' });
     setForm({
       parte_procesal: '',
       filtro_distrito: 'Lima',
@@ -293,7 +270,7 @@ export default function JudicialDashboardPage() {
   async function createCaso() {
     let numero_expediente: string;
     if (activeTab === 'codigo') {
-      numero_expediente = `${expFields.sec}-${expFields.ano}-0-${expFields.dist}-${expFields.tipo}-${expFields.esp}-${expFields.juz}`;
+      numero_expediente = `${expFields.sec}-${expFields.ano}-${expFields.intermedio || '0'}-${expFields.dist}-${expFields.tipo}-${expFields.esp}-${expFields.juz}`;
     } else {
       numero_expediente = form.filtro_numero;
     }
@@ -497,18 +474,9 @@ export default function JudicialDashboardPage() {
           ))}
         </div>
 
-        {highAlertCase && (
-          <div style={{ background: 'var(--accent-navy)', color: 'white', padding: '16px 28px', marginTop: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontFamily: 'var(--font-body)', fontSize: '14px' }}>
-              🔴 {highAlertCase.alias || highAlertCase.cliente} tiene movimiento urgente pendiente.
-            </span>
-            <Link href={`/judicial/${highAlertCase.id}`} style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', textTransform: 'uppercase', opacity: 0.9 }}>Ver detalle →</Link>
-          </div>
-        )}
-
         <div style={{ marginTop: '32px', background: 'var(--surface)', border: '1px solid var(--line)', overflowX: 'auto' }}>
           <div style={{ display: 'grid', gridTemplateColumns: '72px 100px 1.4fr 180px 130px 150px 90px 110px 120px', minWidth: '900px', padding: '12px 24px', background: 'var(--paper-dark)', fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--muted)', gap: '12px' }}>
-            <span>ESTADO</span><span>TIPO</span><span>ALIAS / CLIENTE</span><span>EXPEDIENTE</span><span>ÚLTIMA ACTUALIZ.</span><span>PRÓXIMO EVENTO</span><span>PRIORIDAD</span><span>GESTIÓN</span>
+            <span>ESTADO</span><span>TIPO</span><span>ALIAS / CLIENTE</span><span>EXPEDIENTE</span><span>ÚLTIMA ACTUALIZ.</span><span>PRÓXIMO EVENTO</span><span>GESTIÓN</span>
           </div>
 
           {(!Array.isArray(casos) || casos.length === 0) ? (
@@ -516,19 +484,10 @@ export default function JudicialDashboardPage() {
               No hay procesos registrados todavía.
             </div>
           ) : casos.map(c => {
-            const det = details[c.id] || { movimientos: [], audiencias: [] };
-            const urgentNew = det.movimientos.some(m => m.es_nuevo === 1 && m.urgencia === 'alta');
-            const normalNew = det.movimientos.some(m => m.es_nuevo === 1 && m.urgencia !== 'alta');
-            const hasAny = det.movimientos.length > 0;
-            const nextAud = [...det.audiencias].sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime())[0];
-            const dleft = daysUntil(nextAud?.fecha || null);
-            const calParts = nextAud ? parseEventDateForCalendar(nextAud.fecha) : null;
-            const eventAlias = c.alias || c.cliente || 'Sin alias';
-
             return (
               <div
                 key={c.id}
-                onClick={() => (window.location.href = `/judicial/${c.id}`)}
+                onClick={() => router.push(`/judicial/${c.id}`)}
                 style={{ display: 'grid', gridTemplateColumns: '72px 100px 1.4fr 180px 130px 150px 90px 110px 120px', minWidth: '900px', padding: '0 24px', minHeight: '66px', alignItems: 'center', borderBottom: '1px solid var(--line-faint)', gap: '12px', cursor: 'pointer' }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.background = '#f0f0f0';
@@ -538,7 +497,7 @@ export default function JudicialDashboardPage() {
                 }}
               >
                 <div>
-                  <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '50%', background: urgentNew ? '#991b1b' : normalNew ? '#d97706' : hasAny ? '#166534' : '#9ca3af', animation: urgentNew ? 'pulse 1.5s infinite' : undefined }} />
+                  <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '50%', background: c.prioridad === 'alta' ? '#991b1b' : c.prioridad === 'media' ? '#d97706' : '#166534' }} />
                 </div>
                 <div style={{ fontFamily: 'var(--font-body)', fontSize: '13px' }}>{c.tipo_proceso || '—'}</div>
                 <div>
@@ -555,32 +514,7 @@ export default function JudicialDashboardPage() {
                 </div>
                 <div style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--muted)' }}>{c.numero_expediente}</div>
                 <div style={{ fontFamily: 'var(--font-body)', fontSize: '13px', color: 'var(--muted)' }}>{relativeTime(c.ultimo_movimiento_fecha)}</div>
-                <div
-                  style={{ position: 'relative', fontFamily: 'var(--font-body)', fontSize: '12px', color: dleft === null ? 'var(--muted)' : dleft < 3 ? '#991b1b' : dleft < 7 ? '#92400e' : 'var(--ink)' }}
-                  onMouseEnter={() => { if (calParts) setCalendarHoverId(c.id); }}
-                  onMouseLeave={() => setCalendarHoverId(null)}
-                  onClick={e => e.stopPropagation()}
-                >
-                  {nextAud ? `${nextAud.fecha} (${dleft}d)` : 'Sin evento'}
-                  {calendarHoverId === c.id && calParts && (
-                    <div style={{ position: 'absolute', left: 0, top: '100%', marginTop: 6, zIndex: 50, background: '#141414', border: '1px solid #2a2a2a', minWidth: 200, opacity: 1, transition: 'opacity 0.2s ease', boxShadow: '0 8px 24px rgba(0,0,0,0.35)' }}>
-                      <a href={calendarGoogleUrl(eventAlias, calParts.ymd)} target="_blank" rel="noopener noreferrer" style={{ display: 'block', padding: '8px 16px', fontFamily: 'DM Mono, monospace', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#c9a84c', textDecoration: 'none' }} onMouseOver={e => { e.currentTarget.style.background = '#1c1c1c'; }} onMouseOut={e => { e.currentTarget.style.background = 'transparent'; }}>
-                        Google Calendar
-                      </a>
-                      <a href={calendarOutlookUrl(eventAlias, calParts.ymdDash)} target="_blank" rel="noopener noreferrer" style={{ display: 'block', padding: '8px 16px', fontFamily: 'DM Mono, monospace', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#c9a84c', textDecoration: 'none', borderTop: '1px solid #2a2a2a' }} onMouseOver={e => { e.currentTarget.style.background = '#1c1c1c'; }} onMouseOut={e => { e.currentTarget.style.background = 'transparent'; }}>
-                        Outlook
-                      </a>
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); void togglePriority(c); }}
-                    style={{ border: '1px solid var(--line-strong)', background: c.prioridad === 'alta' ? 'rgba(153,27,27,0.08)' : c.prioridad === 'media' ? 'rgba(217,119,6,0.09)' : 'rgba(107,101,96,0.08)', color: c.prioridad === 'alta' ? '#991b1b' : c.prioridad === 'media' ? '#92400e' : '#6b6560', fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', padding: '5px 8px', cursor: 'pointer' }}
-                  >
-                    {c.prioridad}
-                  </button>
-                </div>
+                <div style={{ fontFamily: 'var(--font-body)', fontSize: '12px', color: 'var(--muted)' }}>Abre detalle</div>
                 <div onClick={e => e.stopPropagation()} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <button
                     type="button"
@@ -679,9 +613,16 @@ export default function JudicialDashboardPage() {
                     />
                     <span style={{ color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>-</span>
                     <input
-                      value="0"
-                      disabled
-                      style={{ width: '28px', border: '1px solid var(--line)', padding: '10px 6px', fontFamily: 'var(--font-mono)', fontSize: '12px', textAlign: 'center', background: 'var(--surface)', color: 'var(--muted)' }}
+                      ref={refIntermedio}
+                      maxLength={1}
+                      placeholder="0"
+                      value={expFields.intermedio}
+                      onChange={e => {
+                        const v = e.target.value;
+                        setExpFields(p => ({ ...p, intermedio: v }));
+                        advanceField(v, 1, refDist);
+                      }}
+                      style={{ width: '28px', border: '1px solid var(--line-strong)', padding: '10px 6px', fontFamily: 'var(--font-mono)', fontSize: '12px', textAlign: 'center', background: 'var(--paper)', color: 'var(--ink)' }}
                     />
                     <span style={{ color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>-</span>
                     <input
@@ -968,34 +909,34 @@ export default function JudicialDashboardPage() {
                   >
                     {submitStatus}
                   </div>
-                  {submitStatus.includes('Error') || 
-                    submitStatus.includes('No se pudieron') || 
-                    submitStatus.includes('error') || 
-                    submitStatus.includes('No se encontraron') || 
+                  {submitStatus.includes('Error') ||
+                    submitStatus.includes('No se pudieron') ||
+                    submitStatus.includes('error') ||
+                    submitStatus.includes('No se encontraron') ||
                     submitStatus.includes('datos incorrectos') ||
                     submitStatus.includes('No se pudo verificar')
                     ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSubmitStatus('');
-                        setProgress(0);
-                      }}
-                      style={{
-                        width: '100%',
-                        background: 'var(--ink)',
-                        color: 'var(--paper)',
-                        border: 'none',
-                        borderRadius: 0,
-                        padding: '16px',
-                        fontFamily: 'var(--font-body)',
-                        fontSize: '14px',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      Reintentar →
-                    </button>
-                  ) : null}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSubmitStatus('');
+                          setProgress(0);
+                        }}
+                        style={{
+                          width: '100%',
+                          background: 'var(--ink)',
+                          color: 'var(--paper)',
+                          border: 'none',
+                          borderRadius: 0,
+                          padding: '16px',
+                          fontFamily: 'var(--font-body)',
+                          fontSize: '14px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Reintentar →
+                      </button>
+                    ) : null}
                 </div>
               ) : (
                 <button
