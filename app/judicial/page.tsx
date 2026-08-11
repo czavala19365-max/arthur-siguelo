@@ -128,7 +128,7 @@ export default function JudicialDashboardPage() {
 
   // Tabbed form state
   const [activeTab, setActiveTab] = useState<'codigo' | 'filtros'>('codigo');
-  const [expFields, setExpFields] = useState({ sec: '', ano: CURRENT_YEAR, dist: '', tipo: '', esp: '', juz: '' });
+  const [expFields, setExpFields] = useState({ sec: '', ano: CURRENT_YEAR, intermedio: '', dist: '', tipo: '', esp: '', juz: '' });
   const [form, setForm] = useState({
     parte_procesal: '',
     filtro_distrito: 'Lima',
@@ -148,6 +148,7 @@ export default function JudicialDashboardPage() {
   // Refs for auto-advance in tab 1
   const refSec = useRef<HTMLInputElement>(null);
   const refAno = useRef<HTMLInputElement>(null);
+  const refIntermedio = useRef<HTMLInputElement>(null);
   const refDist = useRef<HTMLInputElement>(null);
   const refTipo = useRef<HTMLInputElement>(null);
   const refEsp = useRef<HTMLInputElement>(null);
@@ -262,7 +263,7 @@ export default function JudicialDashboardPage() {
 
   function resetForm() {
     setActiveTab('codigo');
-    setExpFields({ sec: '', ano: CURRENT_YEAR, dist: '', tipo: '', esp: '', juz: '' });
+    setExpFields({ sec: '', ano: CURRENT_YEAR, intermedio: '', dist: '', tipo: '', esp: '', juz: '' });
     setForm({
       parte_procesal: '',
       filtro_distrito: 'Lima',
@@ -293,7 +294,7 @@ export default function JudicialDashboardPage() {
   async function createCaso() {
     let numero_expediente: string;
     if (activeTab === 'codigo') {
-      numero_expediente = `${expFields.sec}-${expFields.ano}-0-${expFields.dist}-${expFields.tipo}-${expFields.esp}-${expFields.juz}`;
+      numero_expediente = `${expFields.sec}-${expFields.ano}-${expFields.intermedio || '0'}-${expFields.dist}-${expFields.tipo}-${expFields.esp}-${expFields.juz}`;
     } else {
       numero_expediente = form.filtro_numero;
     }
@@ -679,9 +680,16 @@ export default function JudicialDashboardPage() {
                     />
                     <span style={{ color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>-</span>
                     <input
-                      value="0"
-                      disabled
-                      style={{ width: '28px', border: '1px solid var(--line)', padding: '10px 6px', fontFamily: 'var(--font-mono)', fontSize: '12px', textAlign: 'center', background: 'var(--surface)', color: 'var(--muted)' }}
+                      ref={refIntermedio}
+                      maxLength={1}
+                      placeholder="0"
+                      value={expFields.intermedio}
+                      onChange={e => {
+                        const v = e.target.value;
+                        setExpFields(p => ({ ...p, intermedio: v }));
+                        advanceField(v, 1, refDist);
+                      }}
+                      style={{ width: '28px', border: '1px solid var(--line-strong)', padding: '10px 6px', fontFamily: 'var(--font-mono)', fontSize: '12px', textAlign: 'center', background: 'var(--paper)', color: 'var(--ink)' }}
                     />
                     <span style={{ color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>-</span>
                     <input
@@ -968,34 +976,34 @@ export default function JudicialDashboardPage() {
                   >
                     {submitStatus}
                   </div>
-                  {submitStatus.includes('Error') || 
-                    submitStatus.includes('No se pudieron') || 
-                    submitStatus.includes('error') || 
-                    submitStatus.includes('No se encontraron') || 
+                  {submitStatus.includes('Error') ||
+                    submitStatus.includes('No se pudieron') ||
+                    submitStatus.includes('error') ||
+                    submitStatus.includes('No se encontraron') ||
                     submitStatus.includes('datos incorrectos') ||
                     submitStatus.includes('No se pudo verificar')
                     ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSubmitStatus('');
-                        setProgress(0);
-                      }}
-                      style={{
-                        width: '100%',
-                        background: 'var(--ink)',
-                        color: 'var(--paper)',
-                        border: 'none',
-                        borderRadius: 0,
-                        padding: '16px',
-                        fontFamily: 'var(--font-body)',
-                        fontSize: '14px',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      Reintentar →
-                    </button>
-                  ) : null}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSubmitStatus('');
+                          setProgress(0);
+                        }}
+                        style={{
+                          width: '100%',
+                          background: 'var(--ink)',
+                          color: 'var(--paper)',
+                          border: 'none',
+                          borderRadius: 0,
+                          padding: '16px',
+                          fontFamily: 'var(--font-body)',
+                          fontSize: '14px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Reintentar →
+                      </button>
+                    ) : null}
                 </div>
               ) : (
                 <button
