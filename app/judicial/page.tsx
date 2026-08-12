@@ -123,10 +123,11 @@ export default function JudicialDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [pollingId, setPollingId] = useState<number | null>(null);
+  const [navigatingCaseId, setNavigatingCaseId] = useState<number | null>(null);
 
   // Tabbed form state
   const [activeTab, setActiveTab] = useState<'codigo' | 'filtros'>('codigo');
-  const [expFields, setExpFields] = useState({ sec: '', ano: CURRENT_YEAR, dist: '', tipo: '', esp: '', juz: '' });
+  const [expFields, setExpFields] = useState({ sec: '', ano: CURRENT_YEAR, cero: '', dist: '', tipo: '', esp: '', juz: '' });
   const [form, setForm] = useState({
     parte_procesal: '',
     filtro_distrito: 'Lima',
@@ -146,6 +147,7 @@ export default function JudicialDashboardPage() {
   // Refs for auto-advance in tab 1
   const refSec = useRef<HTMLInputElement>(null);
   const refAno = useRef<HTMLInputElement>(null);
+  const refCero = useRef<HTMLInputElement>(null);
   const refDist = useRef<HTMLInputElement>(null);
   const refTipo = useRef<HTMLInputElement>(null);
   const refEsp = useRef<HTMLInputElement>(null);
@@ -238,7 +240,7 @@ export default function JudicialDashboardPage() {
 
   function resetForm() {
     setActiveTab('codigo');
-    setExpFields({ sec: '', ano: CURRENT_YEAR, dist: '', tipo: '', esp: '', juz: '' });
+    setExpFields({ sec: '', ano: CURRENT_YEAR, cero: '', dist: '', tipo: '', esp: '', juz: '' });
     setForm({
       parte_procesal: '',
       filtro_distrito: 'Lima',
@@ -269,7 +271,8 @@ export default function JudicialDashboardPage() {
   async function createCaso() {
     let numero_expediente: string;
     if (activeTab === 'codigo') {
-      numero_expediente = `${expFields.sec}-${expFields.ano}-0-${expFields.dist}-${expFields.tipo}-${expFields.esp}-${expFields.juz}`;
+      const cero = expFields.cero && expFields.cero.trim() ? expFields.cero.trim() : '0';
+      numero_expediente = `${expFields.sec}-${expFields.ano}-${cero}-${expFields.dist}-${expFields.tipo}-${expFields.esp}-${expFields.juz}`;
     } else {
       numero_expediente = form.filtro_numero;
     }
@@ -363,6 +366,11 @@ export default function JudicialDashboardPage() {
     await loadData();
   }
 
+  function openCaso(casoId: number) {
+    setNavigatingCaseId(casoId);
+    router.push(`/judicial/${casoId}`);
+  }
+
   async function archiveCasoRow(id: number) {
     if (!confirm('¿Archivar este proceso? Dejará de mostrarse en Mis Procesos (podrás restaurarlo desde Archivados).')) return;
     const r = await fetch(`/api/casos/${id}/archive`, { method: 'POST' });
@@ -407,6 +415,50 @@ export default function JudicialDashboardPage() {
 
   return (
     <div style={{ background: 'var(--paper)', minHeight: '100%' }}>
+      {navigatingCaseId !== null && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(12, 12, 12, 0.55)',
+            backdropFilter: 'blur(2px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 18,
+              background: 'rgba(20,20,20,0.92)',
+              border: '1px solid rgba(194,164,109,0.5)',
+              padding: '28px 32px',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.35)',
+            }}
+          >
+            <div
+              style={{
+                width: 54,
+                height: 54,
+                borderRadius: '50%',
+                border: '3px solid rgba(255,255,255,0.14)',
+                borderTopColor: '#c2a46d',
+                borderRightColor: '#c2a46d',
+                transform: 'rotate(0deg)',
+                animation: 'spin 1s linear infinite',
+              }}
+            />
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#f0e7d2' }}>
+              Cargando proceso...
+            </div>
+          </div>
+        </div>
+      )}
+
       {viewingUser && (
         <div
           style={{
@@ -486,7 +538,7 @@ export default function JudicialDashboardPage() {
             return (
               <div
                 key={c.id}
-                onClick={() => router.push(`/judicial/${c.id}`)}
+                onClick={() => openCaso(c.id)}
                 style={{ display: 'grid', gridTemplateColumns: '72px 100px 1.4fr 180px 130px 150px 90px 110px 120px', minWidth: '900px', padding: '0 24px', minHeight: '66px', alignItems: 'center', borderBottom: '1px solid var(--line-faint)', gap: '12px', cursor: 'pointer' }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.background = '#f0f0f0';
@@ -606,15 +658,23 @@ export default function JudicialDashboardPage() {
                       onChange={e => {
                         const v = e.target.value;
                         setExpFields(p => ({ ...p, ano: v }));
-                        advanceField(v, 4, refDist);
+                        advanceField(v, 4, refCero);
                       }}
                       style={{ width: '52px', border: '1px solid var(--line-strong)', padding: '10px 8px', fontFamily: 'var(--font-mono)', fontSize: '12px', textAlign: 'center', background: 'var(--paper)', color: 'var(--ink)' }}
                     />
                     <span style={{ color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>-</span>
                     <input
-                      value="0"
-                      disabled
-                      style={{ width: '28px', border: '1px solid var(--line)', padding: '10px 6px', fontFamily: 'var(--font-mono)', fontSize: '12px', textAlign: 'center', background: 'var(--surface)', color: 'var(--muted)' }}
+                      ref={refCero}
+                      maxLength={1}
+                      inputMode="numeric"
+                      placeholder="0"
+                      value={expFields.cero}
+                      onChange={e => {
+                        const v = e.target.value.replace(/[^0-9]/g, '').slice(0, 1);
+                        setExpFields(p => ({ ...p, cero: v }));
+                        if (v) advanceField(v, 1, refDist);
+                      }}
+                      style={{ width: '28px', border: '1px solid var(--line-strong)', padding: '10px 6px', fontFamily: 'var(--font-mono)', fontSize: '12px', textAlign: 'center', background: 'var(--paper)', color: 'var(--ink)' }}
                     />
                     <span style={{ color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>-</span>
                     <input
@@ -806,22 +866,8 @@ export default function JudicialDashboardPage() {
                         borderRadius: '5px',
                         boxShadow: '0 0 12px rgba(37, 99, 235, 0.5)',
                         position: 'relative',
-                        animation: 'shimmer-progress 1.5s infinite',
                       }}
-                    >
-                      {/* Efecto de brillo pasando por la barra */}
-                      <div
-                        style={{
-                          position: 'absolute',
-                          top: 0,
-                          left: '-100%',
-                          width: '100%',
-                          height: '100%',
-                          background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent)',
-                          animation: 'shimmer-wave 1.2s infinite',
-                        }}
-                      />
-                    </div>
+                    />
                   </div>
 
                   {/* Texto con porcentaje y estado */}
@@ -842,7 +888,7 @@ export default function JudicialDashboardPage() {
                         fontSize: '11px',
                         fontWeight: 'normal',
                         color: '#2563eb',
-                        animation: 'pulse-dot 1s infinite',
+                        opacity: 0.8,
                       }}
                     >
                       ● En progreso
@@ -861,24 +907,6 @@ export default function JudicialDashboardPage() {
                     Este proceso puede tardar varios minutos. La página requiere validaciones que pueden ralentizar la búsqueda. Por favor, no cierre esta ventana.
                   </div>
 
-                  <style jsx>{`
-                    @keyframes shimmer-wave {
-                      0% {
-                        left: -100%;
-                      }
-                      100% {
-                        left: 100%;
-                      }
-                    }
-                    @keyframes pulse-dot {
-                      0%, 100% {
-                        opacity: 1;
-                      }
-                      50% {
-                        opacity: 0.4;
-                      }
-                    }
-                  `}</style>
                 </div>
               ) : submitStatus ? (
                 <div
