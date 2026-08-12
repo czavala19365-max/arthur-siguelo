@@ -18,21 +18,32 @@ async function notifyNextPostprocess({ numero, parte, result }) {
     return
   }
 
-  const controller = AbortSignal.timeout(Number(process.env.CEJ_POSTPROCESS_TIMEOUT_MS) || 180_000)
-  const response = await fetch(callbackUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-internal-secret': secret,
-    },
-    body: JSON.stringify({
-      numeroExpediente: numero,
-      parte,
-      scrapeResult: result,
-      source: 'railway-scraper-service',
-    }),
-    signal: controller,
-  })
+  const timeoutMs = Number(process.env.CEJ_POSTPROCESS_TIMEOUT_MS) || 180_000
+  const started = Date.now()
+  console.log(`[scraper-service] postprocess callback start -> timeout=${timeoutMs}ms expediente=${numero}`)
+  let response
+  try {
+    response = await fetch(callbackUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-internal-secret': secret,
+      },
+      body: JSON.stringify({
+        numeroExpediente: numero,
+        parte,
+        scrapeResult: result,
+        source: 'railway-scraper-service',
+      }),
+      signal: AbortSignal.timeout(timeoutMs),
+    })
+  } catch (error) {
+    const elapsed = Date.now() - started
+    const msg = error instanceof Error ? error.message : String(error)
+    const timedOut = msg.toLowerCase().includes('abort') || msg.toLowerCase().includes('timeout')
+    console.error(`[scraper-service] postprocess callback failed after ${elapsed}ms${timedOut ? ' (timeout)' : ''}:`, msg)
+    throw error
+  }
 
   const text = await response.text().catch(() => '')
   if (!response.ok) {
@@ -40,7 +51,7 @@ async function notifyNextPostprocess({ numero, parte, result }) {
     return
   }
 
-  console.log('[scraper-service] callback postprocess ok:', text.slice(0, 200))
+  console.log(`[scraper-service] callback postprocess ok after ${Date.now() - started}ms:`, text.slice(0, 200))
 }
 
 app.get('/health', (_req, res) => {

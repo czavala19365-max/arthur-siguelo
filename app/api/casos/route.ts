@@ -22,23 +22,33 @@ async function fetchCejFromScraperService(numero: string, parte: string, scrapeC
   console.log("URL:", scraperUrl);
 
   const inicio = Date.now();
+  const timeoutMs = 180_000;
+  console.log(`[API] CEJ fetch start -> timeout=${timeoutMs}ms expediente=${numero}`);
 
 
 
 
   const url = `${scraperUrl.replace(/\/$/, '')}/scrape`
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-cej-disable-callback': '1',
-    },
-    body: JSON.stringify({ numero, parte }),
-    signal: AbortSignal.timeout(15_000),
-  })
+  let res: Response
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-cej-disable-callback': '1',
+      },
+      body: JSON.stringify({ numero, parte }),
+      signal: AbortSignal.timeout(timeoutMs),
+    })
+  } catch (error) {
+    const elapsed = Date.now() - inicio
+    const msg = error instanceof Error ? error.message : String(error)
+    const timedOut = msg.toLowerCase().includes('abort') || msg.toLowerCase().includes('timeout')
+    console.error(`[API] CEJ fetch failed after ${elapsed}ms${timedOut ? ' (timeout)' : ''}:`, msg)
+    throw error
+  }
 
-  console.log("Tiempo fetch:", Date.now() - inicio);
-  console.log("Status:", res.status);
+  console.log(`[API] CEJ fetch done after ${Date.now() - inicio}ms status=${res.status}`);
 
   let data: unknown = {}
   try {
@@ -315,8 +325,11 @@ export async function POST(request: Request) {
     // ─────────────────────────────────────────────────────────────
     // PASO 3: Guardar datos del scraping en el caso creado
     // ─────────────────────────────────────────────────────────────
+    console.log(`[API] POST /casos queueing background postprocess caso=${caso.id}`)
     try {
+      const bgStart = Date.now()
       await persistCejScrapeToCaso(caso, scrapeResult)
+      console.log(`[API] POST /casos persistCejScrapeToCaso done caso=${caso.id} elapsed=${Date.now() - bgStart}ms`)
     } catch (err) {
       console.error('[API] persistCejScrapeToCaso error:', err)
       // No fallar si esto falla, solo loguear

@@ -21,16 +21,29 @@ async function fetchCejFromScraperService(numero: string, parte: string): Promis
     return scrapeCEJ(numero, parte)
   }
 
+  const started = Date.now()
+  console.log(`[POLL] CEJ fetch start -> timeout=${CEJ_FETCH_TIMEOUT_MS}ms expediente=${numero}`)
   const url = `${scraperUrl.replace(/\/$/, '')}/scrape`
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-cej-disable-callback': '1',
-    },
-    body: JSON.stringify({ numero, parte }),
-    signal: AbortSignal.timeout(CEJ_FETCH_TIMEOUT_MS),
-  })
+  let res: Response
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-cej-disable-callback': '1',
+      },
+      body: JSON.stringify({ numero, parte }),
+      signal: AbortSignal.timeout(CEJ_FETCH_TIMEOUT_MS),
+    })
+  } catch (error) {
+    const elapsed = Date.now() - started
+    const msg = error instanceof Error ? error.message : String(error)
+    const timedOut = msg.toLowerCase().includes('abort') || msg.toLowerCase().includes('timeout')
+    console.error(`[POLL] CEJ fetch failed after ${elapsed}ms${timedOut ? ' (timeout)' : ''}:`, msg)
+    throw error
+  }
+
+  console.log(`[POLL] CEJ fetch done after ${Date.now() - started}ms status=${res.status}`)
 
   let data: unknown = {}
   try {
