@@ -29,6 +29,8 @@ export const CHECKLIST_STATUSES = [
   'N/A',
 ] as const
 
+export const CHECKLIST_SYSTEM = `Eres un asistente legal especializado en transacciones corporativas y cierre de operaciones en Perú. Genera checklist accionables y estructurados en JSON.`
+
 export const CHECKLIST_TYPES: ChecklistTypeInfo[] = [
   {
     value: 'constitucion_empresa',
@@ -61,6 +63,28 @@ export const CHECKLIST_TYPES: ChecklistTypeInfo[] = [
     description: 'Proceso completo de cierre de sociedad — disolución, liquidador, balance final, baja RUC y extinción.',
   },
 ]
+
+export const TRANSACTION_TYPES = CHECKLIST_TYPES
+
+export function buildChecklistUserPrompt(params: {
+  dealName: string
+  transactionType: string
+  transactionTypeValue?: string
+  buyer: string
+  seller: string
+  leadCounsel: string
+  targetClosingDate: string
+}): string {
+  return JSON.stringify({
+    dealName: params.dealName,
+    transactionType: params.transactionType,
+    transactionTypeValue: params.transactionTypeValue ?? params.transactionType,
+    buyer: params.buyer,
+    seller: params.seller,
+    leadCounsel: params.leadCounsel,
+    targetClosingDate: params.targetClosingDate,
+  })
+}
 
 export function getChecklistTemplate(type: string): ChecklistData {
   const templates: Record<string, ChecklistData> = {
