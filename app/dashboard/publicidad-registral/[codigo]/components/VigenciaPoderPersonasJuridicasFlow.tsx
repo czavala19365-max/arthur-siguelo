@@ -2,22 +2,9 @@
 
 import Link from 'next/link'
 import styles from '../publicidad-registral.module.css'
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import type { CertificateFlowConfig } from '../certificate-flows'
-import VisaGatewayView from '@/components/publicidad-registral/VisaGatewayView'
-import {
-  buildVigenciaSummary,
-  canSubmitVigenciaAssistantState,
-  createEmptyVigenciaAssistantState,
-  getNextVigenciaField,
-  getVigenciaMissingFields,
-  mergeAssistantFieldUpdates,
-  type AssistantFlowResponse,
-  type AssistantMessage,
-  type VigenciaPoderAssistantState,
-  type VigenciaPoderFieldKey,
-  VIGENCIA_FIELD_LABELS,
-} from '@/lib/sprl/publicidad-registral-assistant'
+import { useEffect } from 'react'
 
 const registryOptions = [
   { value: '', label: 'Seleccionar' },
@@ -219,17 +206,6 @@ export function VigenciaPoderPersonasJuridicasFlow({ onBack, certificate, onToke
     costoTotal?: string
     message: string
   }>(null)
-  const [assistantState, setAssistantState] = useState<VigenciaPoderAssistantState>(createEmptyVigenciaAssistantState())
-  const [assistantMessages, setAssistantMessages] = useState<AssistantMessage[]>([
-    {
-      role: 'assistant',
-      content:
-        'Puedo completar contigo la solicitud de vigencia de poder de personas jurídicas. Escribe lo que ya tengas o empieza con la oficina registral y yo voy guiando el resto del flujo.',
-    },
-  ])
-  const [assistantInput, setAssistantInput] = useState('')
-  const [assistantLoading, setAssistantLoading] = useState(false)
-  const assistantMessagesRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const script = document.createElement('script')
@@ -252,31 +228,6 @@ export function VigenciaPoderPersonasJuridicasFlow({ onBack, certificate, onToke
     }
   }, [])
 
-  useEffect(() => {
-    setAssistantState(current => ({
-      ...current,
-      oficinaRegistral,
-      numero,
-      asiento,
-      cargoApoderado,
-      apellidoPaterno,
-      apellidoMaterno,
-      nombres,
-      declarationAccepted: acceptDeclaration,
-    }))
-  }, [acceptDeclaration, apellidoMaterno, apellidoPaterno, asiento, cargoApoderado, nombres, numero, oficinaRegistral])
-
-  useEffect(() => {
-    const container = assistantMessagesRef.current
-    if (!container) return
-
-    const rafId = window.requestAnimationFrame(() => {
-      container.scrollTop = container.scrollHeight
-    })
-
-    return () => window.cancelAnimationFrame(rafId)
-  }, [assistantMessages, assistantLoading])
-
   function handleNameChange(
     value: string,
     setValue: (nextValue: string) => void,
@@ -287,115 +238,6 @@ export function VigenciaPoderPersonasJuridicasFlow({ onBack, certificate, onToke
 
     setError(hasInvalidChars ? 'Solo se permiten letras y espacios (sin signos de puntuación).' : null)
     setValue(upperValue)
-  }
-
-  function applyAssistantFieldUpdates(
-    fieldUpdates: Partial<Record<VigenciaPoderFieldKey, string>>,
-    declarationAccepted?: boolean,
-  ) {
-    const nextState = mergeAssistantFieldUpdates(assistantState, fieldUpdates)
-    if (typeof declarationAccepted === 'boolean') {
-      nextState.declarationAccepted = declarationAccepted
-      setAcceptDeclaration(declarationAccepted)
-      if (declarationAccepted) {
-        setRequiredErrors(current => ({ ...current, declaration: false }))
-      }
-    }
-
-    if (fieldUpdates.oficinaRegistral) {
-      setOficinaRegistral(fieldUpdates.oficinaRegistral)
-      setRequiredErrors(current => ({ ...current, oficinaRegistral: false }))
-    }
-    if (fieldUpdates.numero) {
-      setNumero(fieldUpdates.numero)
-      setRequiredErrors(current => ({ ...current, numero: false }))
-    }
-    if (fieldUpdates.asiento) {
-      setAsiento(fieldUpdates.asiento)
-      setRequiredErrors(current => ({ ...current, asiento: false }))
-    }
-    if (fieldUpdates.cargoApoderado) {
-      setCargoApoderado(fieldUpdates.cargoApoderado)
-      setRequiredErrors(current => ({ ...current, cargoApoderado: false }))
-    }
-    if (fieldUpdates.apellidoPaterno) {
-      setApellidoPaterno(fieldUpdates.apellidoPaterno)
-      setRequiredErrors(current => ({ ...current, apellidoPaterno: false }))
-    }
-    if (fieldUpdates.apellidoMaterno) {
-      setApellidoMaterno(fieldUpdates.apellidoMaterno)
-    }
-    if (fieldUpdates.nombres) {
-      setNombres(fieldUpdates.nombres)
-      setRequiredErrors(current => ({ ...current, nombres: false }))
-    }
-
-    setAssistantState(nextState)
-  }
-
-  async function handleAssistantSend(text?: string) {
-    const msg = (text || assistantInput).trim()
-    if (!msg || assistantLoading) return
-
-    const userMsg: AssistantMessage = { role: 'user', content: msg }
-    const nextMessages = [...assistantMessages, userMsg]
-    const currentAssistantState = assistantState
-
-    setAssistantMessages(nextMessages)
-    setAssistantInput('')
-    setAssistantLoading(true)
-
-    try {
-      const response = await fetch('/api/sprl/publicidad-registral/assistant', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          moduleKey: 'vigencia_poder_personas_juridicas',
-          messages: nextMessages,
-          state: currentAssistantState,
-          certificateName: certificate?.nombreCertificado || 'Certificado de Vigencia de Poder de Personas Jurídicas',
-        }),
-      })
-
-      const data = await response.json().catch(() => ({})) as Partial<AssistantFlowResponse> & { error?: string }
-      if (!response.ok || data.error) {
-        throw new Error(data.error || 'No se pudo procesar el asistente.')
-      }
-
-      const assistantReply: AssistantMessage = {
-        role: 'assistant',
-        content: data.message || 'Continuemos con la solicitud.',
-      }
-
-      const nextAssistantSnapshot = mergeAssistantFieldUpdates(currentAssistantState, data.fieldUpdates || {})
-      if (typeof data.declarationAccepted === 'boolean') {
-        nextAssistantSnapshot.declarationAccepted = data.declarationAccepted
-      }
-
-      setAssistantMessages([...nextMessages, assistantReply])
-      applyAssistantFieldUpdates(data.fieldUpdates || {}, data.declarationAccepted)
-
-      if (data.shouldSubmit && canSubmitVigenciaAssistantState(nextAssistantSnapshot)) {
-        await handleSolicitar({
-          oficinaRegistral: nextAssistantSnapshot.oficinaRegistral,
-          numero: nextAssistantSnapshot.numero,
-          asiento: nextAssistantSnapshot.asiento,
-          cargoApoderado: nextAssistantSnapshot.cargoApoderado,
-          apellidoPaterno: nextAssistantSnapshot.apellidoPaterno,
-          apellidoMaterno: nextAssistantSnapshot.apellidoMaterno,
-          nombres: nextAssistantSnapshot.nombres,
-          acceptDeclaration: nextAssistantSnapshot.declarationAccepted,
-          asientos,
-        })
-      }
-    } catch (error) {
-      setAssistantMessages([...nextMessages, {
-        role: 'assistant',
-        content: error instanceof Error ? error.message : 'No se pudo procesar el asistente.',
-      }])
-    } finally {
-      setAssistantLoading(false)
-    }
   }
 
   function handleAgregarAsiento() {
@@ -417,36 +259,16 @@ export function VigenciaPoderPersonasJuridicasFlow({ onBack, certificate, onToke
     setAsientos(current => current.filter(item => item.id !== id))
   }
 
-  async function handleSolicitar(snapshot?: {
-    oficinaRegistral?: string
-    numero?: string
-    asiento?: string
-    cargoApoderado?: string
-    apellidoPaterno?: string
-    apellidoMaterno?: string
-    nombres?: string
-    acceptDeclaration?: boolean
-    asientos?: AsientoItem[]
-  }) {
-    const currentOficinaRegistral = snapshot?.oficinaRegistral ?? oficinaRegistral
-    const currentNumero = snapshot?.numero ?? numero
-    const currentAsiento = snapshot?.asiento ?? asiento
-    const currentCargoApoderado = snapshot?.cargoApoderado ?? cargoApoderado
-    const currentApellidoPaterno = snapshot?.apellidoPaterno ?? apellidoPaterno
-    const currentApellidoMaterno = snapshot?.apellidoMaterno ?? apellidoMaterno
-    const currentNombres = snapshot?.nombres ?? nombres
-    const currentAcceptDeclaration = snapshot?.acceptDeclaration ?? acceptDeclaration
-    const currentAsientos = snapshot?.asientos ?? asientos
-
-    const hasAsiento = Boolean(currentAsientos[0]?.asiento || currentAsiento.trim().toUpperCase())
+  async function handleSolicitar() {
+    const hasAsiento = Boolean(asientos[0]?.asiento || asiento.trim().toUpperCase())
     const nextRequiredErrors = {
-      oficinaRegistral: !currentOficinaRegistral,
-      numero: !currentNumero.trim(),
+      oficinaRegistral: !oficinaRegistral,
+      numero: !numero.trim(),
       asiento: !hasAsiento,
-      cargoApoderado: !currentCargoApoderado.trim(),
-      apellidoPaterno: !currentApellidoPaterno.trim(),
-      nombres: !currentNombres.trim(),
-      declaration: !currentAcceptDeclaration,
+      cargoApoderado: !cargoApoderado.trim(),
+      apellidoPaterno: !apellidoPaterno.trim(),
+      nombres: !nombres.trim(),
+      declaration: !acceptDeclaration,
     }
 
     setRequiredErrors(nextRequiredErrors)
@@ -466,7 +288,7 @@ export function VigenciaPoderPersonasJuridicasFlow({ onBack, certificate, onToke
       return
     }
 
-    const asientoSeleccionadoValue = currentAsientos[0]?.asiento || currentAsiento.trim().toUpperCase()
+    const asientoSeleccionadoValue = asientos[0]?.asiento || asiento.trim().toUpperCase()
     if (!asientoSeleccionadoValue) {
       setSubmitError('Debes ingresar al menos un asiento.')
       return
@@ -482,13 +304,13 @@ export function VigenciaPoderPersonasJuridicasFlow({ onBack, certificate, onToke
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           certificate,
-          oficinaRegistral: currentOficinaRegistral,
-          partida: currentNumero.trim(),
+          oficinaRegistral,
+          partida: numero.trim(),
           asiento: asientoSeleccionadoValue,
-          cargoApoderado: currentCargoApoderado,
-          apellidoPaterno: normalizeForBackend(currentApellidoPaterno),
-          apellidoMaterno: normalizeForBackend(currentApellidoMaterno),
-          nombres: normalizeForBackend(currentNombres),
+          cargoApoderado,
+          apellidoPaterno: normalizeForBackend(apellidoPaterno),
+          apellidoMaterno: normalizeForBackend(apellidoMaterno),
+          nombres: normalizeForBackend(nombres),
         }),
       })
 
@@ -517,7 +339,7 @@ export function VigenciaPoderPersonasJuridicasFlow({ onBack, certificate, onToke
       }
 
       setSubmitSummary({
-        partida: data.summary.partida || currentNumero.trim(),
+        partida: data.summary.partida || numero.trim(),
         razSocCert: data.summary.razSocCert || '',
         refNumPart: data.summary.refNumPart || '',
         asiento: data.summary.asiento || asientoSeleccionadoValue,
@@ -793,99 +615,99 @@ export function VigenciaPoderPersonasJuridicasFlow({ onBack, certificate, onToke
     }
   }
 
-  const handleVisaCheckout = async () => {
+const handleVisaCheckout = async () => {
 
-    try {
+  try {
 
-      setVisaContinueLoading(true)
-
-
-      const response = await fetch('/api/sprl/publicidad-registral/payment/checkout', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          provider: 'visa_mastercard',
-          action: 'continue-preview',
-          nombre: visaTitularNombre,
-          apellido: visaTitularApellido,
-          email: visaTitularEmail,
-          purchase: visaPurchaseCode,
-          importe: visaMonto,
-        }),
-      })
+    setVisaContinueLoading(true)
 
 
-      const json = await response.json()
+    const response = await fetch('/api/sprl/publicidad-registral/payment/checkout', {
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+      },
+      body:JSON.stringify({
+        provider:'visa_mastercard',
+        action:'continue-preview',
+        nombre:visaTitularNombre,
+        apellido:visaTitularApellido,
+        email:visaTitularEmail,
+        purchase:visaPurchaseCode,
+        importe:visaMonto,
+      }),
+    })
 
 
-      if (!json.ok) {
-        throw new Error(json.error)
-      }
+    const json = await response.json()
 
 
-      const cfg = json.data.configuration
-
-
-      await loadVisaSDK()
-
-
-      console.log(
-        'SDK:',
-        window.VisanetCheckout
-      )
-
-      console.log(
-        'CONFIG:',
-        cfg
-      )
-
-
-      window.VisanetCheckout.configure(cfg)
-
-      window.VisanetCheckout.open()
-
-
-    } catch (error) {
-
-      console.error(error)
-
-      setPayError(
-        error instanceof Error
-          ? error.message
-          : 'Error iniciando pago'
-      )
-
-    } finally {
-
-      setVisaContinueLoading(false)
-
+    if(!json.ok){
+      throw new Error(json.error)
     }
 
+
+    const cfg = json.data.configuration
+
+
+    await loadVisaSDK()
+
+
+    console.log(
+      'SDK:',
+      window.VisanetCheckout
+    )
+
+    console.log(
+      'CONFIG:',
+      cfg
+    )
+
+
+    window.VisanetCheckout.configure(cfg)
+
+    window.VisanetCheckout.open()
+
+
+  } catch(error){
+
+    console.error(error)
+
+    setPayError(
+      error instanceof Error
+      ? error.message
+      : 'Error iniciando pago'
+    )
+
+  } finally {
+
+    setVisaContinueLoading(false)
+
   }
 
-  const loadVisaSDK = () => {
-    return new Promise<void>((resolve, reject) => {
+}
 
-      if (window.VisanetCheckout) {
-        resolve()
-        return
-      }
+const loadVisaSDK = () => {
+  return new Promise<void>((resolve, reject) => {
 
-      const script = document.createElement('script')
+    if (window.VisanetCheckout) {
+      resolve()
+      return
+    }
 
-      script.src =
-        'https://static-content.vnforapps.com/v2/js/checkout.js'
+    const script = document.createElement('script')
 
-      script.onload = () => resolve()
+    script.src =
+      'https://static-content.vnforapps.com/v2/js/checkout.js'
 
-      script.onerror = () =>
-        reject(new Error('No se pudo cargar VisaNet SDK'))
+    script.onload = () => resolve()
 
-      document.body.appendChild(script)
-    })
-  }
+    script.onerror = () =>
+      reject(new Error('No se pudo cargar VisaNet SDK'))
+
+    document.body.appendChild(script)
+  })
+}
 
   const apoderadoCompleto = [apellidoPaterno, apellidoMaterno, nombres]
     .map(value => normalizeForBackend(value).toUpperCase())
@@ -902,48 +724,121 @@ export function VigenciaPoderPersonasJuridicasFlow({ onBack, certificate, onToke
 
   if (showVisaGatewayView) {
     return (
-      <VisaGatewayView
-        purchaseCode={visaPurchaseCode}
-        monto={visaMonto}
-        titularNombre={visaTitularNombre}
-        titularApellido={visaTitularApellido}
-        titularEmail={visaTitularEmail}
-        ipClient={visaIpClient}
-        sessionExtendId={visaSessionExtendId}
-        continueLoading={visaContinueLoading}
-        payError={payError}
-        fieldErrors={visaFieldErrors}
-        onNombreChange={value => {
-          setVisaTitularNombre(value)
-          if (value.trim()) {
-            setVisaFieldErrors(current => ({ ...current, nombre: false }))
-          }
-        }}
-        onApellidoChange={value => {
-          setVisaTitularApellido(value)
-          if (value.trim()) {
-            setVisaFieldErrors(current => ({ ...current, apellido: false }))
-          }
-        }}
-        onEmailChange={value => {
-          setVisaTitularEmail(value)
-          if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())) {
-            setVisaFieldErrors(current => ({ ...current, email: false }))
-          }
-        }}
-        onContinue={() => void handleVisaCheckout()}
-        onBack={() => setShowVisaGatewayView(false)}
-      />
+      <div className={styles.sprlFlowPage}>
+        <div className={styles.sprlFlowShell}>
+          <div className={styles.sprlGatewayHeaderText}>PASARELA ELECTRONICA DE PAGOS</div>
+          <div className={styles.sprlGatewayProgressBar}>
+            <span className={styles.sprlGatewayProgressOne} />
+            <span className={styles.sprlGatewayProgressTwo} />
+            <span className={styles.sprlGatewayProgressThree} />
+            <span className={styles.sprlGatewayProgressFour} />
+          </div>
+
+          <div className={styles.sprlGatewayPanel}>
+            <h2 className={styles.sprlGatewayTitle}>Ingrese los datos del titular de la tarjeta:</h2>
+
+            <div className={styles.sprlGatewayFormBox}>
+              <div className={styles.sprlGatewayGrid}>
+                <label className={styles.sprlGatewayRow}>
+                  <span className={styles.sprlFlowLabel}>Nombre * :</span>
+                  <div>
+                    <input
+                      className={styles.sprlFlowInput}
+                      placeholder="Ingrese sus nombres"
+                      value={visaTitularNombre}
+                      onChange={event => {
+                        setVisaTitularNombre(event.target.value)
+                        if (event.target.value.trim()) {
+                          setVisaFieldErrors(current => ({ ...current, nombre: false }))
+                        }
+                      }}
+                    />
+                    {visaFieldErrors.nombre && <span className={styles.sprlFlowFieldError}>Este campo es obligatorio.</span>}
+                  </div>
+                </label>
+
+                <label className={styles.sprlGatewayRow}>
+                  <span className={styles.sprlFlowLabel}>Apellido * :</span>
+                  <div>
+                    <input
+                      className={styles.sprlFlowInput}
+                      placeholder="Ingrese sus apellidos"
+                      value={visaTitularApellido}
+                      onChange={event => {
+                        setVisaTitularApellido(event.target.value)
+                        if (event.target.value.trim()) {
+                          setVisaFieldErrors(current => ({ ...current, apellido: false }))
+                        }
+                      }}
+                    />
+                    {visaFieldErrors.apellido && <span className={styles.sprlFlowFieldError}>Este campo es obligatorio.</span>}
+                  </div>
+                </label>
+
+                <label className={styles.sprlGatewayRowWide}>
+                  <span className={styles.sprlFlowLabel}>Email * :</span>
+                  <div>
+                    <input
+                      className={styles.sprlFlowInput}
+                      placeholder="Ingrese su correo electrónico"
+                      value={visaTitularEmail}
+                      onChange={event => {
+                        setVisaTitularEmail(event.target.value)
+                        if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(event.target.value.trim())) {
+                          setVisaFieldErrors(current => ({ ...current, email: false }))
+                        }
+                      }}
+                    />
+                    {visaFieldErrors.email && <span className={styles.sprlFlowFieldError}>Ingrese un correo válido.</span>}
+                  </div>
+                </label>
+              </div>
+
+              <div className={styles.sprlGatewayActions}>
+                <button 
+                type="button" 
+                className={styles.sprlFlowButtonPrimary} 
+                onClick={() => void handleVisaCheckout()} 
+                disabled={visaContinueLoading}
+                >
+                {visaContinueLoading ? 'Procesando...' : '→ Continuar'}
+                </button>
+              </div>
+
+              <div className={styles.sprlGatewayMeta}>
+                Operación: <strong>{visaPurchaseCode}</strong> | Monto: <strong>S/. {visaMonto}</strong>
+              </div>
+              {visaIpClient ? (
+                <div className={styles.sprlGatewayMeta}>IP cliente: <strong>{visaIpClient}</strong></div>
+              ) : null}
+              {visaSessionExtendId ? (
+                <div className={styles.sprlGatewayMeta}>Sesión extendida: <strong>{visaSessionExtendId}</strong></div>
+              ) : null}
+            </div>
+
+            <div className={styles.sprlGatewayWarningTitle}>Tener en cuenta lo siguiente antes de continuar:</div>
+            <ul className={styles.sprlGatewayNotes}>
+              <li>Asegurarse que su tarjeta tenga la opción de compras por internet habilitada.</li>
+              <li>Verificar su límite de compras por internet, por importe o número de transacciones diarias.</li>
+              <li>Asimismo, pueden realizar las consultas ante su entidad financiera.</li>
+            </ul>
+          </div>
+
+          <div className={styles.sprlFlowActions} style={{ marginTop: 20 }}>
+            <button type="button" className={styles.sprlFlowButtonSecondary} onClick={() => setShowVisaGatewayView(false)}>
+              Regresar
+            </button>
+          </div>
+
+          {payError && (
+            <div className={styles.sprlSummarySuccess} style={{ marginTop: 12, background: 'rgba(192, 57, 43, 0.08)', borderColor: 'rgba(192, 57, 43, 0.35)', color: '#9d1f11' }}>
+              {payError}
+            </div>
+          )}
+        </div>
+      </div>
     )
   }
-
-  const assistantStatusLabel = canSubmitVigenciaAssistantState(assistantState)
-    ? 'Datos completos'
-    : `Faltan ${getVigenciaMissingFields(assistantState).length} datos`
-
-  const assistantStatusTone = canSubmitVigenciaAssistantState(assistantState)
-    ? styles.sprlFlowAssistantStatusReady
-    : styles.sprlFlowAssistantStatusPending
 
   if (showPaymentForm) {
     return (
@@ -1083,92 +978,6 @@ export function VigenciaPoderPersonasJuridicasFlow({ onBack, certificate, onToke
           Por ejemplo: cuando se requiere saber o acreditar las facultades del gerente general de una empresa.
         </p>
 
-        <section
-          className={styles.sprlFlowAssistantCard}
-          aria-labelledby="sprl-ai-assistant-title"
-        >
-          <div className={styles.sprlFlowAssistantHero}>
-            <div>
-              <div className={styles.sprlFlowAssistantEyebrow}>Asistente IA de vigencia</div>
-              <h2 id="sprl-ai-assistant-title" className={styles.sprlFlowAssistantTitle}>
-                Chat guiado para completar la solicitud
-              </h2>
-              <p className={styles.sprlFlowAssistantText}>
-                Captura los datos del trámite, arma el resumen y envía la solicitud sin obligarte a tocar el formulario.
-              </p>
-            </div>
-            <div className={`${styles.sprlFlowAssistantStatusBadge} ${assistantStatusTone}`}>
-              {assistantStatusLabel}
-            </div>
-          </div>
-
-          <div className={styles.sprlFlowAssistantGrid}>
-            <div className={styles.sprlFlowAssistantThread}>
-              <div className={styles.sprlFlowAssistantThreadHeader}>
-                <span>Conversación</span>
-                <span>
-                  {assistantLoading ? 'Procesando...' : 'Listo'}
-                </span>
-              </div>
-
-              <div ref={assistantMessagesRef} className={styles.sprlFlowAssistantMessages}>
-                {assistantMessages.map((message, index) => (
-                  <div
-                    key={`${message.role}-${index}`}
-                    className={`${styles.sprlFlowAssistantBubble} ${message.role === 'user' ? styles.sprlFlowAssistantBubbleUser : styles.sprlFlowAssistantBubbleAI}`}
-                  >
-                    {message.content}
-                  </div>
-                ))}
-                {assistantLoading && <div className={styles.sprlFlowAssistantTyping}>Analizando datos...</div>}
-              </div>
-
-              <div className={styles.sprlFlowAssistantComposer}>
-                <textarea
-                  value={assistantInput}
-                  onChange={event => setAssistantInput(event.target.value)}
-                  onKeyDown={event => {
-                    if (event.key === 'Enter' && !event.shiftKey) {
-                      event.preventDefault()
-                      void handleAssistantSend()
-                    }
-                  }}
-                  placeholder="Escribe el dato que tengas o responde confirmando..."
-                  rows={2}
-                  className={styles.sprlFlowAssistantInput}
-                />
-                <button
-                  type="button"
-                  className={styles.sprlFlowAssistantSend}
-                  onClick={() => void handleAssistantSend()}
-                  disabled={assistantLoading || !assistantInput.trim()}
-                >
-                  {assistantLoading ? 'Procesando...' : 'Enviar'}
-                </button>
-              </div>
-
-              <div className={styles.sprlFlowAssistantHint}>
-                Acepta entradas sueltas como "LIMA", "Partida 12345", "Asiento B7" o "sí, enviar".
-              </div>
-            </div>
-
-            <aside className={styles.sprlFlowAssistantSummary}>
-              <div className={styles.sprlFlowAssistantSummaryTitle}>Estado detectado</div>
-              <div className={styles.sprlFlowAssistantSummaryList}>
-                <div><span>Oficina</span><strong>{assistantState.oficinaRegistral || '—'}</strong></div>
-                <div><span>Número</span><strong>{assistantState.numero || '—'}</strong></div>
-                <div><span>Asiento</span><strong>{assistantState.asiento || '—'}</strong></div>
-                <div><span>Cargo</span><strong>{assistantState.cargoApoderado || '—'}</strong></div>
-                <div><span>Apellidos y nombres</span><strong>{[assistantState.apellidoPaterno, assistantState.apellidoMaterno, assistantState.nombres].filter(Boolean).join(' ') || '—'}</strong></div>
-                <div><span>Declaración</span><strong>{assistantState.declarationAccepted ? 'Aceptada' : 'Pendiente'}</strong></div>
-              </div>
-              <div className={styles.sprlFlowAssistantSummaryFoot}>
-                El formulario de abajo sigue disponible como respaldo técnico.
-              </div>
-            </aside>
-          </div>
-        </section>
-
         <SectionHeader>DATOS REGISTRALES</SectionHeader>
 
         <div className={styles.sprlFlowSection}>
@@ -1291,7 +1100,7 @@ export function VigenciaPoderPersonasJuridicasFlow({ onBack, certificate, onToke
               <input
                 className={styles.sprlFlowInput}
                 placeholder="Escriba aquí..."
-                name='cargoApoderado'
+                name='cargoapoderado'
                 value={cargoApoderado}
                 onChange={event => {
                   setCargoApoderado(event.target.value.toUpperCase())
@@ -1518,7 +1327,7 @@ export function VigenciaPoderPersonasJuridicasFlow({ onBack, certificate, onToke
 
               <div className={styles.sprlSummaryFooter}>
                 <button type="button" className={styles.sprlSummarySecondary} onClick={() => setShowResumen(false)}>
-                  Corregir datos
+                  Cancelar
                 </button>
                 <button type="button" className={styles.sprlSummaryPrimary} onClick={() => void handleIrAPagar()} disabled={payLoading}>
                   {payLoading ? 'Preparando...' : 'Ir a pagar'}

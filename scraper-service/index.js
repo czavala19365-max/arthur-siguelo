@@ -2,7 +2,6 @@
 
 const express = require('express')
 const { scrapeCEJ } = require('./cej-scraper')
-const { chromium } = require('playwright')
 
 const app = express()
 app.use(express.json({ limit: '1mb' }))
@@ -19,21 +18,32 @@ async function notifyNextPostprocess({ numero, parte, result }) {
     return
   }
 
-  const controller = AbortSignal.timeout(Number(process.env.CEJ_POSTPROCESS_TIMEOUT_MS) || 180_000)
-  const response = await fetch(callbackUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-internal-secret': secret,
-    },
-    body: JSON.stringify({
-      numeroExpediente: numero,
-      parte,
-      scrapeResult: result,
-      source: 'railway-scraper-service',
-    }),
-    signal: controller,
-  })
+  const timeoutMs = Number(process.env.CEJ_POSTPROCESS_TIMEOUT_MS) || 180_000
+  const started = Date.now()
+  console.log(`[scraper-service] postprocess callback start -> timeout=${timeoutMs}ms expediente=${numero}`)
+  let response
+  try {
+    response = await fetch(callbackUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-internal-secret': secret,
+      },
+      body: JSON.stringify({
+        numeroExpediente: numero,
+        parte,
+        scrapeResult: result,
+        source: 'railway-scraper-service',
+      }),
+      signal: AbortSignal.timeout(timeoutMs),
+    })
+  } catch (error) {
+    const elapsed = Date.now() - started
+    const msg = error instanceof Error ? error.message : String(error)
+    const timedOut = msg.toLowerCase().includes('abort') || msg.toLowerCase().includes('timeout')
+    console.error(`[scraper-service] postprocess callback failed after ${elapsed}ms${timedOut ? ' (timeout)' : ''}:`, msg)
+    throw error
+  }
 
   const text = await response.text().catch(() => '')
   if (!response.ok) {
@@ -41,7 +51,7 @@ async function notifyNextPostprocess({ numero, parte, result }) {
     return
   }
 
-  console.log('[scraper-service] callback postprocess ok:', text.slice(0, 200))
+  console.log(`[scraper-service] callback postprocess ok after ${Date.now() - started}ms:`, text.slice(0, 200))
 }
 
 app.get('/health', (_req, res) => {
@@ -107,154 +117,28 @@ app.get('/health/proxy', async (req, res) => {
 })
 
 // ─── SPRL (Publicidad Registral) ────────────────────────────────
-const { loginSPRL, catalogSPRL } = require('./sprl-scraper')
+const { loginSPRL } = require('./sprl-scraper')
 
 app.post('/sprl/login', async (req, res) => {
   try {
     const { username, password } = req.body || {}
-
     if (!username || !password) {
-      return res.status(400).json({
-        ok: false,
-        error: 'username y password son requeridos',
-      })
+      return res.status(400).json({ ok: false, error: 'username y password son requeridos' })
     }
-
-    const result = await loginSPRL(
-      String(username).trim(),
-      String(password).trim()
-    )
-
-    console.log('[SPRL TEST] Login result:', {
-      ok: result.ok,
-      hasAccessToken: Boolean(result.accessToken),
-      accessTokenLength: result.accessToken?.length ?? 0,
-      hasSessionId: Boolean(result.sunarpSessionId),
-      sessionIdLength: result.sunarpSessionId?.length ?? 0,
-      hasCookieHeader: Boolean(result.sunarpCookieHeader),
-      cookieHeaderLength: result.sunarpCookieHeader?.length ?? 0,
-    })
-
-    if (!result.ok) {
-      return res.json(result)
-    }
-
-    return res.json(result)
-
+    const result = await loginSPRL(String(username).trim(), String(password).trim())
+    res.json(result)
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-
     console.error('[scraper-service] POST /sprl/login', message)
-
-    res.status(500).json({
-      ok: false,
-      error: 'Error al ejecutar login SPRL',
-      details: message,
-    })
+    res.status(500).json({ ok: false, error: 'Error al ejecutar login SPRL', details: message })
   }
 })
-
-app.post('/sprl/catalog', async (req, res) => {
-  try {
-    const { codArea, tipoCert } = req.body || {}
-
-    console.log('[SPRL catalog] Request:', {
-      codArea,
-      tipoCert,
-    })
-
-    if (!codArea || !tipoCert) {
-      return res.status(400).json({
-        success: false,
-        data: null,
-        response: {
-          codigo: '400',
-          titulo: 'ERROR',
-          tipo: 'E',
-          mensaje: 'codArea y tipoCert son requeridos.',
-        },
-      })
-    }
-
-    const result = await catalogSPRL(
-      String(codArea).trim(),
-      String(tipoCert).trim()
-    )
-
-    console.log('[SPRL catalog] Response:', {
-      status: result.status,
-      error: result.error,
-    })
-
-    if (result.error) {
-      return res.status(500).json({
-        success: false,
-        data: null,
-        response: {
-          codigo: '500',
-          titulo: 'ERROR',
-          tipo: 'E',
-          mensaje: result.error,
-        },
-      })
-    }
-
-    let json
-
-    try {
-      json = JSON.parse(result.body)
-    } catch {
-      json = null
-    }
-
-    if (json !== null) {
-      return res.status(result.status).json(json)
-    }
-
-    return res.status(result.status).json({
-      success: false,
-      data: null,
-      response: {
-        codigo: String(result.status),
-        titulo: 'ERROR',
-        tipo: 'E',
-        mensaje: result.body,
-      },
-    })
-  } catch (error) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : String(error)
-
-    console.error(
-      '[SPRL catalog] ERROR:',
-      message
-    )
-
-    return res.status(500).json({
-      success: false,
-      data: null,
-      response: {
-        codigo: '500',
-        titulo: 'ERROR',
-        tipo: 'E',
-        mensaje: message,
-      },
-    })
-  }
-})
-
 
 app.get('/sprl/health', (_req, res) => {
-  res.json({
-    status: 'ok',
-    module: 'sprl',
-  })
+  res.json({ status: 'ok', module: 'sprl' })
 })
 
 const PORT = Number(process.env.PORT) || 3001
-
 app.listen(PORT, () => {
   console.log(`[cej-scraper-service] listening on :${PORT}`)
 })

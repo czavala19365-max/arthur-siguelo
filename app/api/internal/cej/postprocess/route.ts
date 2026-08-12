@@ -41,8 +41,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, processed: false, reason: 'case_not_found' })
     }
 
-    const result = await procesarCejScrapeEnCaso(caso, scrapeResult)
-    return NextResponse.json({ ok: true, processed: true, casoId: caso.id, ...result })
+    void procesarCejScrapeEnCaso(caso, scrapeResult)
+      .then(result => {
+        console.log('[API] POST /internal/cej/postprocess completed:', caso.id, result.movimientosGuardados)
+      })
+      .catch(error => {
+        const msg = error instanceof Error ? error.message : String(error)
+        console.error('[API] POST /internal/cej/postprocess async error:', msg)
+      })
+
+    return NextResponse.json({ ok: true, processed: true, casoId: caso.id, queued: true })
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error)
     console.error('[API] POST /internal/cej/postprocess error:', msg)

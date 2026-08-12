@@ -1,45 +1,37 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAuthUser } from '@/lib/judicial-caso-access'
-import { editarDocumentoConIA, type ChatMessage } from '@/lib/legal/edit-with-ai/edit-service'
-import { actualizarDocumentoDrafter } from '@/lib/legal/drafter/document-service'
-import type { SeccionDrafter } from '@/lib/legal/drafter/types'
+import { createLegalConversation } from '@/lib/legal/anthropic'
+import { REFINE_SYSTEM } from '@/lib/legal/drafter/prompts'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
 
 export async function POST(req: NextRequest) {
-  const auth = await requireAuthUser()
-  if ('response' in auth) return auth.response
-
   try {
     if (!process.env.ANTHROPIC_API_KEY) {
       return NextResponse.json({ error: 'ANTHROPIC_API_KEY no configurada' }, { status: 500 })
     }
 
     const body = (await req.json()) as {
-      documentId: string
-      sections: SeccionDrafter[]
+      document: string
       instruction: string
-      messages?: ChatMessage[]
+      history?: Array<{ role: 'user' | 'assistant'; content: string }>
     }
 
-    if (!body.documentId || !body.sections || !body.instruction) {
-      return NextResponse.json({ error: 'documentId, sections e instruction son requeridos' }, { status: 400 })
-    }
+    const messages: Array<{ role: 'user' | 'assistant'; content: string }> = [
+      ...(body.history || []),
+      {
+        role: 'user',
+        content: `Current document:\n\n${body.document}\n\n---\n\nRevision instruction: ${body.instruction}\n\nReturn the complete revised document.`,
+      },
+    ]
 
-    const result = await editarDocumentoConIA({
-      messages: body.messages || [],
-      sections: body.sections,
-      instruction: body.instruction,
+    const document = await createLegalConversation({
+      system: REFINE_SYSTEM,
+      messages,
+      maxTokens: 4000,
     })
 
-    await actualizarDocumentoDrafter({
-      documentId: body.documentId,
-      userId: auth.user.id,
-      sections: result.sections,
-    })
-
-    return NextResponse.json(result)
+    return NextResponse.json({ document })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     return NextResponse.json({ error: msg }, { status: 500 })
