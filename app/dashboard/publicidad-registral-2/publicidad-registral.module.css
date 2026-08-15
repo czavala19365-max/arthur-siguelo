@@ -945,3 +945,15 @@
     font-size: 16px;
   }
 }
+
+.sprlFlowChatButton {
+  display: block;
+  margin: 14px auto 0;
+  background: #fff;
+  color: #587400;
+  border: 1px solid #95c11f;
+  padding: 10px 20px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  cursor: pointer;
+}

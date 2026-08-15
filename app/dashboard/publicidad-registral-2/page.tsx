@@ -2,7 +2,8 @@
 
 
 import Link from 'next/link'
-import { ReactNode } from 'react'
+import { FormEvent, ReactNode, useState } from 'react'
+import VigenciaPoderChat from '@/components/VigenciaPoderChat'
 import styles from './publicidad-registral.module.css'
 
 const registryOptions = [
@@ -122,8 +123,69 @@ function SelectRow({
 }
 
 export default function VigenciaPoderPersonaJuridica() {
+  const [representante, setRepresentante] = useState<'natural' | 'juridico' | ''>('')
+  const [form, setForm] = useState({ oficinaRegistral: '', solicitarPor: 'partida', numeroPartida: '', numero: '', numeroAsiento: '', cargoApoderado: '', apellidoPaterno: '', apellidoMaterno: '', nombres: '', razonSocial: '', datosAdicionales: '' })
+  const [submitStatus, setSubmitStatus] = useState<{ type: 'idle' | 'success' | 'error'; message: string }>({ type: 'idle', message: '' })
+  const [submitting, setSubmitting] = useState(false)
+  const uppercaseFields = new Set(['oficinaRegistral', 'numeroPartida', 'numero', 'numeroAsiento', 'cargoApoderado', 'apellidoPaterno', 'apellidoMaterno', 'nombres', 'razonSocial', 'datosAdicionales'])
+
+  function updateForm(field: keyof typeof form, value: string) {
+    setForm(previous => ({ ...previous, [field]: uppercaseFields.has(field) ? value.toUpperCase() : value }))
+  }
+
+  function applyChatData(data: Record<string, string>) {
+    const normalizedData = Object.fromEntries(
+      Object.entries(data).map(([key, value]) => [key, uppercaseFields.has(key) ? value.toUpperCase() : value]),
+    )
+    setForm(previous => ({
+      ...previous,
+      ...normalizedData,
+      oficinaRegistral: normalizedData.oficinaRegistral || previous.oficinaRegistral,
+      numeroPartida: normalizedData.numeroPartida || normalizedData.numero || previous.numeroPartida,
+      numero: normalizedData.numeroPartida || normalizedData.numero || previous.numero,
+      razonSocial: normalizedData.razonSocial || previous.razonSocial,
+    }))
+    if (data.representante === 'natural' || data.representante === 'juridico') {
+      setRepresentante(data.representante)
+    }
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (submitting || !representante) return
+
+    setSubmitting(true)
+    setSubmitStatus({ type: 'idle', message: '' })
+    const payload = {
+      ...form,
+      numeroPartida: form.numeroPartida || form.numero,
+      representante,
+      ...(representante === 'juridico'
+        ? { apellidoPaterno: '', apellidoMaterno: '', nombres: '' }
+        : { razonSocial: '' }),
+    }
+    try {
+      const response = await fetch('/api/dashboard/publicidad-registral', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const result = await response.json() as { solicitud?: { id?: string }; error?: string }
+      if (!response.ok) throw new Error(result.error ?? 'No se pudo guardar la solicitud.')
+      setSubmitStatus({ type: 'success', message: `Solicitud guardada correctamente${result.solicitud?.id ? ` · ${result.solicitud.id}` : ''}.` })
+    } catch (error) {
+      setSubmitStatus({ type: 'error', message: error instanceof Error ? error.message : 'No se pudo guardar la solicitud.' })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   return (
     <div className={styles.sprlFlowPage}>
+      <VigenciaPoderChat
+        formData={{ ...form, representante }}
+        onFormData={applyChatData}
+      />
       <div className={styles.sprlFlowShell}>
         <div className={styles.sprlFlowHeaderTop}>
           <Link href="#" onClick={event => { event.preventDefault() }} className={styles.sprlFlowBack}>
@@ -147,169 +209,181 @@ export default function VigenciaPoderPersonaJuridica() {
 
         <SectionHeader>DATOS REGISTRALES</SectionHeader>
 
-        <div className={styles.sprlFlowSection}>
-          <div className={styles.sprlFlowGrid}>
-            <SelectRow
-              label="OFICINA REGISTRAL*:"
-              placeholder="Seleccionar"
-              options={registryOptions}
-              value=""
-              onChange={() => { }}
-            />
-
-            <div className={styles.sprlFlowRow}>
-              <span className={styles.sprlFlowLabel}>SOLICITAR POR:</span>
-              <div className={styles.sprlFlowRadioGroup}>
-                <label className={styles.sprlFlowRadio}>
-                  <input type="radio" name="solicitarPor" defaultChecked />
-                  <span>Partida</span>
-                </label>
-                <label className={styles.sprlFlowRadio}>
-                  <input type="radio" name="solicitarPor" />
-                  <span>Ficha</span>
-                </label>
-                <label className={styles.sprlFlowRadio}>
-                  <input type="radio" name="solicitarPor" />
-                  <span>Tomo/Folio</span>
-                </label>
-              </div>
-            </div>
-
-            <label className={styles.sprlFlowRow}>
-              <span className={styles.sprlFlowLabel}>NÚMERO *:</span>
-              <div>
-                <input
-                  className={styles.sprlFlowInput}
-                  placeholder="Escriba aquí..."
-                  name='numeroPartida'
-                />
-              </div>
-            </label>
-
-            <label className={styles.sprlFlowRow}>
-              <span className={styles.sprlFlowLabel}>N° Asiento:</span>
-              <div>
-                <input
-                  className={styles.sprlFlowInput}
-                  placeholder="Escriba aquí..."
-                  name='numeroAsiento'
-
-                />
-              </div>
-            </label>
-          </div>
-        </div>
-
-        <SectionHeader>DATOS DEL CARGO O APODERADO</SectionHeader>
-
-        <div className={styles.sprlFlowSection}>
-          <div className={styles.sprlFlowGrid}>
-            <label className={styles.sprlFlowRow}>
-              <span className={styles.sprlFlowLabel}>Cargo o Apoderado *:</span>
-              <input
-                className={styles.sprlFlowInput}
-                placeholder="Escriba aquí..."
-                name='cargoapoderado'
+        <form onSubmit={handleSubmit}>
+          <div className={styles.sprlFlowSection}>
+            <div className={styles.sprlFlowGrid}>
+              <SelectRow
+                label="OFICINA REGISTRAL*:"
+                placeholder="Seleccionar"
+                options={registryOptions}
+                value={form.oficinaRegistral}
+                onChange={value => updateForm('oficinaRegistral', value)}
               />
-            </label>
 
-            <div className={styles.sprlFlowRow}>
-              <span className={styles.sprlFlowLabel}>Representante:</span>
-              <div className={styles.sprlFlowRadioGroup}>
-                <label className={styles.sprlFlowRadio}>
-                  <input type="radio" name="representante" defaultChecked />
-                  <span>Natural</span>
-                </label>
-                <label className={styles.sprlFlowRadio}>
-                  <input type="radio" name="representante" />
-                  <span>Jurídico</span>
-                </label>
+              <div className={styles.sprlFlowRow}>
+                <span className={styles.sprlFlowLabel}>SOLICITAR POR:</span>
+                <div className={styles.sprlFlowRadioGroup}>
+                  <label className={styles.sprlFlowRadio}>
+                    <input type="radio" name="solicitarPor" value="partida" checked={form.solicitarPor === 'partida'} onChange={event => updateForm('solicitarPor', event.target.value)} />
+                    <span>Partida</span>
+                  </label>
+                  <label className={styles.sprlFlowRadio}>
+                    <input type="radio" name="solicitarPor" value="ficha" checked={form.solicitarPor === 'ficha'} onChange={event => updateForm('solicitarPor', event.target.value)} />
+                    <span>Ficha</span>
+                  </label>
+                  <label className={styles.sprlFlowRadio}>
+                    <input type="radio" name="solicitarPor" value="tomo_folio" checked={form.solicitarPor === 'tomo_folio'} onChange={event => updateForm('solicitarPor', event.target.value)} />
+                    <span>Tomo/Folio</span>
+                  </label>
+                </div>
               </div>
-            </div>
 
-            <div className={styles.sprlFlowRow}>
-              <span className={styles.sprlFlowLabel}>Apellido Paterno *:</span>
-              <div>
-                <div className={styles.sprlFlowInputStatusWrap}>
+              <label className={styles.sprlFlowRow}>
+                <span className={styles.sprlFlowLabel}>NÚMERO *:</span>
+                <div>
                   <input
                     className={styles.sprlFlowInput}
                     placeholder="Escriba aquí..."
-                    name='apellidoPaterno'
+                    name="numeroPartida" value={form.numeroPartida} onChange={event => updateForm('numeroPartida', event.target.value)}
                   />
-
                 </div>
-              </div>
-            </div>
+              </label>
 
-            <div className={styles.sprlFlowRow}>
-              <span className={styles.sprlFlowLabel}>Apellido Materno:</span>
-              <div>
-                <div className={styles.sprlFlowInputStatusWrap}>
+              <label className={styles.sprlFlowRow}>
+                <span className={styles.sprlFlowLabel}>N° Asiento:</span>
+                <div>
                   <input
                     className={styles.sprlFlowInput}
                     placeholder="Escriba aquí..."
-                    name='apellidoMaterno'
-                  />
-                  <span
-                    className={styles.sprlFlowRealtimeCheck}
-                    aria-hidden="true"
-                  >
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div className={styles.sprlFlowRow}>
-              <span className={styles.sprlFlowLabel}>Nombres *:</span>
-              <div>
-                <div className={styles.sprlFlowInputStatusWrap}>
-                  <input
-                    className={styles.sprlFlowInput}
-                    placeholder="Escriba aquí..."
-                    name='nombres'
+                    name="numeroAsiento" value={form.numeroAsiento} onChange={event => updateForm('numeroAsiento', event.target.value)}
 
                   />
-
                 </div>
-              </div>
+              </label>
             </div>
           </div>
-        </div>
 
-        <div style={{ marginTop: 8 }}>
-          <Link href="#" onClick={event => { event.preventDefault(); }} className={styles.sprlFlowPdfLink}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-              <path d="M14 2v6h6" />
-            </svg>
-            MODELO DE CERTIFICADO
-          </Link>
-        </div>
+          <SectionHeader>DATOS DEL CARGO O APODERADO</SectionHeader>
 
-        <div style={{ marginTop: 14, display: 'grid', gridTemplateColumns: '220px 1fr', gap: 12, alignItems: 'start' }}>
-          <div className={styles.sprlFlowLabel} style={{ alignSelf: 'start', paddingTop: 6 }}>
-            DATOS ADICIONALES
-            <div style={{ marginTop: 10, fontSize: 14, lineHeight: 1.6 }}>
-              - Cargo del representante(Gerente, Gerente General, Gerente Comercial, etc)
-              <br />
-              - Documento Oficial de identidad
+          <div className={styles.sprlFlowSection}>
+            <div className={styles.sprlFlowGrid}>
+              <label className={styles.sprlFlowRow}>
+                <span className={styles.sprlFlowLabel}>Cargo o Apoderado *:</span>
+                <input
+                  className={styles.sprlFlowInput}
+                  placeholder="Escriba aquí..."
+                  name="cargoapoderado" value={form.cargoApoderado} onChange={event => updateForm('cargoApoderado', event.target.value)}
+                />
+              </label>
+
+              <div className={styles.sprlFlowRow}>
+                <span className={styles.sprlFlowLabel}>Representante:</span>
+                <div className={styles.sprlFlowRadioGroup}>
+                  <label className={styles.sprlFlowRadio}>
+                    <input type="radio" name="representante" checked={representante === 'natural'} onChange={() => setRepresentante('natural')} />
+                    <span>Natural</span>
+                  </label>
+                  <label className={styles.sprlFlowRadio}>
+                    <input type="radio" name="representante" checked={representante === 'juridico'} onChange={() => setRepresentante('juridico')} />
+                    <span>Jurídico</span>
+                  </label>
+                </div>
+              </div>
+
+              {representante === 'juridico' ? <label className={styles.sprlFlowRow}>
+                <span className={styles.sprlFlowLabel}>Razón social *:</span>
+                <input className={styles.sprlFlowInput} placeholder="Escriba la razón social..." name="razonSocial" value={form.razonSocial} onChange={event => updateForm('razonSocial', event.target.value)} />
+              </label> : <>
+                <div className={styles.sprlFlowRow}>
+                  <span className={styles.sprlFlowLabel}>Apellido Paterno *:</span>
+                  <div>
+                    <div className={styles.sprlFlowInputStatusWrap}>
+                      <input
+                        className={styles.sprlFlowInput}
+                        placeholder="Escriba aquí..."
+                        name="apellidoPaterno" value={form.apellidoPaterno} onChange={event => updateForm('apellidoPaterno', event.target.value)}
+                      />
+
+                    </div>
+                  </div>
+                </div>
+
+                <div className={styles.sprlFlowRow}>
+                  <span className={styles.sprlFlowLabel}>Apellido Materno:</span>
+                  <div>
+                    <div className={styles.sprlFlowInputStatusWrap}>
+                      <input
+                        className={styles.sprlFlowInput}
+                        placeholder="Escriba aquí..."
+                        name="apellidoMaterno" value={form.apellidoMaterno} onChange={event => updateForm('apellidoMaterno', event.target.value)}
+                      />
+                      <span
+                        className={styles.sprlFlowRealtimeCheck}
+                        aria-hidden="true"
+                      >
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className={styles.sprlFlowRow}>
+                  <span className={styles.sprlFlowLabel}>Nombres *:</span>
+                  <div>
+                    <div className={styles.sprlFlowInputStatusWrap}>
+                      <input
+                        className={styles.sprlFlowInput}
+                        placeholder="Escriba aquí..."
+                        name="nombres" value={form.nombres} onChange={event => updateForm('nombres', event.target.value)}
+
+                      />
+
+                    </div>
+                  </div>
+                </div>
+              </>}
             </div>
           </div>
-          <textarea className={styles.sprlFlowTextarea} maxLength={200} />
-        </div>
 
-        <div className={styles.sprlFlowMuted} style={{ marginTop: 6, marginLeft: 232, color: '#ff4b3a' }}>
-          Max 200 caracteres
-        </div>
+          <div style={{ marginTop: 8 }}>
+            <Link href="#" onClick={event => { event.preventDefault(); }} className={styles.sprlFlowPdfLink}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <path d="M14 2v6h6" />
+              </svg>
+              MODELO DE CERTIFICADO
+            </Link>
+          </div>
 
-        <div className={styles.sprlFlowActions} style={{ marginTop: 24 }}>
-          <button type="button" className={styles.sprlFlowButtonSecondary} >
-            ← Regresar
-          </button>
-          <button type="button" className={styles.sprlFlowButtonPrimary} >
-            Solicitar Publicidad Registral
-          </button>
-        </div>
+          <div style={{ marginTop: 14, display: 'grid', gridTemplateColumns: '220px 1fr', gap: 12, alignItems: 'start' }}>
+            <div className={styles.sprlFlowLabel} style={{ alignSelf: 'start', paddingTop: 6 }}>
+              DATOS ADICIONALES
+              <div style={{ marginTop: 10, fontSize: 14, lineHeight: 1.6 }}>
+                - Cargo del representante(Gerente, Gerente General, Gerente Comercial, etc)
+                <br />
+                - Documento Oficial de identidad
+              </div>
+            </div>
+            <textarea className={styles.sprlFlowTextarea} maxLength={200} value={form.datosAdicionales} onChange={event => updateForm('datosAdicionales', event.target.value)} />
+          </div>
+
+          <div className={styles.sprlFlowMuted} style={{ marginTop: 6, marginLeft: 232, color: '#ff4b3a' }}>
+            Max 200 caracteres
+          </div>
+
+          <div className={styles.sprlFlowActions} style={{ marginTop: 24 }}>
+            <button type="button" className={styles.sprlFlowButtonSecondary} >
+              ← Regresar
+            </button>
+            <button type="submit" className={styles.sprlFlowButtonPrimary} disabled={submitting || !representante}>
+              {submitting ? 'Guardando...' : 'Solicitar Publicidad Registral'}
+            </button>
+          </div>
+          {submitStatus.type !== 'idle' && (
+            <div className={styles.sprlFlowMuted} style={{ marginTop: 12, color: submitStatus.type === 'success' ? '#587400' : '#c62828', textAlign: 'center' }}>
+              {submitStatus.message}
+            </div>
+          )}
+        </form>
 
         <div className={styles.sprlFlowMuted} style={{ marginTop: 18, color: '#95c11f' }}>
           (*) Campos obligatorio
