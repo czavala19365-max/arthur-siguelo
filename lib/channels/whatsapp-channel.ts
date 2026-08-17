@@ -47,13 +47,21 @@ function formatWhatsAppMessage(m: MovimientoJudicialAlerta): string {
   return lines.join('\n')
 }
 
+/** Twilio Content Variables no acepta saltos de línea, tabs ni espacios repetidos. */
+function sanitizeTemplateVariable(value: unknown): string {
+  return String(value ?? '')
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/ {2,}/g, ' ')
+    .trim()
+}
+
 export async function enviarWhatsApp(
   telefono: string,
   movimiento: MovimientoJudicialAlerta
 ): Promise<boolean> {
   const accountSid = process.env.TWILIO_ACCOUNT_SID
   const authToken = process.env.TWILIO_AUTH_TOKEN
-  const from = process.env.TWILIO_WHATSAPP_FROM 
+  const from = process.env.TWILIO_WHATSAPP_FROM
   const contentSid = process.env.TWILIO_TEMPLATE_SID
 
   if (!accountSid || !authToken) {
@@ -61,8 +69,15 @@ export async function enviarWhatsApp(
     return false
   }
 
-  if (!contentSid) {
-    console.warn('[WhatsApp] Template SID no configurado')
+  if (!contentSid || !from) {
+    console.warn('[WhatsApp] TWILIO_TEMPLATE_SID o TWILIO_WHATSAPP_FROM no configurado')
+    return false
+  }
+
+  const numeroExpediente = sanitizeTemplateVariable(movimiento.numeroExpediente)
+  const descripcion = sanitizeTemplateVariable(movimiento.descripcion)
+  if (!numeroExpediente || !descripcion) {
+    console.warn('[WhatsApp] La plantilla necesita numeroExpediente y descripcion')
     return false
   }
 
@@ -74,21 +89,149 @@ export async function enviarWhatsApp(
       return false
     }
     const toNumber = `whatsapp:${e164}`
+    const contentVariables = JSON.stringify({
+      '2': numeroExpediente,
+      '3': descripcion,
+    })
+
+    console.log('[WhatsApp] Enviando template', {
+      contentSid,
+      variables: { '2': numeroExpediente.length, '3': descripcion.length },
+    })
 
     await client.messages.create({
       from,
       to: toNumber,
       contentSid: contentSid,
-      contentVariables: JSON.stringify({
-        2: movimiento.numeroExpediente,
-        3: movimiento.descripcion,
-        4: movimiento.sugerenciaIA,
-      }),
+      contentVariables,
     })
     console.log(`[WhatsApp] Mensaje enviado a ${e164}`)
     return true
   } catch (err) {
-    console.error('[WhatsApp] Error:', err instanceof Error ? err.message : String(err))
+    const twilioError = err as { message?: string; code?: number; status?: number; moreInfo?: string }
+    console.error('[WhatsApp] Error:', {
+      message: twilioError.message || String(err),
+      code: twilioError.code,
+      status: twilioError.status,
+      moreInfo: twilioError.moreInfo,
+      contentSid,
+    })
+    return false
+  }
+}
+
+function newNormalizeWhatsAppE164(telefono: string): string | null {
+  const limpio = telefono.replace(/[^\d+]/g, '')
+
+  if (!limpio) return null
+
+  if (limpio.startsWith('+')) {
+    return limpio
+  }
+
+  // Perú
+  if (limpio.startsWith('9') && limpio.length === 9) {
+    return `+51${limpio}`
+  }
+
+  return null
+}
+
+export async function enviarWhatsAppPublicidadRegistral(
+  telefono: string,
+  solicitud: {
+    numeroPartida: string
+    oficinaRegistral: string
+    cargoApoderado: string
+    representante: string
+    razonSocial?: string
+    apellidoPaterno?: string
+    apellidoMaterno?: string
+    nombres?: string
+  },
+): Promise<boolean> {
+  const accountSid = process.env.TWILIO_ACCOUNT_SID
+  const authToken = process.env.TWILIO_AUTH_TOKEN
+  const from = process.env.TWILIO_WHATSAPP_FROM
+  const contentSid = process.env.TWILIO_TEMPLATE_SID
+
+  if (!accountSid || !authToken) {
+    console.warn('[WhatsApp PR] Credenciales Twilio no configuradas')
+    return false
+  }
+
+  if (!contentSid || !from) {
+    console.warn('[WhatsApp PR] TWILIO_TEMPLATE_SID o TWILIO_WHATSAPP_FROM no configurado')
+    return false
+  }
+
+  try {
+    const client = twilio(accountSid, authToken)
+
+    const e164 = newNormalizeWhatsAppE164(telefono)
+
+    if (!e164) {
+      console.warn('[WhatsApp PR] Numero invalido:', telefono)
+      return false
+    }
+
+    const nombre =
+      solicitud.representante === 'juridico'
+        ? solicitud.razonSocial ?? ''
+        : `${solicitud.nombres ?? ''} ${solicitud.apellidoPaterno ?? ''} ${solicitud.apellidoMaterno ?? ''}`.trim()
+
+    const numeroPartida = sanitizeTemplateVariable(
+      solicitud.numeroPartida,
+    )
+
+    const descripcion = sanitizeTemplateVariable(
+      `Nueva solicitud de Vigencia de Poder | Oficina: ${solicitud.oficinaRegistral} | Solicitante: ${nombre} | Cargo: ${solicitud.cargoApoderado}`,
+    )
+
+    if (!numeroPartida || !descripcion) {
+      console.warn('[WhatsApp PR] La plantilla necesita numeroPartida y descripcion')
+      return false
+    }
+
+    const contentVariables = JSON.stringify({
+      '2': numeroPartida,
+      '3': descripcion,
+    })
+
+    console.log('[WhatsApp PR] Enviando template', {
+      contentSid,
+      variables: {
+        '2': numeroPartida,
+        '3': descripcion.length,
+      },
+    })
+
+    await client.messages.create({
+      from,
+      to: `whatsapp:${e164}`,
+      contentSid,
+      contentVariables,
+    })
+
+    console.log(`[WhatsApp PR] Mensaje enviado a ${e164}`)
+
+    return true
+  } catch (err) {
+    const twilioError = err as {
+      message?: string
+      code?: number
+      status?: number
+      moreInfo?: string
+    }
+
+    console.error('[WhatsApp PR] Error:', {
+      message: twilioError.message || String(err),
+      code: twilioError.code,
+      status: twilioError.status,
+      moreInfo: twilioError.moreInfo,
+      contentSid,
+    })
+
     return false
   }
 }
@@ -100,7 +243,7 @@ export async function enviarSuscripcionWhatsApp(
 ): Promise<boolean> {
   const accountSid = process.env.TWILIO_ACCOUNT_SID
   const authToken = process.env.TWILIO_AUTH_TOKEN
-  const from = process.env.TWILIO_WHATSAPP_FROM 
+  const from = process.env.TWILIO_WHATSAPP_FROM
   const templateSid = process.env.TWILIO_TEMPLATE_SID
 
   if (!accountSid || !authToken) {
@@ -121,7 +264,7 @@ export async function enviarSuscripcionWhatsApp(
       '',
       'Gracias por usar Arthur-IA',
     ].join('\n')
-    
+
     const e164 = normalizeWhatsAppE164(telefono)
     if (!e164) {
       console.warn('[WhatsApp] Numero invalido:', telefono)

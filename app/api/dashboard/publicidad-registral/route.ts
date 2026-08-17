@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createVigenciaPoderSolicitud, type VigenciaPoderData } from '@/lib/solicitudes-servicios'
+import { enviarWhatsAppPublicidadRegistral } from '@/lib/channels/whatsapp-channel'
 
 function isValidBody(body: Partial<VigenciaPoderData>) {
   return Boolean(
@@ -38,6 +39,37 @@ export async function POST(request: Request) {
       razonSocial: body.razonSocial?.trim().toUpperCase() ?? '',
       datosAdicionales: body.datosAdicionales?.trim().toUpperCase() ?? '',
     })
+
+    // ==========================================
+    // ALERTA WHATSAPP
+    // ==========================================
+
+    const whatsappDestino = process.env.PUBLICIDAD_REGISTRAL_WHATSAPP_TO
+
+    if (whatsappDestino) {
+      const whatsappEnviado = await enviarWhatsAppPublicidadRegistral(
+        whatsappDestino,
+        {
+          numeroPartida: body.numeroPartida!.trim().toUpperCase(),
+          oficinaRegistral: body.oficinaRegistral!.trim().toUpperCase(),
+          cargoApoderado: body.cargoApoderado!.trim().toUpperCase(),
+          representante: body.representante!,
+          razonSocial: body.razonSocial?.trim().toUpperCase() ?? '',
+          apellidoPaterno: body.apellidoPaterno?.trim().toUpperCase() ?? '',
+          apellidoMaterno: body.apellidoMaterno?.trim().toUpperCase() ?? '',
+          nombres: body.nombres?.trim().toUpperCase() ?? '',
+        },
+      )
+
+      console.log(
+        `[WhatsApp PR] Alerta ${whatsappEnviado ? 'enviada' : 'NO enviada'}`
+      )
+    } else {
+      console.warn(
+        '[WhatsApp PR] PUBLICIDAD_REGISTRAL_WHATSAPP_TO no configurado'
+      )
+    }
+
 
     return NextResponse.json({ solicitud }, { status: 201 })
   } catch (error) {
