@@ -129,7 +129,7 @@ export default function Sidebar({ observadosCount = 0 }: SidebarProps) {
 
   const links = [
     { href: '/dashboard', label: 'Inicio', hasAlert: false, Icon: IconHome },
-    { href: '/dashboard/publicidad-registral', label: 'Publicidad Registral', hasAlert: false, Icon: IconPublicidad },
+    { href: '/dashboard/publicidad-registral-2', label: 'Publicidad Registral', hasAlert: false, Icon: IconPublicidad },
     { href: '/dashboard/partidas-juridicas', label: 'Partidas - Personas Jurídicas', hasAlert: false, Icon: IconPartidas },
     { href: '/dashboard/agenda', label: 'Agenda de Plazos', hasAlert: false, Icon: IconCalendar },
     { href: '/dashboard/alertas', label: 'Alertas', hasAlert: false, Icon: IconBell },
