@@ -46,6 +46,14 @@ function extractCompanyName(text: string): string | null {
   return null
 }
 
+function extractCorrectedCompanyName(text: string): string | null {
+  if (!/\b(corrige|corregir|cambia|cambiar|modifica|modificar|ahora|debe\s+ser)\b/i.test(text)) return null
+  const company = text.match(/\b(?:raz[oó]n\s+social|empresa|denominaci[oó]n)\s*(?:ahora\s+)?(?:sea|es|a|por|:)?\s*(.+)$/i)?.[1]
+  if (!company) return null
+  const cleaned = stripCorporateSuffix(trimCompanyName(company))
+  return cleaned.length >= 3 ? cleaned : null
+}
+
 async function searchCompany(request: Request, company: string): Promise<SearchResult | null> {
   try {
     const url = new URL('/api/personas-juridicas/buscar', request.url)
@@ -173,6 +181,72 @@ function extractMessageFields(text: string): FormData {
   return inferred
 }
 
+function splitNaturalPersonName(value: string): FormData | null {
+  const words = value.trim().replace(/\s+/g, ' ').split(' ').filter(Boolean)
+  if (words.length < 2) return null
+
+  return {
+    representante: 'natural',
+    nombres: words.length > 2 ? words.slice(0, -2).join(' ') : words[0],
+    apellidoPaterno: words.length > 2 ? words.at(-2) ?? '' : words[1],
+    apellidoMaterno: words.length > 2 ? words.at(-1) ?? '' : '',
+    razonSocial: '',
+  }
+}
+
+function extractCorrectionFields(text: string): FormData {
+  if (!/\b(corrige|corregir|cambia|cambiar|modifica|modificar|ahora|debe\s+ser)\b/i.test(text)) return {}
+
+  const corrected: FormData = {}
+  const asiento = text.match(/\basiento\s*(?:n[°º]?\.?\s*)?(?:sea|es|a|por|:)?\s*([A-Z]\d[A-Z0-9-]*)\b/i)?.[1]
+  if (asiento) corrected.numeroAsiento = asiento
+
+  const cargo = text.match(/\b(?:cargo|apoderado)\s*(?:sea|es|a|por|:)?\s*(gerente\s+(?:general|gneral)|apoderado|director|presidente|administrador)\b/i)?.[1]
+    ?? text.match(/\b(gerente\s+(?:general|gneral)|apoderado|director|presidente|administrador)\b/i)?.[1]
+  if (cargo) corrected.cargoApoderado = cargo.replace(/gneral/i, 'general')
+
+  const name = text.match(/\b(?:nombre|a\s+nombre\s+de)\b(?:\s+(?:(?:ahora\s+)?(?:sea|es|a|por))\s+|\s*:\s*|\s+)([a-záéíóúñ]+(?:\s+[a-záéíóúñ]+)+)\s*$/i)?.[1]
+  const naturalPerson = name ? splitNaturalPersonName(name) : null
+  if (naturalPerson) Object.assign(corrected, naturalPerson)
+
+  const nombres = text.match(/\bnombres?\s*(?:ahora\s+)?(?:sea|es|a|por|:)?\s*([a-záéíóúñ ]+?)(?:[,.]|$)/i)?.[1]?.trim()
+  if (nombres && !naturalPerson) corrected.nombres = nombres
+  const apellidoPaterno = text.match(/\bapellido\s+paterno\s*(?:ahora\s+)?(?:sea|es|a|por|:)?\s*([a-záéíóúñ]+)\b/i)?.[1]
+  if (apellidoPaterno) corrected.apellidoPaterno = apellidoPaterno
+  const apellidoMaterno = text.match(/\bapellido\s+materno\s*(?:ahora\s+)?(?:sea|es|a|por|:)?\s*([a-záéíóúñ]+)\b/i)?.[1]
+  if (apellidoMaterno) corrected.apellidoMaterno = apellidoMaterno
+
+  if (/\brepresentante\s*(?:sea|es|a|por|:)?\s*jur[ií]dico\b/i.test(text)) corrected.representante = 'juridico'
+  if (/\brepresentante\s*(?:sea|es|a|por|:)?\s*natural\b/i.test(text)) corrected.representante = 'natural'
+
+  const partida = text.match(/\bpartida\s*(?:n[°º]?\.?\s*)?(?:sea|es|a|por|:)?\s*(\d+[A-Z0-9-]*)\b/i)?.[1]
+  if (partida) {
+    corrected.numeroPartida = partida
+    corrected.numero = partida
+  }
+
+  if (/\boficina\s+registral\s*(?:sea|es|a|por|:)?\s*/i.test(text)) {
+    const office = text.match(/\boficina\s+registral\s*(?:sea|es|a|por|:)?\s*([a-záéíóúñ ]+?)(?:[,.]|$)/i)?.[1]?.trim()
+    if (office) corrected.oficinaRegistral = office
+  }
+
+  const additionalData = text.match(/\b(?:datos?\s+adicionales?|descripci[oó]n)\s*(?:ahora\s+)?(?:sea|es|a|por|:)?\s*(.+)$/i)?.[1]?.trim()
+  if (additionalData) corrected.datosAdicionales = additionalData
+
+  if (/\bficha\b/i.test(text)) corrected.solicitarPor = 'ficha'
+  else if (/\btomo\s*\/\s*folio\b/i.test(text)) corrected.solicitarPor = 'tomo_folio'
+  else if (/\bpartida\b/i.test(text)) corrected.solicitarPor = 'partida'
+  return corrected
+}
+
+function applyCorrections(current: FormData, corrections: FormData): FormData {
+  const updated = { ...current }
+  for (const [key, value] of Object.entries(corrections)) {
+    if (value !== undefined) updated[key] = value
+  }
+  return updated
+}
+
 function inferInitialFormReply(text: string, previousText: string): FormData {
   const inferred: FormData = {}
   const normalized = text.trim()
@@ -238,6 +312,8 @@ export async function POST(request: Request) {
     let effectiveFormData = { ...(body.formData ?? {}) }
 
     if (lastMessage?.role === 'user') {
+      const corrections = extractCorrectionFields(lastMessage.content)
+      effectiveFormData = applyCorrections(effectiveFormData, corrections)
       effectiveFormData = mergeFormData(effectiveFormData, extractMessageFields(lastMessage.content))
       const inferred = inferInitialFormReply(lastMessage.content, previousMessage?.content ?? '')
       effectiveFormData = mergeFormData(effectiveFormData, inferred)
@@ -254,7 +330,9 @@ export async function POST(request: Request) {
       const asiento = extractAsientoReply(lastMessage.content)
       if (asiento) effectiveFormData.numeroAsiento = asiento
     }
-    const company = lastMessage?.role === 'user' ? extractCompanyName(lastMessage.content) : null
+    const company = lastMessage?.role === 'user'
+      ? extractCompanyName(lastMessage.content) ?? extractCorrectedCompanyName(lastMessage.content)
+      : null
 
     if (company) {
       const search = await searchCompany(request, company)
@@ -282,6 +360,7 @@ export async function POST(request: Request) {
         } catch { }
       }
       if (lastMessage?.role === 'user' && previousMessage?.role === 'assistant') {
+        mergedData = applyCorrections(mergedData, extractCorrectionFields(lastMessage.content))
         const inferred = inferInitialFormReply(lastMessage.content, previousMessage.content)
         mergedData = mergeFormData(mergedData, inferred)
         const naturalName = inferNaturalNameReply(lastMessage.content, previousMessage.content, mergedData)

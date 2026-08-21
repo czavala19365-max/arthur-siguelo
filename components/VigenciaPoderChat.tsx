@@ -14,6 +14,7 @@ interface Props {
 }
 
 const FORM_DATA_RE = /\[\[FORM_DATA:([\s\S]*?)\]\]/
+const CORRECTION_REQUEST_RE = /\b(corrige|corregir|cambia|cambiar|modifica|modificar|ahora|debe\s+ser)\b/i
 
 function normalizeChatData(data: FormData, userText: string, previousAssistantText: string, currentPartida: string): FormData {
   const normalized = { ...data }
@@ -106,7 +107,7 @@ export default function VigenciaPoderChat({ formData, onFormData }: Props) {
     setLoading(true)
 
     try {
-      const company = extractCompanyName(text)
+      const company = CORRECTION_REQUEST_RE.test(text) ? null : extractCompanyName(text)
       if (company) {
         const search = await searchCompany(company)
         const result = search?.resultados?.[0]
