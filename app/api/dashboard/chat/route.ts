@@ -21,6 +21,9 @@ function detectPartidaIntent(text: string): boolean {
 function extractCompanyName(text: string): string | null {
   const clean = text.replace(/[¿?¡!]/g, ' ').trim()
   const patterns = [
+    /(?:raz[oó]n social|denominaci[oó]n)\s*(?:es|:)?\s*(.+)$/i,
+    /(?:empresa|compa[nñ][ií]a)\s*(?:es|:)?\s*(.+)$/i,
+    /vigencia\s+de\s+poder\s+(?:de|para)\s+(.+)$/i,
     // Greedy (.+) para capturar nombres con puntos internos como "S.A.C."
     /partida\s+(?:registral\s+)?de\s+la\s+empresa\s+(.+)$/i,
     /quiero\s+(?:saber|conocer)\s+la\s+partida\s+(?:registral\s+)?de\s+(.+)$/i,
@@ -188,11 +191,69 @@ NAVEGACIÓN — cuando el usuario mencione:
 
 Responde siempre en español, manteniendo un tono formal y profesional en todas las respuestas.`
 
+const PUBLICIDAD_REGISTRAL_SYSTEM = `
+MODO FORMULARIO: estás ayudando a completar una solicitud de Certificado de Vigencia de Poder de Persona Jurídica.
+Conversa de forma simple y natural. En tu primer mensaje y cada vez que falten datos, pide DE GOLPE todos los datos faltantes en una sola lista o pregunta. Nunca pidas un solo dato por turno.
+Los datos necesarios son: oficinaRegistral, solicitarPor (partida, ficha o tomo_folio), numero, numeroAsiento (opcional), cargoApoderado, representante (natural o juridico), y datosAdicionales (opcional).
+Si representante es natural, pide apellidoPaterno, apellidoMaterno (opcional) y nombres. Si representante es juridico, pide solo razonSocial y no pidas apellidos ni nombres.
+Entiende formas habituales como "es Lima", "partida 123", "soy jurídico", "la empresa es ABC SAC", "el cargo es gerente general" o "no tengo el asiento".
+No inventes datos y confirma cualquier dato ambiguo. El frontend te enviará el estado actual en el mensaje de sistema con el formato DATOS_ACTUALES. Usa esos valores para pedir únicamente los datos que sigan vacíos.
+En CADA respuesta añade una línea final con todos los valores que ya conozcas y los campos vacíos como cadenas vacías. Usa EXACTAMENTE este formato JSON, sin markdown:
+[[FORM_DATA:{"oficinaRegistral":"...","solicitarPor":"partida|ficha|tomo_folio","numero":"...","numeroAsiento":"...","cargoApoderado":"...","representante":"natural|juridico","apellidoPaterno":"...","apellidoMaterno":"...","nombres":"...","razonSocial":"...","datosAdicionales":"..."}]]
+Para campos opcionales usa una cadena vacía. Incluye siempre todas las claves. Cuando todos los obligatorios estén completos, muestra un resumen y confirma que el formulario ya está listo.`
+
+function formDataWithPartida(formData: Record<string, string> | undefined, razonSocial: string, partida: string) {
+  return {
+    oficinaRegistral: formData?.oficinaRegistral ?? '',
+    solicitarPor: formData?.solicitarPor ?? 'partida',
+    numero: partida,
+    numeroAsiento: formData?.numeroAsiento ?? '',
+    cargoApoderado: formData?.cargoApoderado ?? '',
+    representante: 'juridico',
+    apellidoPaterno: '',
+    apellidoMaterno: '',
+    nombres: '',
+    razonSocial: formData?.razonSocial || razonSocial,
+    datosAdicionales: formData?.datosAdicionales ?? '',
+  }
+}
+
+async function buscarPartidaDesdeDirectorio(request: Request, razon: string): Promise<{ resultados: PersonaJuridica[] } | null> {
+  try {
+    const url = new URL('/api/personas-juridicas/buscar', request.url)
+    url.searchParams.set('razon', razon.toUpperCase())
+    url.searchParams.set('siglas', '')
+    url.searchParams.set('pagina', '1')
+    const response = await fetch(url)
+    if (!response.ok) return null
+    return await response.json() as { resultados: PersonaJuridica[] }
+  } catch {
+    return null
+  }
+}
+
 export async function POST(request: Request) {
   try {
-    const body = await request.json() as { messages: ChatMsg[] }
+    const body = await request.json() as { messages: ChatMsg[]; formType?: string; formData?: Record<string, string> }
     const messages = body.messages
     const lastMsg = messages[messages.length - 1]
+
+    if (body.formType === 'publicidad_registral' && lastMsg?.role === 'user') {
+      const company = extractCompanyName(lastMsg.content) ?? body.formData?.razonSocial ?? null
+      if (company && company.length >= 3) {
+        const search = await buscarPartidaDesdeDirectorio(request, company)
+        if (search?.resultados.length) {
+          const first = search.resultados[0]
+          const formData = formDataWithPartida(body.formData, company, first.partida)
+          const extra = search.resultados.length > 1
+            ? ` Se encontraron ${search.resultados.length} resultados; se colocó el primero. Verifica que corresponda a tu empresa.`
+            : ''
+          return Response.json({
+            text: `Encontré la razón social en SUNARP y completé el número de partida: ${first.partida}, oficina ${first.oficina}.${extra}\n\n[[FORM_DATA:${JSON.stringify(formData)}]]`,
+          })
+        }
+      }
+    }
 
     // ── Intercepción: búsqueda de partida registral ───────────────────────────
     if (lastMsg?.role === 'user' && detectPartidaIntent(lastMsg.content)) {
@@ -208,7 +269,11 @@ export async function POST(request: Request) {
     }
 
     // ── Ruta normal: Claude ───────────────────────────────────────────────────
-    const result = await chatWithProvider(messages, 'anthropic', SUNARP_SYSTEM)
+    const currentForm = body.formData ? `\nDATOS_ACTUALES:\n${JSON.stringify(body.formData)}` : ''
+    const systemPrompt = body.formType === 'publicidad_registral'
+      ? `${SUNARP_SYSTEM}\n${PUBLICIDAD_REGISTRAL_SYSTEM}${currentForm}`
+      : SUNARP_SYSTEM
+    const result = await chatWithProvider(messages, 'anthropic', systemPrompt)
     return Response.json(result)
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error)

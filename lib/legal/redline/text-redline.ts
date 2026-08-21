@@ -1,0 +1,683 @@
+import { diffWordsWithSpace } from 'diff'
+import mammoth from 'mammoth'
+import PizZip from 'pizzip'
+import { getAnthropicClient } from '@/lib/legal/anthropic'
+import { buildSummaryDocx } from './summary-docx'
+
+/**
+ * Redline "text-first" con tracked changes granulares — no usa sandbox.
+ *
+ *   1. Extrae texto plano de ambos DOCX con mammoth.
+ *   2. Pide a Sonnet 5 un PLAN DE EDICIONES estructurado (JSON) con
+ *      ubicacion estructural ("Clausula Tercera", "Seccion 2.1"...) por
+ *      cada cambio, ancladas a fragmentos exactos del texto original.
+ *   3. Aplica cada edicion sobre el XML del DOCX preservando el formato:
+ *      los <w:ins>/<w:del> envuelven solo el fragmento cambiado, no el
+ *      parrafo completo. Los runs anteriores y posteriores se preservan
+ *      intactos con su formato original.
+ *
+ * Devuelve dos DOCX: el redline con tracked changes reales y un resumen
+ * separado en formato Arthur (Arial 11, A4) para descargar por separado.
+ */
+
+export interface EditItem {
+  location: string  // p.ej. "CLAUSULA TERCERA - PRECIO", "COMPARECENCIA", "SECCION 2.1"
+  kind: 'substitution' | 'insertion' | 'deletion'
+  old_text?: string
+  new_text?: string
+  after_text?: string
+  context_before?: string
+  description?: string  // resumen humano corto del cambio
+}
+
+export interface ChangeGroup {
+  location: string
+  changes: EditItem[]
+}
+
+export interface RedlineArtifacts {
+  docx: Buffer
+  summaryDocx: Buffer
+  summary: string
+  changes: ChangeGroup[]
+  stats: {
+    substitutions: number
+    insertions: number
+    deletions: number
+    total: number
+    unmatched: number
+  }
+}
+
+export interface RedlineInput {
+  oldBuffer: Buffer
+  oldName: string
+  newBuffer: Buffer
+  newName: string
+}
+
+export type ProgressPhase = 'extracting' | 'diffing' | 'applying' | 'building_summary' | 'done'
+
+export interface ProgressEvent {
+  phase: ProgressPhase
+  progress: number
+  message: string
+}
+
+export type ProgressCallback = (event: ProgressEvent) => void
+
+interface EditPlan {
+  edits: EditItem[]
+  summary: string
+}
+
+const AUTHOR = 'Arthur (Redline)'
+
+const DIFF_SYSTEM = `Eres un experto en comparacion de documentos legales bajo ley peruana. Recibes el TEXTO PLANO de un contrato original (A) y uno revisado (B). Tu tarea es producir un PLAN DE EDICIONES estructurado que, aplicado a A, resulte exactamente en B.
+
+Devuelve SOLO un JSON valido (sin fences de markdown, sin comentarios), con esta forma exacta:
+{
+  "edits": [
+    {
+      "location": "ubicacion estructural en el documento",
+      "kind": "substitution" | "insertion" | "deletion",
+      "old_text": "...",         // requerido en substitution y deletion
+      "new_text": "...",         // requerido en substitution y insertion
+      "after_text": "...",       // requerido en insertion — fragmento del original despues del cual insertar
+      "context_before": "...",   // opcional — 30-60 caracteres previos si el old_text/after_text es ambiguo
+      "description": "explicacion corta y humana del cambio"
+    }
+  ],
+  "summary": "resumen ejecutivo en espanol, maximo 15 lineas, describiendo los cambios globales"
+}
+
+Reglas ESTRICTAS:
+- Cada "old_text", "after_text" y "text_to_delete" debe aparecer EXACTAMENTE en el ORIGINAL (caracter por caracter, incluyendo puntuacion y espacios). Copia y pega desde el ORIGINAL.
+- Cada edicion debe ser lo mas GRANULAR posible: si solo cambia una palabra, "old_text" es esa palabra (no toda la oracion). Si cambia una fecha, es la fecha exacta. Si cambia un monto, es el monto exacto. Esto es CRITICO para que el redline no marque parrafos enteros como cambiados.
+- Si el mismo fragmento aparece MAS de una vez en el ORIGINAL, agrega "context_before" con los 30-60 caracteres inmediatamente anteriores para desambiguar.
+- "location" debe ser la ubicacion estructural donde ocurre el cambio, tal como aparece en el documento: "COMPARECENCIA", "CLAUSULA PRIMERA - ANTECEDENTES", "CLAUSULA TERCERA - PRECIO", "SECCION 4.2 - GARANTIAS", "SUSCRIPCION", "ANEXO I", etc. Se usa para agrupar los cambios en el resumen.
+- "description" es una frase corta (max 100 caracteres) que explica el cambio para un abogado revisor. Ejemplos: "Actualiza la fecha de vencimiento", "Modifica la tasa de interes de 8% a 10%", "Agrega parrafo sobre confidencialidad".
+- Nunca inventes cambios que no esten en B. Si el original y el revisado son identicos, devuelve edits vacio y summary "No se detectaron cambios sustanciales.".
+- El "summary" debe estar en espanol, en oraciones planas, sin markdown, describiendo los cambios globales del contrato (que se agrego, que se modifico, que se elimino). Es lo que un abogado leeria primero para tener el panorama.`
+
+export async function generateRedline(
+  input: RedlineInput,
+  onProgress?: ProgressCallback,
+): Promise<RedlineArtifacts> {
+  const emit = (event: ProgressEvent) => onProgress?.(event)
+
+  emit({ phase: 'extracting', progress: 15, message: 'Extrayendo texto de ambos DOCX...' })
+  const [originalText, revisedText] = await Promise.all([
+    extractText(input.oldBuffer),
+    extractText(input.newBuffer),
+  ])
+
+  emit({ phase: 'diffing', progress: 40, message: 'Comparando versiones con IA...' })
+  const plan = await computeEditPlan(originalText, revisedText)
+
+  emit({
+    phase: 'applying',
+    progress: 70,
+    message: `Aplicando ${plan.edits.length} cambio(s) al DOCX...`,
+  })
+  const { buffer, stats } = applyEditsToDocx(input.oldBuffer, plan)
+
+  emit({ phase: 'building_summary', progress: 90, message: 'Generando resumen en Word...' })
+  const grouped = groupChangesByLocation(plan.edits)
+  const summaryDocx = await buildSummaryDocx({
+    oldName: input.oldName,
+    newName: input.newName,
+    summary: plan.summary,
+    groups: grouped,
+    stats,
+  })
+
+  emit({ phase: 'done', progress: 100, message: 'Redline listo.' })
+
+  return {
+    docx: buffer,
+    summaryDocx,
+    summary: plan.summary,
+    changes: grouped,
+    stats: {
+      substitutions: stats.substitutions,
+      insertions: stats.insertions,
+      deletions: stats.deletions,
+      total: stats.substitutions + stats.insertions + stats.deletions,
+      unmatched: stats.unmatched,
+    },
+  }
+}
+
+async function extractText(buffer: Buffer): Promise<string> {
+  const res = await mammoth.extractRawText({ buffer })
+  return res.value
+}
+
+async function computeEditPlan(originalText: string, revisedText: string): Promise<EditPlan> {
+  const client = getAnthropicClient()
+  const response = await client.messages.create({
+    model: 'claude-sonnet-5',
+    max_tokens: 16000,
+    thinking: { type: 'disabled' },
+    system: DIFF_SYSTEM,
+    messages: [
+      {
+        role: 'user',
+        content: `ORIGINAL:\n${originalText}\n\n---\n\nREVISADO:\n${revisedText}\n\nProduce el plan de ediciones en el JSON requerido.`,
+      },
+    ],
+  })
+
+  const text = response.content
+    .filter((b): b is Extract<(typeof response.content)[number], { type: 'text' }> => b.type === 'text')
+    .map(b => b.text)
+    .join('\n')
+
+  const parsed = parsePlanJSON(text)
+  if (!parsed) {
+    throw new Error(`El modelo no devolvio un JSON de plan de ediciones valido. Texto:\n${text.slice(-500)}`)
+  }
+  return parsed
+}
+
+function parsePlanJSON(text: string): EditPlan | null {
+  const fenced = text.match(/```(?:json)?\s*([\s\S]+?)```/i)
+  const candidate = fenced ? fenced[1] : text
+  const first = candidate.indexOf('{')
+  const last = candidate.lastIndexOf('}')
+  if (first === -1 || last <= first) return null
+  try {
+    const parsed = JSON.parse(candidate.slice(first, last + 1))
+    return {
+      edits: Array.isArray(parsed.edits) ? parsed.edits.filter(isValidEdit) : [],
+      summary: typeof parsed.summary === 'string' ? parsed.summary : '',
+    }
+  } catch {
+    return null
+  }
+}
+
+function isValidEdit(e: unknown): e is EditItem {
+  if (!e || typeof e !== 'object') return false
+  const obj = e as Record<string, unknown>
+  if (typeof obj.location !== 'string') return false
+  return obj.kind === 'substitution' || obj.kind === 'insertion' || obj.kind === 'deletion'
+}
+
+function groupChangesByLocation(edits: EditItem[]): ChangeGroup[] {
+  const map = new Map<string, EditItem[]>()
+  for (const edit of edits) {
+    const loc = edit.location || 'SIN UBICACION'
+    if (!map.has(loc)) map.set(loc, [])
+    map.get(loc)!.push(edit)
+  }
+  return Array.from(map.entries()).map(([location, changes]) => ({ location, changes }))
+}
+
+// ---------------------------------------------------------------------------
+// Aplicacion XML de tracked changes granulares
+// ---------------------------------------------------------------------------
+
+interface ApplyStats {
+  substitutions: number
+  insertions: number
+  deletions: number
+  unmatched: number
+}
+
+interface RunSegment {
+  text: string    // texto visible del <w:t> (unescape aplicado)
+  rPr: string     // "<w:rPr>...</w:rPr>" del run, o cadena vacia
+}
+
+interface ParagraphMeta {
+  index: number
+  raw: string             // XML actual (se actualiza tras cada edicion)
+  originalRaw: string     // XML tal como estaba en el body original
+  startInBody: number     // offset del inicio de <w:p> en el body original
+  endInBody: number       // offset del fin de </w:p> en el body original
+  text: string            // concatenacion de w:t (unescaped)
+  segments: RunSegment[]
+  pPr: string
+  hasComplexContent: boolean  // true si contiene imagenes, tablas anidadas u otros elementos que no manejamos
+}
+
+function applyEditsToDocx(
+  originalBuffer: Buffer,
+  plan: EditPlan,
+): { buffer: Buffer; stats: ApplyStats } {
+  const zip = new PizZip(originalBuffer)
+  const docFile = zip.file('word/document.xml')
+  if (!docFile) throw new Error('DOCX invalido: no contiene word/document.xml')
+  const originalXml = docFile.asText()
+
+  const { pre, body, post } = splitDocumentBody(originalXml)
+  const paragraphs = parseParagraphs(body)
+
+  const stats: ApplyStats = { substitutions: 0, insertions: 0, deletions: 0, unmatched: 0 }
+  let idCounter = highestExistingId(originalXml) + 100
+  const nextId = () => idCounter++
+
+  const now = new Date().toISOString()
+
+  for (const edit of plan.edits) {
+    if (edit.kind === 'substitution' && edit.old_text && edit.new_text !== undefined) {
+      const applied = applyGranularSubstitution(
+        paragraphs,
+        edit.old_text,
+        edit.new_text,
+        edit.context_before,
+        nextId,
+        now,
+      )
+      applied ? stats.substitutions++ : stats.unmatched++
+    } else if (edit.kind === 'insertion' && edit.after_text && edit.new_text !== undefined) {
+      const applied = applyParagraphInsertion(
+        paragraphs,
+        edit.after_text,
+        edit.new_text,
+        edit.context_before,
+        nextId,
+        now,
+      )
+      applied ? stats.insertions++ : stats.unmatched++
+    } else if (edit.kind === 'deletion' && edit.old_text) {
+      const applied = applyGranularDeletion(
+        paragraphs,
+        edit.old_text,
+        edit.context_before,
+        nextId,
+        now,
+      )
+      applied ? stats.deletions++ : stats.unmatched++
+    } else {
+      stats.unmatched++
+    }
+  }
+
+  // Reemplazo por indices sobre el body original — preserva todo el markup
+  // NO-parrafo (tablas w:tbl/w:tr/w:tc, secciones w:sectPr, bookmarks, etc.)
+  // que mi enfoque anterior perdia al hacer fragments.join(''). Aplicamos en
+  // orden inverso para no invalidar los indices de las modificaciones anteriores.
+  const modifications = paragraphs
+    .filter(p => p.raw !== p.originalRaw)
+    .map(p => ({ start: p.startInBody, end: p.endInBody, replacement: p.raw }))
+    .sort((a, b) => b.start - a.start)
+
+  let newBody = body
+  for (const mod of modifications) {
+    newBody = newBody.slice(0, mod.start) + mod.replacement + newBody.slice(mod.end)
+  }
+
+  const newXml = pre + newBody + post
+  zip.file('word/document.xml', newXml)
+  return { buffer: zip.generate({ type: 'nodebuffer' }) as Buffer, stats }
+}
+
+/**
+ * Sustituye granularmente. Si `oldText` y `newText` son similares (varias
+ * palabras iguales entre ambos), hace un diff palabra-a-palabra intra-fragmento
+ * y emite multiples <w:del> + <w:ins> pequenos SOLO donde realmente cambia el
+ * texto, preservando las palabras identicas como runs normales. Esto evita
+ * que el redline marque parrafos enteros cuando solo cambian una o dos
+ * palabras (p. ej. "S/ 300" -> "S/ 200").
+ */
+function applyGranularSubstitution(
+  paragraphs: ParagraphMeta[],
+  oldText: string,
+  newText: string,
+  contextBefore: string | undefined,
+  nextId: () => number,
+  isoDate: string,
+): boolean {
+  if (oldText === newText) return true // no-op
+
+  const target = findParagraph(paragraphs, oldText, contextBefore)
+  if (target === null) return false
+  const { index, matchStart } = target
+  const paragraph = paragraphs[index]
+  if (paragraph.hasComplexContent) return false // no tocamos parrafos con imagenes / tablas anidadas
+  const matchEnd = matchStart + oldText.length
+
+  const prefixXml = renderRunsForRange(paragraph.segments, 0, matchStart)
+  const suffixXml = renderRunsForRange(paragraph.segments, matchEnd, paragraph.text.length)
+
+  const innerXml = renderInlineDiff(
+    oldText,
+    newText,
+    paragraph.segments,
+    matchStart,
+    nextId,
+    isoDate,
+  )
+
+  const newPXml = `<w:p>${paragraph.pPr}${prefixXml}${innerXml}${suffixXml}</w:p>`
+  paragraphs[index] = {
+    ...paragraph,
+    raw: newPXml,
+    text: paragraph.text.slice(0, matchStart) + newText + paragraph.text.slice(matchEnd),
+    // Simplificamos los segments porque el texto cambio y las offsets originales
+    // ya no son validos. Ediciones posteriores contra este parrafo funcionan
+    // pero pierden granularidad de rPr — es una compensacion aceptable.
+    segments: [
+      {
+        text: paragraph.text.slice(0, matchStart) + newText + paragraph.text.slice(matchEnd),
+        rPr: paragraph.segments[0]?.rPr ?? '',
+      },
+    ],
+  }
+  return true
+}
+
+/**
+ * Compara `oldText` y `newText` con un diff palabra-a-palabra y devuelve el
+ * XML de runs (incluyendo <w:del> y <w:ins>) que reproduce la transicion,
+ * conservando las palabras identicas como runs normales sin marcar. El
+ * parametro `segments` es la lista completa de segmentos del parrafo, y
+ * `absStart` es el offset absoluto del inicio de `oldText` dentro del texto
+ * plano del parrafo — se usa para recuperar el rPr correcto de cada region.
+ */
+function renderInlineDiff(
+  oldText: string,
+  newText: string,
+  segments: RunSegment[],
+  absStart: number,
+  nextId: () => number,
+  isoDate: string,
+): string {
+  const changes = diffWordsWithSpace(oldText, newText)
+  const parts: string[] = []
+  let cursor = absStart // avanza sobre el texto plano del parrafo original
+
+  for (const change of changes) {
+    if (!change.added && !change.removed) {
+      // Fragmento identico en ambos: preservar como runs normales con el rPr
+      // correcto de cada segmento original.
+      const chunkStart = cursor
+      const chunkEnd = cursor + change.value.length
+      parts.push(renderRunsForRange(segments, chunkStart, chunkEnd))
+      cursor = chunkEnd
+    } else if (change.removed) {
+      // Fragmento del original que desaparece: envolver en <w:del> usando el
+      // rPr del inicio de la region.
+      const chunkStart = cursor
+      const chunkEnd = cursor + change.value.length
+      const rPr = findRPrAtOffset(segments, chunkStart)
+      parts.push(
+        `<w:del w:id="${nextId()}" w:author="${AUTHOR}" w:date="${isoDate}">` +
+          `<w:r>${rPr}<w:delText xml:space="preserve">${escapeXml(change.value)}</w:delText></w:r>` +
+          `</w:del>`,
+      )
+      cursor = chunkEnd
+    } else if (change.added) {
+      // Fragmento nuevo: envolver en <w:ins> usando el rPr de la posicion
+      // actual en el original (no avanzamos el cursor porque el fragmento
+      // nuevo no consume caracteres del original).
+      const rPr = findRPrAtOffset(segments, cursor)
+      parts.push(
+        `<w:ins w:id="${nextId()}" w:author="${AUTHOR}" w:date="${isoDate}">` +
+          `<w:r>${rPr}<w:t xml:space="preserve">${escapeXml(change.value)}</w:t></w:r>` +
+          `</w:ins>`,
+      )
+    }
+  }
+
+  return parts.join('')
+}
+
+function applyGranularDeletion(
+  paragraphs: ParagraphMeta[],
+  oldText: string,
+  contextBefore: string | undefined,
+  nextId: () => number,
+  isoDate: string,
+): boolean {
+  return applyGranularSubstitution(paragraphs, oldText, '', contextBefore, nextId, isoDate)
+}
+
+/**
+ * Inserta un parrafo nuevo despues del parrafo que contiene `after_text`.
+ * El parrafo insertado hereda el pPr y el rPr del parrafo ancla.
+ */
+function applyParagraphInsertion(
+  paragraphs: ParagraphMeta[],
+  afterText: string,
+  newParagraph: string,
+  contextBefore: string | undefined,
+  nextId: () => number,
+  isoDate: string,
+): boolean {
+  const target = findParagraph(paragraphs, afterText, contextBefore)
+  if (target === null) return false
+  const { index } = target
+  const anchor = paragraphs[index]
+
+  const pPrWithIns = injectInsertedMarkIntoPPr(anchor.pPr, nextId(), isoDate)
+  const rPr = anchor.segments[0]?.rPr ?? ''
+  const insXml =
+    `<w:ins w:id="${nextId()}" w:author="${AUTHOR}" w:date="${isoDate}">` +
+    `<w:r>${rPr}<w:t xml:space="preserve">${escapeXml(newParagraph)}</w:t></w:r>` +
+    `</w:ins>`
+  const newPXml = `<w:p>${pPrWithIns}${insXml}</w:p>`
+  // Adjuntamos el parrafo nuevo AL raw del anclaje. El reemplazo por indices al
+  // final del pipeline substituira [startInBody, endInBody] del ancla por
+  // anchor.raw actual, que ya incluye el nuevo parrafo. Preserva la posicion
+  // exacta en el body original (incluso dentro de una tabla o seccion).
+  paragraphs[index] = { ...anchor, raw: anchor.raw + newPXml }
+  return true
+}
+
+// ---------------------------------------------------------------------------
+// Parseo de parrafos y runs
+// ---------------------------------------------------------------------------
+
+function splitDocumentBody(xml: string): { pre: string; body: string; post: string } {
+  const bodyOpen = xml.indexOf('<w:body>')
+  const bodyClose = xml.indexOf('</w:body>')
+  if (bodyOpen === -1 || bodyClose === -1) {
+    throw new Error('DOCX invalido: no se encontro <w:body>')
+  }
+  return {
+    pre: xml.slice(0, bodyOpen + '<w:body>'.length),
+    body: xml.slice(bodyOpen + '<w:body>'.length, bodyClose),
+    post: xml.slice(bodyClose),
+  }
+}
+
+function parseParagraphs(body: string): ParagraphMeta[] {
+  const paragraphs: ParagraphMeta[] = []
+  const pRegex = /<w:p(?:\s[^>]*)?(?:\/>|>[\s\S]*?<\/w:p>)/g
+  let m: RegExpExecArray | null
+  let index = 0
+  while ((m = pRegex.exec(body)) !== null) {
+    const raw = m[0]
+    const segments = parseSegments(raw)
+    paragraphs.push({
+      index: index++,
+      raw,
+      originalRaw: raw,
+      startInBody: m.index,
+      endInBody: m.index + raw.length,
+      text: segments.map(s => s.text).join(''),
+      segments,
+      pPr: extractPPr(raw),
+      hasComplexContent: detectComplexContent(raw),
+    })
+  }
+  return paragraphs
+}
+
+/**
+ * Detecta si el parrafo contiene elementos que mi reconstruccion NO preserva:
+ * imagenes (<w:drawing>), pictures viejas (<w:pict>), campos complejos
+ * (<w:fldChar>), objetos embebidos, SmartArt. Si detectamos alguno, marcamos
+ * el parrafo como "complex" y no lo modificamos — mejor perder un cambio de
+ * texto que romper una imagen o una tabla.
+ */
+function detectComplexContent(pXml: string): boolean {
+  return (
+    pXml.includes('<w:drawing') ||
+    pXml.includes('<w:pict') ||
+    pXml.includes('<w:object') ||
+    pXml.includes('<w:fldChar')
+  )
+}
+
+/**
+ * Extrae la secuencia de RunSegments visibles (texto + rPr) del parrafo.
+ * Ignora bloques ya marcados como <w:del> — su contenido no es texto visible.
+ * Los <w:ins> preexistentes se tratan como texto normal (accept-in-place).
+ */
+function parseSegments(pXml: string): RunSegment[] {
+  // Quitamos <w:del>...</w:del> completos para no incluirlos en el flat text
+  const cleaned = pXml.replace(/<w:del(?:\s[^>]*)?>[\s\S]*?<\/w:del>/g, '')
+  const segments: RunSegment[] = []
+  const runRegex = /<w:r(?:\s[^>]*)?>([\s\S]*?)<\/w:r>/g
+  let m: RegExpExecArray | null
+  while ((m = runRegex.exec(cleaned)) !== null) {
+    const runInner = m[1]
+    const rPrMatch = runInner.match(/<w:rPr>[\s\S]*?<\/w:rPr>/)
+    const rPr = rPrMatch ? rPrMatch[0] : ''
+    // Extraer todos los <w:t> del run (puede haber varios)
+    const tRegex = /<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>/g
+    let tMatch: RegExpExecArray | null
+    while ((tMatch = tRegex.exec(runInner)) !== null) {
+      segments.push({ text: unescapeXml(tMatch[1]), rPr })
+    }
+    // Tabs — los tratamos como texto tab
+    const tabCount = (runInner.match(/<w:tab\/>/g) ?? []).length
+    for (let i = 0; i < tabCount; i++) {
+      segments.push({ text: '\t', rPr })
+    }
+    // Line breaks — los tratamos como \n
+    const brCount = (runInner.match(/<w:br(?:\/|\s[^>]*\/)?>/g) ?? []).length
+    for (let i = 0; i < brCount; i++) {
+      segments.push({ text: '\n', rPr })
+    }
+  }
+  return segments
+}
+
+function extractPPr(pXml: string): string {
+  const m = pXml.match(/<w:pPr>[\s\S]*?<\/w:pPr>/)
+  return m ? m[0] : ''
+}
+
+/**
+ * Encuentra el parrafo con el fragmento y devuelve indice + offset del match
+ * dentro del texto plano del parrafo. Considera context_before para desambiguar.
+ */
+function findParagraph(
+  paragraphs: ParagraphMeta[],
+  needle: string,
+  contextBefore?: string,
+): { index: number; matchStart: number } | null {
+  if (!needle) return null
+  const candidates: Array<{ index: number; matchStart: number }> = []
+  for (const p of paragraphs) {
+    if (!p.text) continue
+    const searchAnchor = contextBefore ? contextBefore + needle : needle
+    let idx = p.text.indexOf(searchAnchor)
+    if (idx !== -1) {
+      // matchStart apunta al inicio del needle, no del contexto
+      const matchStart = idx + (contextBefore?.length ?? 0)
+      candidates.push({ index: p.index, matchStart })
+    }
+  }
+  if (candidates.length === 0 && contextBefore) {
+    // Fallback: buscar solo el needle sin contexto
+    for (const p of paragraphs) {
+      if (!p.text) continue
+      const idx = p.text.indexOf(needle)
+      if (idx !== -1) candidates.push({ index: p.index, matchStart: idx })
+    }
+  } else if (candidates.length === 0) {
+    for (const p of paragraphs) {
+      if (!p.text) continue
+      const idx = p.text.indexOf(needle)
+      if (idx !== -1) candidates.push({ index: p.index, matchStart: idx })
+    }
+  }
+  return candidates[0] ?? null
+}
+
+/**
+ * Devuelve el rPr del segmento que cubre `offset` en el texto plano del parrafo.
+ */
+function findRPrAtOffset(segments: RunSegment[], offset: number): string {
+  let cursor = 0
+  for (const seg of segments) {
+    if (offset < cursor + seg.text.length) return seg.rPr
+    cursor += seg.text.length
+  }
+  return segments[segments.length - 1]?.rPr ?? ''
+}
+
+/**
+ * Renderea el XML de <w:r> para el rango [start, end) del texto plano del
+ * parrafo, respetando el rPr de cada segmento original. Si el rango cruza
+ * segmentos con distinto rPr, emite multiples <w:r> preservando cada formato.
+ */
+function renderRunsForRange(segments: RunSegment[], start: number, end: number): string {
+  if (start >= end) return ''
+  const parts: string[] = []
+  let cursor = 0
+  for (const seg of segments) {
+    const segStart = cursor
+    const segEnd = cursor + seg.text.length
+    cursor = segEnd
+    if (segEnd <= start) continue
+    if (segStart >= end) break
+    const from = Math.max(0, start - segStart)
+    const to = Math.min(seg.text.length, end - segStart)
+    const slice = seg.text.slice(from, to)
+    if (!slice) continue
+    parts.push(`<w:r>${seg.rPr}<w:t xml:space="preserve">${escapeXml(slice)}</w:t></w:r>`)
+  }
+  return parts.join('')
+}
+
+function highestExistingId(xml: string): number {
+  const idRegex = /w:id="(\d+)"/g
+  let max = 0
+  let m: RegExpExecArray | null
+  while ((m = idRegex.exec(xml)) !== null) {
+    const n = parseInt(m[1], 10)
+    if (!Number.isNaN(n) && n > max) max = n
+  }
+  return max
+}
+
+function injectInsertedMarkIntoPPr(pPr: string, id: number, isoDate: string): string {
+  const insMark = `<w:rPr><w:ins w:id="${id}" w:author="${AUTHOR}" w:date="${isoDate}"/></w:rPr>`
+  if (!pPr) return `<w:pPr>${insMark}</w:pPr>`
+  if (pPr.includes('<w:rPr>')) {
+    return pPr.replace(
+      /<w:rPr>/,
+      `<w:rPr><w:ins w:id="${id}" w:author="${AUTHOR}" w:date="${isoDate}"/>`,
+    )
+  }
+  return pPr.replace(
+    '</w:pPr>',
+    `${insMark.replace('<w:pPr>', '').replace('</w:pPr>', '')}</w:pPr>`,
+  )
+}
+
+function escapeXml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;')
+}
+
+function unescapeXml(text: string): string {
+  return text
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+}
