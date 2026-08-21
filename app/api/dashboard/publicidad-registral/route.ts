@@ -58,6 +58,10 @@ export async function POST(request: Request) {
           apellidoPaterno: body.apellidoPaterno?.trim().toUpperCase() ?? '',
           apellidoMaterno: body.apellidoMaterno?.trim().toUpperCase() ?? '',
           nombres: body.nombres?.trim().toUpperCase() ?? '',
+          solicitarPor: body.solicitarPor,
+          numeroAsiento: body.numeroAsiento?.trim().toUpperCase() ?? '',
+          datosAdicionales: body.datosAdicionales?.trim().toUpperCase() ?? '',
+          cliente: solicitud.usuario?.full_name || solicitud.usuario?.email || 'Usuario sin identificar',
         },
       )
 

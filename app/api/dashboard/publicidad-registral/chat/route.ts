@@ -12,6 +12,24 @@ type SearchResult = {
   }>
 }
 
+// Frases que indican que el nombre de empresa terminó y empieza otro dato del formulario.
+const COMPANY_STOP_TOKENS = /\b(con\s+partida|partida\s*n[°º]?\.?|n[uú]mero\s*(?:de\s*)?partida|asiento|n[uú]mero\s*de\s*asiento|con\s+nombre|gerente|apoderado|director|presidente|administrador|representante|natural|jur[ií]dico)\b/i
+
+// El buscador SUNARP hace match por prefijo exacto: quitamos el sufijo societario (S.A.C., S.A., etc.)
+// porque su puntuación no coincide con la forma en que el usuario lo escribe ("sac" vs "S.A.C.").
+const CORPORATE_SUFFIX_RE = /\s+(s\.?a\.?c\.?|s\.?a\.?a\.?|s\.?r\.?l\.?|e\.?i\.?r\.?l\.?|s\.?c\.?r\.?l\.?|s\.?a\.?)\s*$/i
+
+function trimCompanyName(raw: string): string {
+  const match = raw.match(COMPANY_STOP_TOKENS)
+  const cut = match?.index !== undefined ? raw.slice(0, match.index) : raw
+  return cut.trim().replace(/[,.\s]+$/, '')
+}
+
+function stripCorporateSuffix(name: string): string {
+  const stripped = name.replace(CORPORATE_SUFFIX_RE, '').trim()
+  return stripped.length >= 3 ? stripped : name
+}
+
 function extractCompanyName(text: string): string | null {
   const clean = text.replace(/[¿?¡!]/g, ' ').trim()
   const patterns = [
@@ -22,8 +40,8 @@ function extractCompanyName(text: string): string | null {
 
   for (const pattern of patterns) {
     const match = clean.match(pattern)
-    const company = match?.[1]?.trim().replace(/[,.\s]+$/, '')
-    if (company && company.length >= 3) return company
+    const company = trimCompanyName(match?.[1]?.trim().replace(/[,.\s]+$/, '') ?? '')
+    if (company && company.length >= 3) return stripCorporateSuffix(company)
   }
   return null
 }
@@ -52,9 +70,9 @@ function buildFormData(current: FormData | undefined, result: SearchResult['resu
     numeroAsiento: current?.numeroAsiento || '',
     cargoApoderado: current?.cargoApoderado || '',
     representante: current?.representante || '',
-    apellidoPaterno: '',
-    apellidoMaterno: '',
-    nombres: '',
+    apellidoPaterno: current?.apellidoPaterno || '',
+    apellidoMaterno: current?.apellidoMaterno || '',
+    nombres: current?.nombres || '',
     razonSocial: result.razon,
     datosAdicionales: current?.datosAdicionales || '',
   }
@@ -97,11 +115,10 @@ function mergeFormData(current: FormData | undefined, incoming: FormData): FormD
   return merged
 }
 
-function missingFields(formData: FormData, messages: ChatMsg[]): string[] {
-  const userText = messages.filter(message => message.role === 'user').map(message => message.content).join(' ').toLowerCase()
+function missingFields(formData: FormData): string[] {
   const missing: string[] = []
 
-  if (!/\b(partida|ficha|tomo\s*\/\s*folio|tomo\s+y\s+folio)\b/i.test(userText)) {
+  if (!formData.solicitarPor?.trim()) {
     missing.push('si se solicita por partida, ficha o tomo/folio')
   }
   if (!(formData.numeroPartida || formData.numero)?.trim()) missing.push('el número correspondiente')
@@ -119,8 +136,8 @@ function missingFields(formData: FormData, messages: ChatMsg[]): string[] {
   return missing
 }
 
-function buildMissingPrompt(formData: FormData, messages: ChatMsg[]): string {
-  const missing = missingFields(formData, messages)
+function buildMissingPrompt(formData: FormData): string {
+  const missing = missingFields(formData)
   if (missing.length === 0) return 'Ya tengo todos los datos necesarios para completar la solicitud. Puedes revisar el formulario y enviarlo.'
   return `Para continuar, indícame ${missing.join(', ')}.`
 }
@@ -128,6 +145,32 @@ function buildMissingPrompt(formData: FormData, messages: ChatMsg[]): string {
 function extractAsientoReply(text: string): string {
   const match = text.trim().match(/\b[A-Z]?\d[A-Z0-9-]*\b/i)
   return match?.[0] ?? ''
+}
+
+function extractMessageFields(text: string): FormData {
+  const inferred: FormData = {}
+  const asiento = text.match(/\basiento\s*(?:n[°º]?\.?\s*)?[:#-]?\s*([A-Z]\d[A-Z0-9-]*)\b/i)?.[1]
+  if (asiento) inferred.numeroAsiento = asiento
+
+  const cargo = text.match(/\b(gerente\s+(?:general|gneral)|apoderado|director|presidente|administrador)\b/i)?.[1]
+  if (cargo) inferred.cargoApoderado = cargo.replace(/gneral/i, 'general')
+
+  const nombre = text.match(/\bcon\s+nombre\s+([a-záéíóúñ]+)\s+([a-záéíóúñ]+)(?:\s+([a-záéíóúñ]+))?\b/i)
+  if (nombre) {
+    inferred.representante = 'natural'
+    inferred.nombres = nombre[1]
+    inferred.apellidoPaterno = nombre[2]
+    inferred.apellidoMaterno = nombre[3] ?? ''
+  } else if (/\bnatural\b/i.test(text)) {
+    inferred.representante = 'natural'
+  } else if (/\bjur[ií]dico\b/i.test(text)) {
+    inferred.representante = 'juridico'
+  }
+
+  if (/\bficha\b/i.test(text)) inferred.solicitarPor = 'ficha'
+  else if (/\btomo\s*\/\s*folio\b/i.test(text)) inferred.solicitarPor = 'tomo_folio'
+  else if (/\bpartida\b/i.test(text)) inferred.solicitarPor = 'partida'
+  return inferred
 }
 
 function inferInitialFormReply(text: string, previousText: string): FormData {
@@ -147,8 +190,8 @@ function inferInitialFormReply(text: string, previousText: string): FormData {
     inferred.numeroPartida = number
     inferred.numeroAsiento = number
   }
-  const cargo = parts.find(part => /gerente|apoderado|director|presidente|administrador/i.test(part))
-  if (cargo) inferred.cargoApoderado = cargo
+  const cargo = normalized.match(/\b(gerente\s+(?:general|gneral)|apoderado|director|presidente|administrador)\b/i)?.[1]
+  if (cargo) inferred.cargoApoderado = cargo.replace(/gneral/i, 'general')
   if (/\bnatural\b/i.test(normalized)) inferred.representante = 'natural'
   if (/\bjur[ií]dico\b/i.test(normalized)) inferred.representante = 'juridico'
 
@@ -195,6 +238,7 @@ export async function POST(request: Request) {
     let effectiveFormData = { ...(body.formData ?? {}) }
 
     if (lastMessage?.role === 'user') {
+      effectiveFormData = mergeFormData(effectiveFormData, extractMessageFields(lastMessage.content))
       const inferred = inferInitialFormReply(lastMessage.content, previousMessage?.content ?? '')
       effectiveFormData = mergeFormData(effectiveFormData, inferred)
       const naturalName = inferNaturalNameReply(lastMessage.content, previousMessage?.content ?? '', effectiveFormData)
@@ -219,7 +263,7 @@ export async function POST(request: Request) {
         const formData = buildFormData(effectiveFormData, result)
         formData.numeroPartida = formData.numero
         return Response.json({
-          text: `${buildMissingPrompt(formData, messages)}\n\n[[FORM_DATA:${JSON.stringify(formData)}]]`,
+          text: `${buildMissingPrompt(formData)}\n\n[[FORM_DATA:${JSON.stringify(formData)}]]`,
         })
       }
     }
@@ -248,7 +292,7 @@ export async function POST(request: Request) {
         mergedData.numeroPartida = effectiveFormData.numeroPartida || effectiveFormData.numero
         mergedData.numero = mergedData.numeroPartida
       }
-      const prompt = buildMissingPrompt(mergedData, messages)
+      const prompt = buildMissingPrompt(mergedData)
       const outputMarker = `[[FORM_DATA:${JSON.stringify(mergedData)}]]`
       return Response.json({ ...result, text: `${prompt}\n\n${outputMarker}` })
     }

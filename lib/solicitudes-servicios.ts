@@ -45,5 +45,13 @@ export async function createVigenciaPoderSolicitud(data: VigenciaPoderData) {
     .single()
 
   if (error) throw new Error(error.message)
-  return solicitud
+  return {
+    ...solicitud,
+    usuario: {
+      full_name: typeof authData.user.user_metadata.full_name === 'string'
+        ? authData.user.user_metadata.full_name
+        : '',
+      email: authData.user.email ?? '',
+    },
+  }
 }

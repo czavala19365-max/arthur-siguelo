@@ -344,32 +344,6 @@ export default function VigenciaPoderPersonaJuridica() {
             </div>
           </div>
 
-          <div style={{ marginTop: 8 }}>
-            <Link href="#" onClick={event => { event.preventDefault(); }} className={styles.sprlFlowPdfLink}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                <path d="M14 2v6h6" />
-              </svg>
-              MODELO DE CERTIFICADO
-            </Link>
-          </div>
-
-          <div style={{ marginTop: 14, display: 'grid', gridTemplateColumns: '220px 1fr', gap: 12, alignItems: 'start' }}>
-            <div className={styles.sprlFlowLabel} style={{ alignSelf: 'start', paddingTop: 6 }}>
-              DATOS ADICIONALES
-              <div style={{ marginTop: 10, fontSize: 14, lineHeight: 1.6 }}>
-                - Cargo del representante(Gerente, Gerente General, Gerente Comercial, etc)
-                <br />
-                - Documento Oficial de identidad
-              </div>
-            </div>
-            <textarea className={styles.sprlFlowTextarea} maxLength={200} value={form.datosAdicionales} onChange={event => updateForm('datosAdicionales', event.target.value)} />
-          </div>
-
-          <div className={styles.sprlFlowMuted} style={{ marginTop: 6, marginLeft: 232, color: '#ff4b3a' }}>
-            Max 200 caracteres
-          </div>
-
           <div className={styles.sprlFlowActions} style={{ marginTop: 24 }}>
             <button type="button" className={styles.sprlFlowButtonSecondary} >
               ← Regresar
@@ -384,22 +358,6 @@ export default function VigenciaPoderPersonaJuridica() {
             </div>
           )}
         </form>
-
-        <div className={styles.sprlFlowMuted} style={{ marginTop: 18, color: '#95c11f' }}>
-          (*) Campos obligatorio
-        </div>
-
-        <div className={styles.sprlFlowFooterNote}>
-          Según el Artículo 107 del Reglamento del Servicio de Publicidad Registral, aprobado mediante Resolución N°
-          281-2015-SUNARP/SN, en el certificado de vigencia de poder en el registro de personas jurídicas, cuando se
-          advierte en la partida registral que el apoderado ostenta más de un régimen de poderes, independientes de uno
-          del otro e inscritos en asientos distintos, no es necesario que el solicitante precise el asiento, salvo que
-          se solicite la vigencia de poder de determinadas facultades.
-          <br />
-          Para el caso de vigencia de gerente o representante legal de la persona jurídica se aplicará lo dispuesto en
-          el párrafo anterior.
-        </div>
-
       </div>
     </div>
   )

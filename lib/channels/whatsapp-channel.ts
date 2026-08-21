@@ -148,6 +148,10 @@ export async function enviarWhatsAppPublicidadRegistral(
     apellidoPaterno?: string
     apellidoMaterno?: string
     nombres?: string
+    solicitarPor?: string
+    numeroAsiento?: string
+    datosAdicionales?: string
+    cliente: string
   },
 ): Promise<boolean> {
   const accountSid = process.env.TWILIO_ACCOUNT_SID
@@ -180,13 +184,29 @@ export async function enviarWhatsAppPublicidadRegistral(
         ? solicitud.razonSocial ?? ''
         : `${solicitud.nombres ?? ''} ${solicitud.apellidoPaterno ?? ''} ${solicitud.apellidoMaterno ?? ''}`.trim()
 
+    const solicitarPorLabel =
+      solicitud.solicitarPor === 'ficha'
+        ? 'Ficha'
+        : solicitud.solicitarPor === 'tomo_folio'
+          ? 'Tomo/Folio'
+          : 'Partida'
+
     const numeroPartida = sanitizeTemplateVariable(
       solicitud.numeroPartida,
     )
 
-    const descripcion = sanitizeTemplateVariable(
-      `Nueva solicitud de Vigencia de Poder | Oficina: ${solicitud.oficinaRegistral} | Solicitante: ${nombre} | Cargo: ${solicitud.cargoApoderado}`,
-    )
+    const descripcionPartes = [
+      `El cliente *${solicitud.cliente}* ha solicitado la partida con estos datos:`,
+      `Oficina: ${solicitud.oficinaRegistral}`,
+      `Solicitar por: N° ${solicitarPorLabel} ${solicitud.numeroPartida}`,
+      solicitud.numeroAsiento ? `N° Asiento: ${solicitud.numeroAsiento}` : null,
+      `Cargo: ${solicitud.cargoApoderado}`,
+      `Representante: ${solicitud.representante === 'juridico' ? 'Jurídico' : 'Natural'}`,
+      `Solicitante: ${nombre}`,
+      solicitud.datosAdicionales ? `Datos adicionales: ${solicitud.datosAdicionales}` : null,
+    ].filter(Boolean)
+
+    const descripcion = sanitizeTemplateVariable(descripcionPartes.join(' | '))
 
     if (!numeroPartida || !descripcion) {
       console.warn('[WhatsApp PR] La plantilla necesita numeroPartida y descripcion')
