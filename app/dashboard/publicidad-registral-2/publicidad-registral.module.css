@@ -191,15 +191,17 @@
 
 .sprlFlowPage {
   padding: 22px;
-  background: #efefef;
+  background: var(--paper);
   min-height: 100%;
   color: var(--ink);
 }
 
 .sprlFlowShell {
-  background: #fff;
-  border: 1px solid #d9d9d9;
-  padding: 28px 22px 30px;
+  background: linear-gradient(180deg, #ffffff 0%, #faf9f7 100%);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 26px 28px 30px;
+  box-shadow: 0 18px 40px rgba(20, 20, 20, 0.05);
 }
 
 .sprlFlowHeaderTop {
@@ -218,33 +220,47 @@
   font-size: 12px;
   color: var(--muted);
   text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.sprlFlowBack:hover {
+  color: var(--ink);
 }
 
 .sprlFlowTitle {
-  font-family: var(--font-body);
-  font-size: 21px;
-  font-weight: 700;
-  margin: 0 0 20px;
+  font-family: var(--font-display);
+  font-size: clamp(28px, 1vw, 42px);
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  margin: 0 0 18px;
+  color: var(--ink);
 }
 
 .sprlFlowIntroRed {
-  color: #ff2d20;
+  background: rgba(194, 164, 109, 0.08);
+  border: 1px solid rgba(194, 164, 109, 0.25);
+  border-left: 4px solid var(--accent);
+  color: var(--ink);
   font-family: var(--font-body);
   font-size: 14px;
-  line-height: 1.25;
+  line-height: 1.6;
   margin: 0 0 28px;
-  font-weight: 700;
+  padding: 16px 18px;
+  border-radius: 10px;
 }
 
 .sprlFlowSectionHeader {
-  background: #d9d9d9;
-  color: #111;
-  font-family: var(--font-body);
-  font-size: 14px;
+  background: rgba(194, 164, 109, 0.1);
+  color: var(--ink);
+  border: 1px solid rgba(194, 164, 109, 0.22);
+  border-radius: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
   line-height: 1;
-  padding: 12px 18px;
+  padding: 12px 16px;
   margin: 0 0 18px;
   text-transform: uppercase;
+  letter-spacing: 0.12em;
 }
 
 .sprlFlowSection {
@@ -253,7 +269,7 @@
 
 .sprlFlowGrid {
   display: grid;
-  gap: 14px;
+  gap: 16px;
 }
 
 .sprlFlowRow {
@@ -264,9 +280,11 @@
 }
 
 .sprlFlowLabel {
-  font-family: var(--font-body);
-  font-size: 14px;
-  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
   white-space: nowrap;
 }
 
@@ -277,10 +295,81 @@
   font-family: var(--font-body);
   font-size: 14px;
   color: var(--ink);
-  border: 1px solid #d9d9d9;
-  background: #fff;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  border-radius: 10px;
   outline: none;
   box-sizing: border-box;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+
+.sprlFlowSelect:focus,
+.sprlFlowInput:focus,
+.sprlFlowTextarea:focus {
+  border-color: rgba(194, 164, 109, 0.8);
+  box-shadow: 0 0 0 4px rgba(194, 164, 109, 0.12);
+}
+
+.sprlFlowInputStatusWrap {
+  position: relative;
+}
+
+.sprlFlowRealtimeCheck {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #95c11f;
+  font-family: var(--font-body);
+  font-size: 16px;
+  font-weight: 700;
+  opacity: 0;
+  transition: opacity 120ms ease-in-out;
+  pointer-events: none;
+}
+
+.sprlFlowRealtimeCheckVisible {
+  opacity: 1;
+}
+
+.sprlFlowRealtimeCheckInvalid {
+  color: #c0392b;
+}
+
+.sprlFlowFieldError {
+  display: inline-block;
+  margin-top: 6px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: #c0392b;
+}
+
+.sprlFlowSelect,
+.sprlFlowInput {
+  height: 42px;
+  padding: 0 12px;
+}
+
+.sprlFlowTextarea {
+  min-height: 158px;
+  padding: 12px;
+  resize: vertical;
+}
+
+.sprlFlowSelectWrap {
+  position: relative;
+}
+
+.sprlFlowArrow {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.sprlFlowRow>div {
+  min-width: 0;
 }
 
 .sprlFlowInputStatusWrap {
@@ -346,6 +435,10 @@
   align-items: center;
   gap: 24px;
   flex-wrap: wrap;
+  background: rgba(194, 164, 109, 0.05);
+  border: 1px solid rgba(194, 164, 109, 0.18);
+  border-radius: 10px;
+  padding: 10px 14px;
 }
 
 .sprlFlowRadio {
@@ -357,6 +450,10 @@
   color: var(--ink);
 }
 
+.sprlFlowRadio input {
+  accent-color: var(--accent);
+}
+
 .sprlFlowActions {
   display: flex;
   justify-content: center;
@@ -366,35 +463,49 @@
 }
 
 .sprlFlowButtonPrimary {
-  background: #95c11f;
-  color: #fff;
+  background: var(--accent);
+  color: #141414;
   border: none;
   padding: 12px 24px;
   min-width: 250px;
-  font-family: var(--font-body);
-  font-size: 14px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
   cursor: pointer;
+  border-radius: 10px;
+  box-shadow: 0 10px 20px rgba(194, 164, 109, 0.18);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.sprlFlowButtonPrimary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 26px rgba(194, 164, 109, 0.22);
 }
 
 .sprlFlowButtonSecondary {
-  background: #f7b500;
-  color: #fff;
-  border: none;
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--line);
   padding: 12px 24px;
   min-width: 250px;
-  font-family: var(--font-body);
-  font-size: 14px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
   cursor: pointer;
+  border-radius: 10px;
 }
 
 .sprlFlowNote {
   margin-top: 18px;
-  background: #fff9e8;
-  border: 1px solid #f2c569;
+  background: rgba(194, 164, 109, 0.08);
+  border: 1px solid rgba(194, 164, 109, 0.22);
   padding: 10px 14px;
   font-family: var(--font-body);
   font-size: 14px;
   color: var(--ink);
+  border-radius: 10px;
 }
 
 .sprlFlowPdfLink {

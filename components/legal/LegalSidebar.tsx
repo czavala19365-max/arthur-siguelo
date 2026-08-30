@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { getAuthClient } from '@/lib/supabase-auth-client'
+import { legalStyles } from '@/lib/legal/styles'
 
 const links = [
   { href: '/legal', label: 'Inicio' },
@@ -86,10 +87,7 @@ export default function LegalSidebar() {
           <div
             style={{
               marginTop: 10,
-              fontFamily: 'var(--font-mono)',
-              fontSize: 10,
-              textTransform: 'uppercase',
-              letterSpacing: '0.12em',
+              ...legalStyles.tag,
               color: 'var(--sidebar-module-label)',
             }}
           >
@@ -128,14 +126,12 @@ export default function LegalSidebar() {
               router.push('/login')
             }}
             style={{
+              ...legalStyles.tag,
               width: '100%',
               padding: '10px',
               background: 'transparent',
               border: '1px solid var(--sidebar-btn-border)',
               color: 'var(--sidebar-btn-fg)',
-              fontFamily: 'var(--font-mono)',
-              fontSize: 10,
-              textTransform: 'uppercase',
               cursor: 'pointer',
             }}
           >

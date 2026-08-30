@@ -1,6 +1,7 @@
 'use client'
 
 import type { CSSProperties } from 'react'
+import { legalStyles } from '@/lib/legal/styles'
 
 export function JgaToast({ message }: { message: string | null }) {
   if (!message) return null
@@ -15,10 +16,7 @@ export function JgaToast({ message }: { message: string | null }) {
         border: '1px solid rgba(201, 168, 76, 0.3)',
         color: '#c9a84c',
         padding: '12px 20px',
-        fontFamily: 'var(--font-mono)',
-        fontSize: 11,
-        textTransform: 'uppercase',
-        letterSpacing: '0.06em',
+        ...legalStyles.tag,
         borderRadius: 0,
       }}
     >
@@ -28,7 +26,7 @@ export function JgaToast({ message }: { message: string | null }) {
 }
 
 export const pathCardStyle = (selected: boolean): CSSProperties => ({
-  background: '#0a0a0a',
+  background: 'var(--surface)',
   border: `1px solid rgba(201, 168, 76, ${selected ? 0.3 : 0.15})`,
   padding: 24,
   cursor: 'pointer',
@@ -40,10 +38,7 @@ export const pathCardStyle = (selected: boolean): CSSProperties => ({
 })
 
 export const pathCardLabel: CSSProperties = {
-  fontFamily: 'var(--font-mono)',
-  fontSize: 10,
-  textTransform: 'uppercase',
-  letterSpacing: '0.1em',
+  ...legalStyles.tag,
   color: '#c9a84c',
   marginBottom: 12,
 }
@@ -58,15 +53,12 @@ export const pathCardTitle: CSSProperties = {
 export const pathCardDesc: CSSProperties = {
   fontFamily: 'var(--font-body)',
   fontSize: 13,
-  color: 'rgba(245,245,245,0.62)',
+  color: 'var(--muted)',
   lineHeight: 1.6,
   marginBottom: 20,
 }
 
 export const pathCardAction: CSSProperties = {
-  fontFamily: 'var(--font-mono)',
-  fontSize: 10,
-  textTransform: 'uppercase',
+  ...legalStyles.tag,
   color: 'rgba(201, 168, 76, 0.75)',
-  letterSpacing: '0.08em',
 }

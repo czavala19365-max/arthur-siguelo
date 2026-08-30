@@ -500,7 +500,7 @@ function JgaNuevaActaWizardInner() {
             </div>
           ))}
         </div>
-        <h3 style={{ fontFamily: 'var(--font-mono)', fontSize: 11, marginTop: 20 }}>Accionistas</h3>
+        <h3 style={{ ...legalStyles.subheading, marginTop: 20 }}>Accionistas</h3>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
           <input
             style={legalStyles.input}
@@ -576,7 +576,7 @@ function JgaNuevaActaWizardInner() {
   return (
     <>
       <JgaToast message={toast} />
-      <p style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--muted)', marginBottom: 16 }}>
+      <p style={{ ...legalStyles.meta, marginBottom: 16 }}>
         Paso {step} de 4
       </p>
       {error && <p style={{ color: '#c0392b', marginBottom: 16 }}>{error}</p>}
@@ -650,7 +650,7 @@ function JgaNuevaActaWizardInner() {
                     }}
                   >
                     <div style={{ fontSize: 15, marginBottom: 4 }}>{p.nombre_referencia}</div>
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'rgba(201,168,76,0.65)' }}>
+                    <div style={{ ...legalStyles.meta, color: 'rgba(201,168,76,0.65)' }}>
                       {p.razon_social} · {(p.tipo_operaciones ?? []).join(', ')} · {p.fecha_acta || new Date(p.created_at).toLocaleDateString('es-PE')}
                     </div>
                   </button>
@@ -747,7 +747,7 @@ function JgaNuevaActaWizardInner() {
             return (
               <div key={idx} style={legalStyles.card}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-                  <h3 style={{ fontFamily: 'var(--font-mono)', fontSize: 12, margin: 0 }}>
+                  <h3 style={{ ...legalStyles.subheading, margin: 0 }}>
                     {punto.numero}. {punto.titulo}
                   </h3>
                   <button
@@ -833,7 +833,7 @@ function JgaNuevaActaWizardInner() {
               }}
             >
               {s.titulo && (
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, marginBottom: 8 }}>{s.titulo}</div>
+                <div style={{ ...legalStyles.subheading, marginBottom: 8 }}>{s.titulo}</div>
               )}
               <textarea
                 style={{ ...legalStyles.textarea, minHeight: 120, fontSize: 13 }}
@@ -874,7 +874,7 @@ function JgaNuevaActaWizardInner() {
             style={{ ...legalStyles.card, width: '100%', maxWidth: 440, background: '#0a0a0a', border: '1px solid rgba(201,168,76,0.3)' }}
             onClick={e => e.stopPropagation()}
           >
-            <h3 style={{ fontFamily: 'var(--font-mono)', fontSize: 12, textTransform: 'uppercase', color: '#c9a84c' }}>
+            <h3 style={{ ...legalStyles.tag, color: '#c9a84c' }}>
               Guardar como precedente
             </h3>
             <label style={{ ...legalStyles.label, marginTop: 16 }}>Nombre de referencia</label>

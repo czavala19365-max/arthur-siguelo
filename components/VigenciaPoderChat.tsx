@@ -186,27 +186,27 @@ export default function VigenciaPoderChat({ formData, onFormData }: Props) {
   return (
     <section className="vigencia-chat">
       <style>{`
-        .vigencia-chat { --chat-ink: #143d38; --chat-muted: #5d7d77; --chat-panel: #f8fcfa; --chat-cyan: #167f73; --chat-accent: #d6a943; position: relative; isolation: isolate; overflow: hidden; margin: 0 0 34px; border: 1px solid #a8cec6; border-radius: 8px; background: var(--chat-panel); box-shadow: 0 20px 44px rgba(35, 90, 80, .14), 0 0 0 4px rgba(22, 127, 115, .07); font-family: var(--font-body); }
-        .vigencia-chat::before { content: ''; position: absolute; z-index: -1; inset: 0; opacity: .5; background-image: linear-gradient(90deg, rgba(22, 127, 115, .12) 1px, transparent 1px), linear-gradient(rgba(22, 127, 115, .12) 1px, transparent 1px); background-size: 24px 24px; }
-        .vigencia-chat::after { content: ''; position: absolute; inset: 0; z-index: -1; border: 1px solid rgba(214, 169, 67, .35); border-radius: 5px; pointer-events: none; }
-        .vigencia-chat__header { position: relative; padding: 23px 26px; display: flex; align-items: center; gap: 15px; color: #f8fcfa; background: #287e73; border-bottom: 1px solid #a17d2c; overflow: hidden; }
-        .vigencia-chat__header::after { content: 'IA · EN LÍNEA'; position: absolute; top: 14px; right: 24px; color: #e9c768; font: 700 10px/1 var(--font-body); }
-        .vigencia-chat__avatar { position: relative; z-index: 1; width: 48px; height: 48px; display: grid; place-items: center; flex: 0 0 auto; border: 1px solid #d1f2eb; border-radius: 50%; background: #f8fcfa; color: var(--chat-cyan); box-shadow: 0 0 0 5px rgba(209, 242, 235, .18), 0 0 20px rgba(209, 242, 235, .35); font: 800 21px/1 var(--font-body); }
-        .vigencia-chat__title { position: relative; z-index: 1; color: inherit; font: 700 21px/1.15 var(--font-body); letter-spacing: 0; }
-        .vigencia-chat__hint { position: relative; z-index: 1; margin-top: 5px; color: #d1f2eb; font: 500 12px/1.35 var(--font-body); letter-spacing: 0; }
-        .vigencia-chat__messages { height: 285px; overflow-y: auto; padding: 24px 26px; display: flex; flex-direction: column; gap: 14px; overscroll-behavior: contain; scrollbar-color: #167f73 #eaf5f1; }
-        .vigencia-chat__welcome { max-width: 480px; padding: 15px 17px; border: 1px solid #a8cec6; border-left: 3px solid var(--chat-cyan); background: #f4fbf8; color: #28534d; font: 15px/1.55 var(--font-body); box-shadow: 0 7px 18px rgba(35,90,80,.09); }
-        .vigencia-chat__message { max-width: min(86%, 600px); padding: 13px 16px; border-radius: 7px; color: var(--chat-ink); font: 15px/1.55 var(--font-body); white-space: pre-wrap; box-shadow: 0 5px 14px rgba(35,90,80,.1); }
-        .vigencia-chat__message--user { align-self: flex-end; border: 1px solid #d5b86c; background: #fff8e3; border-bottom-right-radius: 1px; }
-        .vigencia-chat__message--assistant { align-self: flex-start; border: 1px solid #a8cec6; background: #f4fbf8; border-bottom-left-radius: 1px; }
-        .vigencia-chat__loading { align-self: flex-start; color: var(--chat-cyan); font: 700 12px var(--font-body); letter-spacing: 0; }
-        .vigencia-chat__composer { display: flex; gap: 12px; padding: 18px 22px 22px; border-top: 1px solid #a8cec6; background: #eaf5f1; }
-        .vigencia-chat__input { flex: 1; min-height: 54px; max-height: 110px; resize: vertical; box-sizing: border-box; padding: 15px 16px; border: 1px solid #91bcb3; border-radius: 5px; outline: none; background: #fffefa; color: var(--chat-ink); font: 15px/1.45 var(--font-body); box-shadow: inset 0 1px 12px rgba(35,90,80,.06); transition: border-color .18s ease, box-shadow .18s ease; }
-        .vigencia-chat__input::placeholder { color: #769991; }
-        .vigencia-chat__input:focus { border-color: var(--chat-cyan); box-shadow: inset 0 1px 12px rgba(35,90,80,.06), 0 0 0 3px rgba(22,127,115,.15); }
-        .vigencia-chat__send { width: 58px; height: 54px; align-self: flex-end; border: 1px solid #176a60; border-radius: 5px; background: #287e73; color: #f8fcfa; cursor: pointer; font-size: 25px; line-height: 1; box-shadow: 0 0 16px rgba(22,127,115,.2); transition: transform .15s ease, box-shadow .15s ease, background .15s ease; }
-        .vigencia-chat__send:hover:not(:disabled) { background: #166f64; transform: translateY(-1px); box-shadow: 0 0 22px rgba(22,127,115,.35); }
-        .vigencia-chat__send:active:not(:disabled) { transform: translateY(1px); box-shadow: 0 0 9px rgba(22,127,115,.2); }
+        .vigencia-chat { --chat-ink: var(--ink); --chat-muted: var(--muted); --chat-panel: var(--paper); --chat-dark: #141414; position: relative; isolation: isolate; overflow: hidden; margin: 0 0 34px; border: 1px solid rgba(194, 164, 109, .35); border-radius: 8px; background: var(--chat-panel); box-shadow: 0 20px 44px rgba(0, 0, 0, .1), 0 0 0 4px rgba(194, 164, 109, .08); font-family: var(--font-body); }
+        .vigencia-chat::before { content: ''; position: absolute; z-index: -1; inset: 0; opacity: .5; background-image: linear-gradient(90deg, rgba(194, 164, 109, .14) 1px, transparent 1px), linear-gradient(rgba(194, 164, 109, .14) 1px, transparent 1px); background-size: 24px 24px; }
+        .vigencia-chat::after { content: ''; position: absolute; inset: 0; z-index: -1; border: 1px solid rgba(194, 164, 109, .2); border-radius: 5px; pointer-events: none; }
+        .vigencia-chat__header { position: relative; padding: 23px 26px; display: flex; align-items: center; gap: 15px; color: #f5f5f5; background: var(--chat-dark); border-bottom: 1px solid rgba(194, 164, 109, .4); overflow: hidden; }
+        .vigencia-chat__header::after { content: 'IA · EN LÍNEA'; position: absolute; top: 14px; right: 24px; color: var(--accent); font: 700 10px/1 var(--font-mono); text-transform: uppercase; letter-spacing: .08em; }
+        .vigencia-chat__avatar { position: relative; z-index: 1; width: 48px; height: 48px; display: grid; place-items: center; flex: 0 0 auto; border: 1px solid rgba(194, 164, 109, .5); border-radius: 50%; background: #f5f5f5; color: var(--chat-dark); box-shadow: 0 0 0 5px rgba(194, 164, 109, .16), 0 0 20px rgba(194, 164, 109, .3); font: 800 21px/1 var(--font-display); }
+        .vigencia-chat__title { position: relative; z-index: 1; color: inherit; font: 600 21px/1.15 var(--font-display); letter-spacing: 0; }
+        .vigencia-chat__hint { position: relative; z-index: 1; margin-top: 5px; color: rgba(245, 245, 245, .7); font: 500 12px/1.35 var(--font-body); letter-spacing: 0; }
+        .vigencia-chat__messages { height: 285px; overflow-y: auto; padding: 24px 26px; display: flex; flex-direction: column; gap: 14px; overscroll-behavior: contain; scrollbar-color: var(--accent) var(--surface); }
+        .vigencia-chat__welcome { max-width: 480px; padding: 15px 17px; border: 1px solid rgba(194, 164, 109, .3); border-left: 3px solid var(--accent); background: var(--surface); color: var(--ink); font: 15px/1.55 var(--font-body); box-shadow: 0 7px 18px rgba(0,0,0,.06); }
+        .vigencia-chat__message { max-width: min(86%, 600px); padding: 13px 16px; border-radius: 7px; color: var(--chat-ink); font: 15px/1.55 var(--font-body); white-space: pre-wrap; box-shadow: 0 5px 14px rgba(0,0,0,.06); }
+        .vigencia-chat__message--user { align-self: flex-end; border: 1px solid rgba(194, 164, 109, .4); background: rgba(194, 164, 109, .12); border-bottom-right-radius: 1px; }
+        .vigencia-chat__message--assistant { align-self: flex-start; border: 1px solid var(--line); background: var(--surface); border-bottom-left-radius: 1px; }
+        .vigencia-chat__loading { align-self: flex-start; color: var(--accent); font: 700 11px var(--font-mono); text-transform: uppercase; letter-spacing: .06em; }
+        .vigencia-chat__composer { display: flex; gap: 12px; padding: 18px 22px 22px; border-top: 1px solid var(--line); background: var(--surface); }
+        .vigencia-chat__input { flex: 1; min-height: 54px; max-height: 110px; resize: vertical; box-sizing: border-box; padding: 15px 16px; border: 1px solid var(--line-strong); border-radius: 5px; outline: none; background: var(--paper); color: var(--chat-ink); font: 15px/1.45 var(--font-body); box-shadow: inset 0 1px 12px rgba(0,0,0,.04); transition: border-color .18s ease, box-shadow .18s ease; }
+        .vigencia-chat__input::placeholder { color: var(--muted); }
+        .vigencia-chat__input:focus { border-color: var(--accent); box-shadow: inset 0 1px 12px rgba(0,0,0,.04), 0 0 0 3px rgba(194, 164, 109, .2); }
+        .vigencia-chat__send { width: 58px; height: 54px; align-self: flex-end; border: none; border-radius: 5px; background: var(--accent); color: #141414; cursor: pointer; font-size: 25px; line-height: 1; box-shadow: 0 0 16px rgba(194, 164, 109, .3); transition: transform .15s ease, box-shadow .15s ease, background .15s ease; }
+        .vigencia-chat__send:hover:not(:disabled) { background: #ad8f5c; transform: translateY(-1px); box-shadow: 0 0 22px rgba(194, 164, 109, .45); }
+        .vigencia-chat__send:active:not(:disabled) { transform: translateY(1px); box-shadow: 0 0 9px rgba(194, 164, 109, .3); }
         .vigencia-chat__send:disabled { opacity: .4; cursor: default; box-shadow: none; }
         @media (max-width: 560px) { .vigencia-chat__header { padding: 19px 17px; } .vigencia-chat__header::after { top: 12px; right: 14px; } .vigencia-chat__messages { height: 260px; padding: 18px 17px; } .vigencia-chat__composer { padding: 14px; } .vigencia-chat__title { max-width: 220px; font-size: 18px; } }
       `}</style>
