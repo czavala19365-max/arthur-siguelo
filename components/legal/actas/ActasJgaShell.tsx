@@ -56,15 +56,12 @@ function ActasJgaShellContent() {
             type="button"
             onClick={() => switchTab(t.id)}
             style={{
+              ...legalStyles.tag,
               padding: '10px 20px',
               background: 'transparent',
               border: 'none',
               borderBottom: tab === t.id ? '2px solid var(--accent)' : '2px solid transparent',
               color: tab === t.id ? 'var(--ink)' : 'var(--muted)',
-              fontFamily: 'var(--font-mono)',
-              fontSize: 10,
-              textTransform: 'uppercase',
-              letterSpacing: '0.08em',
               cursor: 'pointer',
               marginBottom: -1,
             }}
