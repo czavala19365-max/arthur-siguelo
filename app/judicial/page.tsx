@@ -1,34 +1,993 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { formatPartesDisplay } from '@/lib/format-partes-judicial';
+import { getAuthClient } from '@/lib/supabase-auth-client';
 
-export default function JudicialLandingPage() {
+type AdminViewingUser = {
+  id: string;
+  email: string;
+  full_name: string | null;
+};
+
+interface Caso {
+  id: number;
+  tipo_proceso: string | null;
+  alias: string | null;
+  cliente: string | null;
+  partes: string | null;
+  numero_expediente: string;
+  ultimo_movimiento_fecha: string | null;
+  proximo_evento: string | null;
+  proximo_evento_fecha: string | null;
+  prioridad: 'alta' | 'media' | 'baja';
+}
+
+interface Movimiento {
+  id: number;
+  urgencia: 'alta' | 'normal' | 'info';
+  es_nuevo: number;
+}
+
+interface Audiencia {
+  id: number;
+  fecha: string;
+}
+
+const DISTRITOS = [
+  'Lima', 'Lima Norte', 'Lima Sur', 'Lima Este', 'Callao',
+  'Arequipa', 'Cusco', 'La Libertad', 'Piura', 'Junín',
+  'Lambayeque', 'Ica', 'Áncash', 'Cajamarca', 'Loreto',
+  'Puno', 'San Martín', 'Tacna', 'Ayacucho', 'Huánuco',
+  'Moquegua', 'Tumbes', 'Ucayali', 'Amazonas', 'Apurímac',
+  'Huancavelica', 'Madre de Dios', 'Pasco',
+]
+
+const ESPECIALIDADES = [
+  'Civil', 'Laboral', 'Penal', 'Familia', 'Comercial',
+  'Constitucional', 'Contencioso Administrativo', 'Laboral Previsional',
+]
+
+function relativeTime(dateStr: string | null): string {
+  if (!dateStr) return 'Nunca';
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'Hace un momento';
+  if (mins < 60) return `Hace ${mins} min`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `Hace ${hrs}h`;
+  const days = Math.floor(hrs / 24);
+  return `Hace ${days}d`;
+}
+
+function daysUntil(dateStr: string | null): number | null {
+  if (!dateStr) return null;
+  const now = new Date();
+  const d = new Date(dateStr);
+  return Math.ceil((d.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+/** Parse expediente date string for external calendar links (same calendar day, 09:00–10:00). */
+function parseEventDateForCalendar(raw: string): { ymd: string; ymdDash: string } | null {
+  const t = raw.trim();
+  const slash = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (slash) {
+    const d0 = parseInt(slash[1], 10);
+    const m0 = parseInt(slash[2], 10);
+    const y0 = parseInt(slash[3], 10);
+    const date = new Date(y0, m0 - 1, d0);
+    if (Number.isNaN(date.getTime())) return null;
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return { ymd: `${y}${m}${d}`, ymdDash: `${y}-${m}-${d}` };
+  }
+  const date = new Date(t);
+  if (Number.isNaN(date.getTime())) return null;
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return { ymd: `${y}${m}${d}`, ymdDash: `${y}-${m}-${d}` };
+}
+
+function calendarGoogleUrl(alias: string, ymd: string) {
+  const details = encodeURIComponent('Proceso judicial - arthur.ia');
+  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(alias)}&dates=${ymd}T090000/${ymd}T100000&details=${details}`;
+}
+
+function calendarOutlookUrl(alias: string, ymdDash: string) {
+  const body = encodeURIComponent('Proceso judicial - arthur.ia');
+  return `https://outlook.live.com/calendar/0/deeplink/compose?subject=${encodeURIComponent(alias)}&startdt=${encodeURIComponent(`${ymdDash}T09:00:00`)}&enddt=${encodeURIComponent(`${ymdDash}T10:00:00`)}&body=${body}`;
+}
+
+const CURRENT_YEAR = String(new Date().getFullYear());
+
+function asCasoList(raw: unknown): Caso[] {
+  if (raw == null || !Array.isArray(raw)) return [];
+  return raw.filter(
+    (item): item is Caso =>
+      typeof item === 'object' &&
+      item !== null &&
+      'id' in item &&
+      typeof (item as Caso).id === 'number'
+  );
+}
+
+export default function JudicialDashboardPage() {
   const router = useRouter();
+  const [viewingUser, setViewingUser] = useState<AdminViewingUser | null>(null);
+  const [casos, setCasos] = useState<Caso[]>([]);
+  const [stats, setStats] = useState({ total: 0, activos: 0, conAlerta: 0, proximasAudiencias: 0 });
+  const [loading, setLoading] = useState(true);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [pollingId, setPollingId] = useState<number | null>(null);
+  const [navigatingCaseId, setNavigatingCaseId] = useState<number | null>(null);
+
+  // Tabbed form state
+  const [activeTab, setActiveTab] = useState<'codigo' | 'filtros'>('codigo');
+  const [expFields, setExpFields] = useState({ sec: '', ano: CURRENT_YEAR, cero: '', dist: '', tipo: '', esp: '', juz: '' });
+  const [form, setForm] = useState({
+    parte_procesal: '',
+    filtro_distrito: 'Lima',
+    filtro_ano: CURRENT_YEAR,
+    filtro_numero: '',
+    filtro_especialidad: 'Civil',
+    alias: '',
+    whatsapp_number: '',
+    email: '',
+    polling_frequency_hours: 4,
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitStatus, setSubmitStatus] = useState('');
+  const [progress, setProgress] = useState(0);
+  const progressIntervalRef = useRef<number | null>(null);
+
+  // Refs for auto-advance in tab 1
+  const refSec = useRef<HTMLInputElement>(null);
+  const refAno = useRef<HTMLInputElement>(null);
+  const refCero = useRef<HTMLInputElement>(null);
+  const refDist = useRef<HTMLInputElement>(null);
+  const refTipo = useRef<HTMLInputElement>(null);
+  const refEsp = useRef<HTMLInputElement>(null);
+  const refJuz = useRef<HTMLInputElement>(null);
+  const cejSyncPollRef = useRef<number | null>(null);
+  const cejSyncTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
-    router.replace('/judicial/chat');
-  }, [router]);
+    void (async () => {
+      try {
+        const raw = localStorage.getItem('admin_viewing_user');
+        if (!raw) return;
+        const parsed = JSON.parse(raw) as AdminViewingUser;
+        const db = getAuthClient();
+        const {
+          data: { user },
+        } = await db.auth.getUser();
+        if (!user?.id) return;
+        const { data: profile } = await db.from('profiles').select('role').eq('id', user.id).single();
+        if (profile?.role === 'admin') {
+          setViewingUser(parsed);
+        } else {
+          localStorage.removeItem('admin_viewing_user');
+        }
+      } catch {
+        localStorage.removeItem('admin_viewing_user');
+      }
+    })();
+  }, []);
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const query = viewingUser ? `?as_user_id=${encodeURIComponent(viewingUser.id)}` : '';
+      const [casosRes, statsRes] = await Promise.all([
+        fetch(`/api/casos${query}`),
+        fetch(`/api/casos/stats${query}`),
+      ]);
+
+      let casosRaw: unknown;
+      try {
+        casosRaw = await casosRes.json();
+      } catch {
+        casosRaw = null;
+      }
+      const casosList = asCasoList(casosRaw);
+
+      let statsData: typeof stats = { total: 0, activos: 0, conAlerta: 0, proximasAudiencias: 0 };
+      try {
+        const statsRaw: unknown = await statsRes.json();
+        if (statsRaw && typeof statsRaw === 'object' && !Array.isArray(statsRaw) && 'total' in statsRaw) {
+          const o = statsRaw as Record<string, unknown>;
+          statsData = {
+            total: Number(o.total) || 0,
+            activos: Number(o.activos) || 0,
+            conAlerta: Number(o.conAlerta) || 0,
+            proximasAudiencias: Number(o.proximasAudiencias) || 0,
+          };
+        }
+      } catch {
+        /* keep defaults */
+      }
+
+      setCasos(casosList);
+      setStats(statsData);
+    } finally {
+      setLoading(false);
+    }
+  }, [viewingUser]);
+
+  useEffect(() => { void loadData(); }, [loadData]);
+
+  useEffect(
+    () => () => {
+      if (cejSyncPollRef.current) {
+        clearInterval(cejSyncPollRef.current);
+        cejSyncPollRef.current = null;
+      }
+      if (cejSyncTimeoutRef.current) {
+        clearTimeout(cejSyncTimeoutRef.current);
+        cejSyncTimeoutRef.current = null;
+      }
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+        progressIntervalRef.current = null;
+      }
+    },
+    []
+  );
+
+  function resetForm() {
+    setActiveTab('codigo');
+    setExpFields({ sec: '', ano: CURRENT_YEAR, cero: '', dist: '', tipo: '', esp: '', juz: '' });
+    setForm({
+      parte_procesal: '',
+      filtro_distrito: 'Lima',
+      filtro_ano: CURRENT_YEAR,
+      filtro_numero: '',
+      filtro_especialidad: 'Civil',
+      alias: '',
+      whatsapp_number: '',
+      email: '',
+      polling_frequency_hours: 4,
+    });
+
+    setIsSubmitting(false);
+    setSubmitStatus('');
+    setProgress(0);
+  }
+
+  function advanceField(
+    value: string,
+    maxLen: number,
+    nextRef: React.RefObject<HTMLInputElement | null> | null
+  ) {
+    if (value.length === maxLen && nextRef?.current) {
+      nextRef.current.focus();
+    }
+  }
+
+  async function createCaso() {
+    let numero_expediente: string;
+    if (activeTab === 'codigo') {
+      const cero = expFields.cero && expFields.cero.trim() ? expFields.cero.trim() : '0';
+      numero_expediente = `${expFields.sec}-${expFields.ano}-${cero}-${expFields.dist}-${expFields.tipo}-${expFields.esp}-${expFields.juz}`;
+    } else {
+      numero_expediente = form.filtro_numero;
+    }
+
+    setIsSubmitting(true);
+    setSubmitStatus('');
+    setProgress(0);
+
+    // Inicia animación de progreso realista y acorde al scraping
+    if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
+    let stage = 0; // 0-2: inicial lento, 2-50: medio, 50+: muy lento
+    progressIntervalRef.current = window.setInterval(() => {
+      setProgress(prev => {
+        let increment = 0;
+        if (prev < 25) {
+          // Fase inicial: subida lenta (simula bloqueos iniciales del sitio)
+          increment = 0.8 + Math.random() * 1.2;
+        } else if (prev < 70) {
+          // Fase media: progreso moderado
+          increment = 1.5 + Math.random() * 1.8;
+        } else {
+          // Fase final: muy lenta, casi imperceptible pero constante
+          increment = 0.5 + Math.random() * 0.8;
+        }
+        const newProgress = Math.min(prev + increment, 99);
+        return newProgress;
+      });
+    }, 800);
+
+    const payload: Record<string, unknown> = {
+      numero_expediente,
+      parte_procesal: form.parte_procesal,
+      alias: form.alias || null,
+      searchType: activeTab,
+      whatsapp_number: form.whatsapp_number || null,
+      email: form.email || null,
+      polling_frequency_hours: form.polling_frequency_hours,
+    };
+    if (activeTab === 'filtros') {
+      payload.distrito_judicial = form.filtro_distrito;
+      payload.tipo_proceso = form.filtro_especialidad;
+    }
+
+    const res = await fetch('/api/casos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      let msg = 'Error al guardar el proceso.';
+      try {
+        const j = JSON.parse(text) as { error?: string; detail?: string };
+        if (j.error && j.error !== 'Error al crear proceso judicial') msg = j.error;
+        else if (j.detail) msg = `${msg} ${j.detail}`
+      } catch {
+        if (text) msg = `${msg} (${text.slice(0, 120)})`;
+      }
+      if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
+      setProgress(0);
+      setSubmitStatus(msg);
+      setIsSubmitting(false);
+      return;
+    }
+
+    const data = await res.json() as Record<string, unknown>;
+
+    // Limpia el intervalo de progreso y lleva a 100%
+    if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
+    setProgress(100);
+
+    if (data.portalDown) {
+      setSubmitStatus('⚠️ Proceso guardado. CEJ no disponible.');
+    } else if (data.captchaFailed) {
+      setSubmitStatus('⚠️ Proceso guardado. Captcha no resuelto.');
+    } else {
+      setSubmitStatus('✅ Proceso y movimientos obtenidos satisfactoriamente.');
+    } const delay = 2500; setTimeout(() => {
+      setDrawerOpen(false);
+      resetForm();
+      setProgress(0);
+      if (!data.syncPending) void loadData();
+    }, delay);
+  }
+
+  async function pollNow(id: number) {
+    setPollingId(id);
+    await fetch(`/api/casos/${id}/poll-now`, { method: 'POST' });
+    setPollingId(null);
+    await loadData();
+  }
+
+  function openCaso(casoId: number) {
+    setNavigatingCaseId(casoId);
+    router.push(`/judicial/${casoId}`);
+  }
+
+  async function archiveCasoRow(id: number) {
+    if (!confirm('¿Archivar este proceso? Dejará de mostrarse en Mis Procesos (podrás restaurarlo desde Archivados).')) return;
+    const r = await fetch(`/api/casos/${id}/archive`, { method: 'POST' });
+    if (!r.ok) {
+      alert('No se pudo archivar el proceso.');
+      return;
+    }
+    await loadData();
+  }
+
+  async function eliminarCasoRow(id: number) {
+    if (
+      !confirm(
+        '¿Eliminar este proceso? Irá a la papelera y se borrará permanentemente del sistema a los 30 días.'
+      )
+    )
+      return;
+    const r = await fetch(`/api/casos/${id}`, { method: 'DELETE' });
+    if (!r.ok) {
+      alert('No se pudo eliminar el proceso.');
+      return;
+    }
+    await loadData();
+  }
+
+  async function togglePriority(c: Caso) {
+    const next = c.prioridad === 'alta' ? 'media' : c.prioridad === 'media' ? 'baja' : 'alta';
+    await fetch(`/api/casos/${c.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prioridad: next }),
+    });
+    await loadData();
+  }
+
+  if (loading) {
+    return <div style={{ padding: '48px 64px', fontFamily: 'var(--font-mono)', fontSize: '11px', textTransform: 'uppercase', color: 'var(--muted)' }}>Cargando procesos...</div>;
+  }
+
+  const labelStyle: React.CSSProperties = { fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase' as const, letterSpacing: '0.1em', color: 'var(--muted)' };
+  const inputStyle: React.CSSProperties = { width: '100%', border: '1px solid var(--line-strong)', padding: '12px 14px', marginTop: 6, marginBottom: 16, fontFamily: 'var(--font-body)', fontSize: '13px', background: 'var(--paper)', color: 'var(--ink)', boxSizing: 'border-box' };
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        background: 'var(--paper)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        color: 'var(--muted)',
-        fontFamily: 'var(--font-mono)',
-        fontSize: '11px',
-        textTransform: 'uppercase',
-        letterSpacing: '0.12em',
-      }}
-    >
-      Cargando chat judicial...
+    <div style={{ background: 'var(--paper)', minHeight: '100%' }}>
+      {navigatingCaseId !== null && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(12, 12, 12, 0.55)',
+            backdropFilter: 'blur(2px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 18,
+              background: 'rgba(20,20,20,0.92)',
+              border: '1px solid rgba(194,164,109,0.5)',
+              padding: '28px 32px',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.35)',
+            }}
+          >
+            <div
+              style={{
+                width: 54,
+                height: 54,
+                borderRadius: '50%',
+                border: '3px solid rgba(255,255,255,0.14)',
+                borderTopColor: '#c2a46d',
+                borderRightColor: '#c2a46d',
+                transform: 'rotate(0deg)',
+                animation: 'spin 1s linear infinite',
+              }}
+            />
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#f0e7d2' }}>
+              Cargando proceso...
+            </div>
+          </div>
+        </div>
+      )}
+
+      {viewingUser && (
+        <div
+          style={{
+            background: 'rgba(201,168,76,0.15)',
+            borderBottom: '1px solid rgba(201,168,76,0.3)',
+            padding: '10px 40px',
+            fontFamily: 'var(--font-mono)',
+            fontSize: '12px',
+            color: '#c9a84c',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '8px',
+          }}
+        >
+          <span>
+            Estás viendo como: {viewingUser.full_name || viewingUser.email} ({viewingUser.email})
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              router.push('/select');
+            }}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              fontFamily: 'var(--font-mono)',
+              fontSize: '12px',
+              color: '#c9a84c',
+              cursor: 'pointer',
+              textDecoration: 'underline',
+              padding: 0,
+            }}
+          >
+            Volver a módulos →
+          </button>
+        </div>
+      )}
+      <div style={{ padding: '48px 32px 48px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderLeft: '4px solid #c2a46d', paddingLeft: '24px' }}>
+          <div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.15em', color: '#c2a46d', marginBottom: '8px' }}>
+              MIS PROCESOS
+            </div>
+            <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(32px, 4vw, 48px)', color: 'var(--ink)', fontWeight: 400 }}>Mis Procesos</h1>
+          </div>
+          <button onClick={() => setDrawerOpen(true)} style={{ background: 'var(--ink)', color: 'var(--paper)', border: 'none', borderRadius: 0, padding: '12px 24px', fontFamily: 'var(--font-body)', fontSize: '13px', cursor: 'pointer' }}>
+            + Nuevo proceso
+          </button>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px', marginTop: '32px' }}>
+          {[
+            { label: 'TOTAL PROCESOS', value: stats.total, color: 'var(--ink)', top: 'transparent', bg: 'var(--surface)' },
+            { label: 'CON ALERTAS', value: stats.conAlerta, color: '#991b1b', top: '#991b1b', bg: 'rgba(153,27,27,0.04)' },
+            { label: 'ACTIVOS', value: stats.activos, color: '#166534', top: '#166534', bg: 'rgba(22,101,52,0.04)' },
+            { label: 'PRÓXIMAS AUDIENCIAS', value: stats.proximasAudiencias, color: '#92400e', top: '#d97706', bg: 'rgba(217,119,6,0.06)' },
+          ].map(card => (
+            <div key={card.label} style={{ background: card.bg, border: '1px solid var(--line)', borderTop: card.label === 'TOTAL PROCESOS' ? '3px solid #c2a46d' : card.top === 'transparent' ? '1px solid var(--line)' : `3px solid ${card.top}`, padding: '24px 28px' }}>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.12em', color: card.color, marginBottom: '8px' }}>{card.label}</div>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: '52px', lineHeight: 1, color: card.color }}>{card.value}</div>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ marginTop: '32px', background: 'var(--surface)', border: '1px solid var(--line)', overflowX: 'auto' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '72px 100px 1.4fr 180px 130px 150px 90px 110px 120px', minWidth: '900px', padding: '12px 24px', background: 'var(--paper-dark)', fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--muted)', gap: '12px' }}>
+            <span>ESTADO</span><span>TIPO</span><span>ALIAS / CLIENTE</span><span>EXPEDIENTE</span><span>ÚLTIMA ACTUALIZ.</span><span>PRÓXIMO EVENTO</span><span>GESTIÓN</span>
+          </div>
+
+          {(!Array.isArray(casos) || casos.length === 0) ? (
+            <div style={{ padding: '56px 24px', textAlign: 'center', fontFamily: 'var(--font-body)', color: 'var(--muted)' }}>
+              No hay procesos registrados todavía.
+            </div>
+          ) : casos.map(c => {
+            return (
+              <div
+                key={c.id}
+                onClick={() => openCaso(c.id)}
+                style={{ display: 'grid', gridTemplateColumns: '72px 100px 1.4fr 180px 130px 150px 90px 110px 120px', minWidth: '900px', padding: '0 24px', minHeight: '66px', alignItems: 'center', borderBottom: '1px solid var(--line-faint)', gap: '12px', cursor: 'pointer' }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = '#f0f0f0';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent';
+                }}
+              >
+                <div>
+                  <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '50%', background: c.prioridad === 'alta' ? '#991b1b' : c.prioridad === 'media' ? '#d97706' : '#166534' }} />
+                </div>
+                <div style={{ fontFamily: 'var(--font-body)', fontSize: '13px' }}>{c.tipo_proceso || '—'}</div>
+                <div>
+                  <div style={{ fontFamily: 'var(--font-body)', fontSize: '14px', fontWeight: 600 }}>{c.alias || c.cliente || 'Sin alias'}</div>
+                  {(() => {
+                    const partesLine = formatPartesDisplay(c.partes);
+                    if (!partesLine) return null;
+                    return (
+                      <div style={{ fontFamily: 'var(--font-body)', fontSize: '12px', color: 'var(--muted)', marginTop: '4px', lineHeight: 1.45 }}>
+                        {partesLine}
+                      </div>
+                    );
+                  })()}
+                </div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--muted)' }}>{c.numero_expediente}</div>
+                <div style={{ fontFamily: 'var(--font-body)', fontSize: '13px', color: 'var(--muted)' }}>{relativeTime(c.ultimo_movimiento_fecha)}</div>
+                <div style={{ fontFamily: 'var(--font-body)', fontSize: '12px', color: 'var(--muted)' }}>Abre detalle</div>
+                <div onClick={e => e.stopPropagation()} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <button
+                    type="button"
+                    onClick={() => void archiveCasoRow(c.id)}
+                    style={{ background: 'transparent', border: '1px solid var(--line-strong)', padding: '5px 8px', fontFamily: 'var(--font-mono)', fontSize: '9px', textTransform: 'uppercase', cursor: 'pointer', color: 'var(--muted)' }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = '#adb5bd';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'transparent';
+                    }}
+                  >
+                    Archivar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void eliminarCasoRow(c.id)}
+                    style={{ background: 'transparent', border: '1px solid #991b1b', padding: '5px 8px', fontFamily: 'var(--font-mono)', fontSize: '9px', textTransform: 'uppercase', cursor: 'pointer', color: '#991b1b' }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = '#ff8787';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'transparent';
+                    }}
+                  >
+                    Eliminar
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {drawerOpen && (
+          <>
+            <div onClick={() => setDrawerOpen(false)} style={{ position: 'fixed', inset: 0, background: 'var(--overlay-scrim)', zIndex: 200 }} />
+            <div className="animate-slideInRight" style={{ position: 'fixed', top: 0, right: 0, width: '520px', height: '100vh', background: 'var(--paper)', borderLeft: '1px solid var(--line-mid)', zIndex: 300, overflowY: 'auto', padding: '40px 36px' }}>
+              <button onClick={() => setDrawerOpen(false)} style={{ position: 'absolute', right: '20px', top: '16px', border: 'none', background: 'none', cursor: 'pointer', fontSize: '20px' }}>×</button>
+              <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '28px', fontWeight: 400 }}>Nuevo proceso</h2>
+              <div style={{ width: '60px', height: '2px', background: 'var(--accent)', marginTop: '12px', marginBottom: '24px' }} />
+
+              {/* Tabs */}
+              <div style={{ display: 'flex', borderBottom: '1px solid var(--line-strong)', marginBottom: '24px' }}>
+                {(['codigo', 'filtros'] as const).map(tab => (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveTab(tab)}
+                    style={{
+                      border: 'none',
+                      borderBottom: activeTab === tab ? '2px solid var(--ink)' : '2px solid transparent',
+                      background: 'none',
+                      padding: '10px 16px',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: '10px',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.1em',
+                      cursor: 'pointer',
+                      color: activeTab === tab ? 'var(--ink)' : 'var(--muted)',
+                      marginBottom: '-1px',
+                    }}
+                  >
+                    {tab === 'codigo' ? 'Por Código de Expediente' : 'Por Filtros'}
+                  </button>
+                ))}
+              </div>
+
+              {/* TAB 1: Por Código de Expediente */}
+              {activeTab === 'codigo' && (
+                <div>
+                  <label style={labelStyle}>Código de Expediente</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: 8, marginBottom: 6, flexWrap: 'nowrap' }}>
+                    <input
+                      ref={refSec}
+                      maxLength={5}
+                      placeholder="00001"
+                      value={expFields.sec}
+                      onChange={e => {
+                        const v = e.target.value;
+                        setExpFields(p => ({ ...p, sec: v }));
+                        advanceField(v, 5, refAno);
+                      }}
+                      style={{ width: '60px', border: '1px solid var(--line-strong)', padding: '10px 8px', fontFamily: 'var(--font-mono)', fontSize: '12px', textAlign: 'center', background: 'var(--paper)', color: 'var(--ink)' }}
+                    />
+                    <span style={{ color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>-</span>
+                    <input
+                      ref={refAno}
+                      maxLength={4}
+                      placeholder={CURRENT_YEAR}
+                      value={expFields.ano}
+                      onChange={e => {
+                        const v = e.target.value;
+                        setExpFields(p => ({ ...p, ano: v }));
+                        advanceField(v, 4, refCero);
+                      }}
+                      style={{ width: '52px', border: '1px solid var(--line-strong)', padding: '10px 8px', fontFamily: 'var(--font-mono)', fontSize: '12px', textAlign: 'center', background: 'var(--paper)', color: 'var(--ink)' }}
+                    />
+                    <span style={{ color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>-</span>
+                    <input
+                      ref={refCero}
+                      maxLength={1}
+                      inputMode="numeric"
+                      placeholder="0"
+                      value={expFields.cero}
+                      onChange={e => {
+                        const v = e.target.value.replace(/[^0-9]/g, '').slice(0, 1);
+                        setExpFields(p => ({ ...p, cero: v }));
+                        if (v) advanceField(v, 1, refDist);
+                      }}
+                      style={{ width: '28px', border: '1px solid var(--line-strong)', padding: '10px 6px', fontFamily: 'var(--font-mono)', fontSize: '12px', textAlign: 'center', background: 'var(--paper)', color: 'var(--ink)' }}
+                    />
+                    <span style={{ color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>-</span>
+                    <input
+                      ref={refDist}
+                      maxLength={4}
+                      placeholder="1801"
+                      value={expFields.dist}
+                      onChange={e => {
+                        const v = e.target.value;
+                        setExpFields(p => ({ ...p, dist: v }));
+                        advanceField(v, 4, refTipo);
+                      }}
+                      style={{ width: '52px', border: '1px solid var(--line-strong)', padding: '10px 8px', fontFamily: 'var(--font-mono)', fontSize: '12px', textAlign: 'center', background: 'var(--paper)', color: 'var(--ink)' }}
+                    />
+                    <span style={{ color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>-</span>
+                    <input
+                      ref={refTipo}
+                      maxLength={2}
+                      placeholder="JR"
+                      value={expFields.tipo}
+                      onChange={e => {
+                        const v = e.target.value;
+                        setExpFields(p => ({ ...p, tipo: v }));
+                        advanceField(v, 2, refEsp);
+                      }}
+                      style={{ width: '36px', border: '1px solid var(--line-strong)', padding: '10px 6px', fontFamily: 'var(--font-mono)', fontSize: '12px', textAlign: 'center', background: 'var(--paper)', color: 'var(--ink)' }}
+                    />
+                    <span style={{ color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>-</span>
+                    <input
+                      ref={refEsp}
+                      maxLength={2}
+                      placeholder="CI"
+                      value={expFields.esp}
+                      onChange={e => {
+                        const v = e.target.value;
+                        setExpFields(p => ({ ...p, esp: v }));
+                        advanceField(v, 2, refJuz);
+                      }}
+                      style={{ width: '36px', border: '1px solid var(--line-strong)', padding: '10px 6px', fontFamily: 'var(--font-mono)', fontSize: '12px', textAlign: 'center', background: 'var(--paper)', color: 'var(--ink)' }}
+                    />
+                    <span style={{ color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>-</span>
+                    <input
+                      ref={refJuz}
+                      maxLength={2}
+                      placeholder="06"
+                      value={expFields.juz}
+                      onChange={e => setExpFields(p => ({ ...p, juz: e.target.value }))}
+                      style={{ width: '36px', border: '1px solid var(--line-strong)', padding: '10px 6px', fontFamily: 'var(--font-mono)', fontSize: '12px', textAlign: 'center', background: 'var(--paper)', color: 'var(--ink)' }}
+                    />
+                  </div>
+                  <p style={{ fontFamily: 'var(--font-body)', fontSize: '11px', color: 'var(--muted)', marginBottom: '20px' }}>
+                    Ej: 00001-2005-0-1817-JR-CO-06
+                  </p>
+
+                  <label style={labelStyle}>
+                    PARTE PROCESAL (PARA BÚSQUEDA EN CEJ) <span style={{ color: '#991b1b' }}>*</span>
+                  </label>
+                  <input
+                    value={form.parte_procesal}
+                    onChange={e => setForm(p => ({ ...p, parte_procesal: e.target.value }))}
+                    placeholder="Ej: GARCIA LOPEZ o CONSTRUCTORA ANDINA SAC"
+                    required
+                    style={inputStyle}
+                  />
+                  <p style={{ fontFamily: 'var(--font-body)', fontSize: '11px', color: 'var(--muted)', marginTop: -12, marginBottom: '16px' }}>
+                    Ingresa el apellido paterno y materno, o la razón social exactamente como aparece en el CEJ
+                  </p>
+                </div>
+              )}
+
+              {/* TAB 2: Por Filtros */}
+              {activeTab === 'filtros' && (
+                <div>
+                  <label style={labelStyle}>Distrito Judicial</label>
+                  <select
+                    value={form.filtro_distrito}
+                    onChange={e => setForm(p => ({ ...p, filtro_distrito: e.target.value }))}
+                    style={{ ...inputStyle }}
+                  >
+                    {DISTRITOS.map(d => <option key={d}>{d}</option>)}
+                  </select>
+
+                  <label style={labelStyle}>Año</label>
+                  <input
+                    type="number"
+                    value={form.filtro_ano}
+                    onChange={e => setForm(p => ({ ...p, filtro_ano: e.target.value }))}
+                    style={inputStyle}
+                  />
+
+                  <label style={labelStyle}>Número</label>
+                  <input
+                    value={form.filtro_numero}
+                    onChange={e => setForm(p => ({ ...p, filtro_numero: e.target.value }))}
+                    style={inputStyle}
+                  />
+
+                  <label style={labelStyle}>Especialidad</label>
+                  <select
+                    value={form.filtro_especialidad}
+                    onChange={e => setForm(p => ({ ...p, filtro_especialidad: e.target.value }))}
+                    style={{ ...inputStyle }}
+                  >
+                    {ESPECIALIDADES.map(e => <option key={e}>{e}</option>)}
+                  </select>
+
+                  <label style={labelStyle}>
+                    PARTE PROCESAL (PARA BÚSQUEDA EN CEJ) <span style={{ color: '#991b1b' }}>*</span>
+                  </label>
+                  <input
+                    value={form.parte_procesal}
+                    onChange={e => setForm(p => ({ ...p, parte_procesal: e.target.value }))}
+                    placeholder="Ej: GARCIA LOPEZ o CONSTRUCTORA ANDINA SAC"
+                    required
+                    style={inputStyle}
+                  />
+                  <p style={{ fontFamily: 'var(--font-body)', fontSize: '11px', color: 'var(--muted)', marginTop: -12, marginBottom: '16px' }}>
+                    Ingresa el apellido paterno y materno, o la razón social exactamente como aparece en el CEJ
+                  </p>
+                </div>
+              )}
+
+              {/* Always visible below tabs */}
+              <label style={labelStyle}>Alias del caso</label>
+              <input
+                value={form.alias}
+                onChange={e => setForm(p => ({ ...p, alias: e.target.value }))}
+                placeholder="Nombre descriptivo para identificar el caso"
+                style={inputStyle}
+              />
+
+              <label style={labelStyle}>WhatsApp</label>
+              <input
+                value={form.whatsapp_number}
+                onChange={e => setForm(p => ({ ...p, whatsapp_number: e.target.value }))}
+                placeholder="+51999000000"
+                style={inputStyle}
+              />
+
+              <label style={labelStyle}>Email</label>
+              <input
+                value={form.email}
+                onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
+                style={inputStyle}
+              />
+
+              {/* <label style={labelStyle}>Frecuencia de revisión</label>
+              <select
+                value={form.polling_frequency_hours}
+                onChange={e => setForm(p => ({ ...p, polling_frequency_hours: Number(e.target.value) }))}
+                style={{ ...inputStyle }}
+              >
+                <option value={1}>Cada hora</option>
+                <option value={2}>Cada 2h</option>
+                <option value={4}>Cada 4h</option>
+                <option value={12}>Cada 12h</option>
+                <option value={24}>Cada 24h</option>
+              </select>*/}
+
+              {isSubmitting ? (
+                <div
+                  style={{
+                    padding: '24px',
+                    border: '1px solid var(--line)',
+                    background: 'var(--surface)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '12px',
+                    marginTop: 8,
+                  }}
+                >
+                  {/* Barra de progreso con shimmer */}
+                  <div
+                    style={{
+                      width: '100%',
+                      height: '10px',
+                      background: '#e5e7eb',
+                      borderRadius: '5px',
+                      overflow: 'hidden',
+                      position: 'relative',
+                    }}
+                  >
+                    <div
+                      style={{
+                        height: '100%',
+                        background: 'linear-gradient(90deg, #2563eb 0%, #1d4ed8 100%)',
+                        width: `${progress}%`,
+                        transition: 'width 0.4s ease-out',
+                        borderRadius: '5px',
+                        boxShadow: '0 0 12px rgba(37, 99, 235, 0.5)',
+                        position: 'relative',
+                      }}
+                    />
+                  </div>
+
+                  {/* Texto con porcentaje y estado */}
+                  <div
+                    style={{
+                      fontFamily: 'var(--font-body)',
+                      fontSize: '13px',
+                      color: 'var(--ink)',
+                      fontWeight: 600,
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <span>{Math.round(progress)}% - Extrayendo movimientos de CEJ</span>
+                    <span
+                      style={{
+                        fontSize: '11px',
+                        fontWeight: 'normal',
+                        color: '#2563eb',
+                        opacity: 0.8,
+                      }}
+                    >
+                      ● En progreso
+                    </span>
+                  </div>
+
+                  <div
+                    style={{
+                      fontFamily: 'var(--font-body)',
+                      fontSize: '12px',
+                      color: 'var(--muted)',
+                      textAlign: 'left',
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    Este proceso puede tardar varios minutos. La página requiere validaciones que pueden ralentizar la búsqueda. Por favor, no cierre esta ventana.
+                  </div>
+
+                </div>
+              ) : submitStatus ? (
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '12px',
+                    marginTop: 8,
+                  }}
+                >
+                  <div
+                    style={{
+                      padding: '16px',
+                      border: '1px solid var(--line)',
+                      background: 'var(--surface)',
+                      fontFamily: 'var(--font-body)',
+                      fontSize: '13px',
+                      color: 'var(--ink)',
+                    }}
+                  >
+                    {submitStatus}
+                  </div>
+                  {submitStatus.includes('Error') ||
+                    submitStatus.includes('No se pudieron') ||
+                    submitStatus.includes('error') ||
+                    submitStatus.includes('No se encontraron') ||
+                    submitStatus.includes('datos incorrectos') ||
+                    submitStatus.includes('No se pudo verificar')
+                    ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSubmitStatus('');
+                          setProgress(0);
+                        }}
+                        style={{
+                          width: '100%',
+                          background: 'var(--ink)',
+                          color: 'var(--paper)',
+                          border: 'none',
+                          borderRadius: 0,
+                          padding: '16px',
+                          fontFamily: 'var(--font-body)',
+                          fontSize: '14px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Reintentar →
+                      </button>
+                    ) : null}
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => void createCaso()}
+                  style={{
+                    width: '100%',
+                    background: 'var(--ink)',
+                    color: 'var(--paper)',
+                    border: 'none',
+                    borderRadius: 0,
+                    padding: '16px',
+                    fontFamily: 'var(--font-body)',
+                    fontSize: '14px',
+                    cursor: 'pointer',
+                    marginTop: 8,
+                  }}
+                >
+                  Comenzar seguimiento →
+                </button>
+              )}
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }
+
+
+
 
 
 
