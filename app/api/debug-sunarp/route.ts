@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server'
 import { scrapeTitulo, getOficinas } from '@/lib/sunarp-scraper'
+import { requireAuthUser } from '@/lib/judicial-caso-access'
 
 export async function GET(request: Request) {
+  const auth = await requireAuthUser()
+  if ('response' in auth) return auth.response
+
   const { searchParams } = new URL(request.url)
   const numero = searchParams.get('numero') || '001234'
   const anio = searchParams.get('anio') || '2024'
@@ -31,7 +35,6 @@ export async function GET(request: Request) {
     })
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error)
-    const stack = error instanceof Error ? error.stack : undefined
-    return NextResponse.json({ success: false, error: msg, stack }, { status: 500 })
+    return NextResponse.json({ success: false, error: msg }, { status: 500 })
   }
 }

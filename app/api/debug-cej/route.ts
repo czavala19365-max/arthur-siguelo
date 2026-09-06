@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server'
 import { scrapeCEJ } from '@/lib/cej-scraper'
+import { requireAuthUser } from '@/lib/judicial-caso-access'
 
 export async function GET(request: Request) {
+  const auth = await requireAuthUser()
+  if ('response' in auth) return auth.response
+
   const { searchParams } = new URL(request.url)
   const numero = searchParams.get('numero') || '10001-2022-0-1801-JR-CI-01'
   const parte = searchParams.get('parte') || ''

@@ -12,15 +12,11 @@ import {
   updateCaso,
   type Caso,
 } from '@/lib/judicial-db'
+import { isCronAuthorized } from '@/lib/cron-auth'
 
 // Vercel cron protection
 export const runtime = 'nodejs'
 export const maxDuration = 60
-
-function isAuthorized(req: NextRequest): boolean {
-  const auth = req.headers.get('authorization') ?? ''
-  return auth === `Bearer ${process.env.CRON_SECRET}`
-}
 
 async function fetchCej(numero: string, parte: string): Promise<CejCaseData> {
   const scraperUrl = process.env.CEJ_SCRAPER_URL?.trim()
@@ -73,7 +69,7 @@ async function fetchCej(numero: string, parte: string): Promise<CejCaseData> {
 }
 
 export async function GET(req: NextRequest) {
-  if (!isAuthorized(req)) {
+  if (!isCronAuthorized(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

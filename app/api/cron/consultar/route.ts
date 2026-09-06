@@ -4,6 +4,7 @@ import { consultarTitulo, detalleTituloSunarp } from '@/lib/scraper'
 import { enviarAlertaEmail, enviarAlertaWhatsApp } from '@/lib/alertas'
 import { normalizarEstado } from '@/lib/estados'
 import type { CronResumen, CronDetalleTitulo } from '@/types'
+import { isCronAuthorized } from '@/lib/cron-auth'
 
 /**
  * GET /api/cron/consultar
@@ -13,8 +14,7 @@ import type { CronResumen, CronDetalleTitulo } from '@/types'
  */
 export async function GET(request: NextRequest) {
   // ── Validar secret de Vercel Cron ────────────────────────────────────────
-  const authHeader = request.headers.get('authorization')
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!isCronAuthorized(request)) {
     return NextResponse.json({ error: 'No autorizado.' }, { status: 401 })
   }
 
