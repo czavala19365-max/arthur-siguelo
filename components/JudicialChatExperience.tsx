@@ -103,13 +103,7 @@ function SimpleMarkdown({ text }: { text: string }) {
 }
 
 export default function JudicialChatExperience() {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      role: 'assistant',
-      content:
-        'Buenos días. Estoy aquí para apoyar en análisis, estrategia y redacción jurídica. Puede indicarme el asunto, el expediente o el tipo de requerimiento que necesita resolver.',
-    },
-  ])
+  const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [isTyping, setIsTyping] = useState(false)
   const endRef = useRef<HTMLDivElement>(null)
@@ -146,294 +140,55 @@ export default function JudicialChatExperience() {
     }
   }
 
+  const active = !!input.trim()
+
   return (
     <>
       <style>{`
-        @keyframes fadeUp {
-          from { opacity: 0; transform: translateY(12px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes dotPulse {
-          0%, 80%, 100% { opacity: 0.35; transform: scale(0.8); }
-          40% { opacity: 1; transform: scale(1); }
-        }
-        .judicial-chat-input:focus {
-          border-color: rgba(194,164,109,0.7) !important;
-          box-shadow: 0 0 0 4px rgba(194,164,109,0.10) !important;
-        }
-        .judicial-chip:hover {
-          border-color: rgba(194,164,109,0.45) !important;
-          background: rgba(194,164,109,0.06) !important;
-        }
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+        .judicial-qbox:focus-within { border-color: rgba(194,164,109,0.55) !important; box-shadow: 0 4px 32px rgba(194,164,109,0.08), 0 2px 20px rgba(0,0,0,0.05) !important; }
+        .judicial-chip { display: inline-flex; align-items: center; gap: 8px; padding: 9px 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 100px; font-family: var(--font-body); font-size: 13px; font-weight: 500; color: var(--ink); text-decoration: none; transition: background 0.15s, border-color 0.15s; white-space: nowrap; cursor: pointer; }
+        .judicial-chip:hover { background: rgba(194,164,109,0.1); border-color: rgba(194,164,109,0.4); }
+        .judicial-send { transition: background 0.2s, color 0.2s, opacity 0.2s, border-color 0.2s; }
+        .judicial-send:hover:not(:disabled) { opacity: 0.82; }
+        @media (max-width: 640px) { .judicial-home { padding: 40px 20px 60px !important; } }
       `}</style>
-
-      <div
-        style={{
-          minHeight: '100vh',
-          background: 'var(--paper)',
-          color: 'var(--ink)',
-          display: 'flex',
-          flexDirection: 'column',
-          animation: 'fadeUp 0.35s ease',
-        }}
-      >
-        <div
-          style={{
-            borderBottom: '1px solid var(--line)',
-            background: 'rgba(255,255,255,0.85)',
-            backdropFilter: 'blur(8px)',
-            padding: '20px 32px',
-            position: 'sticky',
-            top: 0,
-            zIndex: 10,
-          }}
-        >
-          <div
-            style={{
-              maxWidth: '980px',
-              margin: '0 auto',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: '20px',
-            }}
-          >
-            <div>
-              <div
-                style={{
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: '10px',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.14em',
-                  color: 'var(--accent)',
-                  marginBottom: '8px',
-                }}
-              >
-                Arthur AI · Judicial
-              </div>
-              <h1
-                style={{
-                  fontFamily: 'var(--font-display)',
-                  fontSize: 'clamp(28px, 3vw, 38px)',
-                  margin: 0,
-                  fontWeight: 600,
-                  letterSpacing: '-0.04em',
-                  color: 'var(--ink)',
-                }}
-              >
-                Asistente legal
-              </h1>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setMessages([{ role: 'assistant', content: 'Buenas tardes. Estoy aquí para apoyar en análisis, estrategia y redacción jurídica. Puede indicarme el asunto, el expediente o el tipo de requerimiento que necesita resolver.' }])}
-              style={{
-                background: 'transparent',
-                border: '1px solid var(--line)',
-                color: 'var(--ink)',
-                fontFamily: 'var(--font-mono)',
-                fontSize: '10px',
-                textTransform: 'uppercase',
-                letterSpacing: '0.1em',
-                padding: '10px 16px',
-                borderRadius: '8px',
-                cursor: 'pointer',
-              }}
-            >
-              Nueva conversación
-            </button>
-          </div>
+      <div className="judicial-home" style={{ padding: '64px 48px 80px', background: 'var(--paper)', minHeight: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '5px 14px', background: 'rgba(194,164,109,0.1)', border: '1px solid rgba(194,164,109,0.3)', borderRadius: '100px', fontFamily: 'var(--font-mono)', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--accent)', marginBottom: '22px', animation: 'fadeUp 0.45s ease forwards' }}>
+          Arthur AI · Poder Judicial
         </div>
-
-        <div style={{ flex: 1, display: 'flex', justifyContent: 'center', padding: '32px 20px 24px' }}>
-          <div style={{ width: '100%', maxWidth: '980px' }}>
-            {messages.length === 1 && (
-              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '18px', flexWrap: 'wrap', gap: '10px' }}>
-                
-              </div>
-            )}
-
-            <div
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '18px',
-                minHeight: '380px',
-              }}
-            >
-              {messages.map((message, index) => (
-                <div
-                  key={`${message.role}-${index}`}
-                  style={{
-                    display: 'flex',
-                    justifyContent: message.role === 'user' ? 'flex-end' : 'flex-start',
-                  }}
-                >
-                  {message.role === 'assistant' ? (
-                    <div
-                      style={{
-                        maxWidth: '820px',
-                        width: '100%',
-                        background: 'rgba(194,164,109,0.04)',
-                        border: '1px solid rgba(194,164,109,0.18)',
-                        borderLeft: '4px solid var(--accent)',
-                        borderRadius: '14px',
-                        padding: '18px 18px 16px',
-                        boxShadow: '0 12px 28px rgba(20,20,20,0.03)',
-                      }}
-                    >
-                      <div
-                        style={{
-                          fontFamily: 'var(--font-mono)',
-                          fontSize: '10px',
-                          letterSpacing: '0.12em',
-                          textTransform: 'uppercase',
-                          color: 'var(--muted)',
-                          marginBottom: '10px',
-                        }}
-                      >
-                        Arthur IA
-                      </div>
-                      <SimpleMarkdown text={message.content} />
-                    </div>
-                  ) : (
-                    <div
-                      style={{
-                        maxWidth: '720px',
-                        background: 'var(--ink)',
-                        color: 'var(--paper)',
-                        borderRadius: '14px',
-                        padding: '14px 18px',
-                        boxShadow: '0 12px 28px rgba(20,20,20,0.08)',
-                      }}
-                    >
-                      <div style={{ whiteSpace: 'pre-wrap', fontFamily: 'var(--font-body)', fontSize: '14px', lineHeight: 1.7 }}>
-                        {message.content}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
-
-              {isTyping && (
-                <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
-                  <div
-                    style={{
-                      width: '220px',
-                      background: 'rgba(194,164,109,0.04)',
-                      border: '1px solid rgba(194,164,109,0.18)',
-                      borderLeft: '4px solid var(--accent)',
-                      borderRadius: '14px',
-                      padding: '16px 18px',
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontFamily: 'var(--font-mono)',
-                        fontSize: '10px',
-                        letterSpacing: '0.12em',
-                        textTransform: 'uppercase',
-                        color: 'var(--muted)',
-                        marginBottom: '10px',
-                      }}
-                    >
-                      Arthur IA
-                    </div>
-                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                      {[0, 1, 2].map(item => (
-                        <div
-                          key={item}
-                          style={{
-                            width: '7px',
-                            height: '7px',
-                            borderRadius: '50%',
-                            background: 'var(--accent)',
-                            animation: 'dotPulse 1.1s infinite',
-                            animationDelay: `${item * 0.15}s`,
-                          }}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div ref={endRef} />
-          </div>
-        </div>
-
-        <div
-          style={{
-            position: 'sticky',
-            bottom: 0,
-            background: 'rgba(255,255,255,0.92)',
-            backdropFilter: 'blur(10px)',
-            borderTop: '1px solid var(--line)',
-            padding: '18px 20px 26px',
-          }}
-        >
-          <div style={{ maxWidth: '980px', margin: '0 auto' }}>
-            <div
-              style={{
-                display: 'flex',
-                gap: '12px',
-                alignItems: 'flex-end',
-              }}
-            >
-              <textarea
-                value={input}
-                onChange={event => setInput(event.target.value)}
-                onKeyDown={event => {
-                  if (event.key === 'Enter' && !event.shiftKey) {
-                    event.preventDefault()
-                    void sendMessage()
-                  }
-                }}
-                rows={3}
-                placeholder="Escriba su consulta jurídica..."
-                className="judicial-chat-input"
-                style={{
-                  flex: 1,
-                  resize: 'none',
-                  border: '1px solid var(--line)',
-                  borderRadius: '12px',
-                  background: 'var(--surface)',
-                  color: 'var(--ink)',
-                  fontFamily: 'var(--font-body)',
-                  fontSize: '15px',
-                  lineHeight: 1.7,
-                  padding: '14px 16px',
-                  outline: 'none',
-                  minHeight: '76px',
-                }}
-              />
-
-              <button
-                type="button"
-                onClick={() => void sendMessage()}
-                disabled={!input.trim() || isTyping}
-                style={{
-                  border: 'none',
-                  background: input.trim() && !isTyping ? 'var(--accent)' : 'var(--surface)',
-                  color: input.trim() && !isTyping ? '#141414' : 'var(--muted)',
-                  borderRadius: '12px',
-                  padding: '14px 22px',
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: '10px',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.12em',
-                  cursor: input.trim() && !isTyping ? 'pointer' : 'not-allowed',
-                  minWidth: '120px',
-                  height: '76px',
-                }}
-              >
-                Enviar
+        <h1 style={{ fontFamily: 'var(--font-body)', fontSize: 'clamp(28px, 4vw, 46px)', fontWeight: 600, color: 'var(--ink)', lineHeight: 1.15, letterSpacing: '-0.01em', textAlign: 'center', marginBottom: '14px', animation: 'fadeUp 0.45s ease 0.04s both' }}>
+          Tu proceso judicial, en un solo lugar.
+        </h1>
+        <p style={{ fontFamily: 'var(--font-body)', fontSize: '16px', color: 'var(--muted)', lineHeight: 1.6, textAlign: 'center', maxWidth: '560px', margin: '0 0 36px', animation: 'fadeUp 0.45s ease 0.08s both' }}>
+          Analiza expedientes, prepara estrategias y redacta documentos con inteligencia artificial.
+        </p>
+        <div style={{ width: '100%', maxWidth: '760px', marginBottom: '14px', animation: 'fadeUp 0.45s ease 0.12s both' }}>
+          <div className="judicial-qbox" style={{ border: '1.5px solid var(--line)', borderRadius: '16px', background: 'var(--paper)', boxShadow: '0 2px 20px rgba(0,0,0,0.05)', overflow: 'hidden', transition: 'border-color 0.2s, box-shadow 0.2s' }}>
+            <textarea value={input} onChange={event => setInput(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void sendMessage() } }} placeholder="Escribe una pregunta o dime qué necesitas hacer..." rows={3} style={{ width: '100%', padding: '20px 24px 10px', border: 'none', outline: 'none', background: 'transparent', fontFamily: 'var(--font-body)', fontSize: '15px', color: 'var(--ink)', lineHeight: 1.65, resize: 'none', boxSizing: 'border-box', display: 'block' }} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px 14px', borderTop: '1px solid var(--line-faint)' }}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.08em', opacity: 0.65 }}>Enter para enviar</span>
+              <button className="judicial-send" onClick={() => void sendMessage()} disabled={!active || isTyping} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 22px', background: active && !isTyping ? 'var(--accent)' : 'var(--surface)', color: active && !isTyping ? '#141414' : 'var(--muted)', border: `1px solid ${active && !isTyping ? 'var(--accent)' : 'var(--line)'}`, borderRadius: '8px', fontFamily: 'var(--font-body)', fontSize: '13px', fontWeight: 600, cursor: active && !isTyping ? 'pointer' : 'default' }}>
+                Consultar
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
               </button>
             </div>
           </div>
+          <p style={{ fontFamily: 'var(--font-body)', fontSize: '11.5px', color: 'var(--muted)', textAlign: 'center', marginTop: '11px', opacity: 0.6 }}>Arthur AI puede cometer errores. Verifica la información importante.</p>
         </div>
+        <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap', animation: 'fadeUp 0.45s ease 0.18s both' }}>
+          {[
+            ['📋', 'Analizar expediente'],
+            ['📄', 'Resumir resolución'],
+            ['⚖️', 'Estrategia procesal'],
+          ].map(([icon, label]) => <button key={label} className="judicial-chip" type="button" onClick={() => setInput(label)}><span>{icon}</span><span>{label}</span></button>)}
+        </div>
+        {messages.length > 0 && (
+          <div ref={endRef} style={{ width: '100%', maxWidth: '760px', marginTop: '28px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {messages.map((message, index) => <div key={`${message.role}-${index}`} style={{ alignSelf: message.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '86%', padding: '13px 16px', borderRadius: '8px', background: message.role === 'user' ? 'rgba(194,164,109,0.12)' : 'var(--surface)', border: '1px solid var(--line)', color: 'var(--ink)', fontFamily: 'var(--font-body)', fontSize: '14px', lineHeight: 1.6 }}>{message.role === 'assistant' ? <SimpleMarkdown text={message.content} /> : message.content}</div>)}
+            {isTyping && <div style={{ color: 'var(--accent)', fontFamily: 'var(--font-mono)', fontSize: '11px', textTransform: 'uppercase' }}>Analizando tu consulta...</div>}
+          </div>
+        )}
       </div>
     </>
   )
