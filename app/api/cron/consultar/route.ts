@@ -98,10 +98,10 @@ export async function GET(request: NextRequest) {
         try {
           const cronologia = await detalleTituloSunarp({
             oficina_registral: titulo.oficina_registral,
-            anio_titulo:       titulo.anio_titulo,
-            numero_titulo:     titulo.numero_titulo,
-            tipo_registro:     titulo.tipo_registro,
-            area_registral:    titulo.area_registral,
+            anio_titulo: titulo.anio_titulo,
+            numero_titulo: titulo.numero_titulo,
+            tipo_registro: titulo.tipo_registro,
+            area_registral: titulo.area_registral,
           })
 
           const normStr = (s: string) =>
@@ -126,18 +126,18 @@ export async function GET(request: NextRequest) {
 
       // Siempre actualizar el estado actual y timestamp de última consulta
       await actualizarEstadoTitulo(titulo.id, resultado.estado, resultado.areaRegistral, resultado.numeroPartida, {
-        fecha_presentacion:         resultado.fechaHoraPresentacion,
-        fecha_vencimiento:          resultado.fechaVencimiento,
-        lugar_presentacion:         resultado.lugarPresentacion,
-        nombre_presentante:         resultado.nombrePresentante,
-        tipo_registro:              resultado.tipoRegistro,
-        monto_devolucion:           resultado.montoDevo,
-        indi_prorroga:              resultado.indiPror,
-        indi_suspension:            resultado.indiSusp,
-        pagos:                      resultado.lstPagos,
-        actos:                      resultado.lstActos,
+        fecha_presentacion: resultado.fechaHoraPresentacion,
+        fecha_vencimiento: resultado.fechaVencimiento,
+        lugar_presentacion: resultado.lugarPresentacion,
+        nombre_presentante: resultado.nombrePresentante,
+        tipo_registro: resultado.tipoRegistro,
+        monto_devolucion: resultado.montoDevo,
+        indi_prorroga: resultado.indiPror,
+        indi_suspension: resultado.indiSusp,
+        pagos: resultado.lstPagos,
+        actos: resultado.lstActos,
         fecha_ingreso_calificacion: fechaIngresoCalif,
-        es_reingreso:               esReingreso,
+        es_reingreso: esReingreso,
       })
     } catch (err) {
       item.error = err instanceof Error ? err.message : 'Error desconocido'
