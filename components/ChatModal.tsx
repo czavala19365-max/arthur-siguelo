@@ -24,6 +24,8 @@ type Message = {
   confirmError?: string
 }
 
+type FormData = Record<string, string>
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 const MARKER_RE = /\[\[CONFIRMAR_TITULO:([\s\S]*?)\]\]/
@@ -91,7 +93,7 @@ function renderContent(text: string): React.ReactNode {
   let i = 0
 
   while (i < lines.length) {
-    const line    = lines[i]
+    const line = lines[i]
     const trimmed = line.trim()
 
     // ── Markdown table block ──────────────────────────────────────────────────
@@ -196,18 +198,24 @@ function renderContent(text: string): React.ReactNode {
 
 interface Props {
   initialQuery: string
+  welcomeMessage?: string
   onClose: () => void
+  formType?: string
+  onFormData?: (data: FormData) => void
+  formData?: FormData
+  inline?: boolean
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
 
-export default function ChatModal({ initialQuery, onClose }: Props) {
+export default function ChatModal({ initialQuery, welcomeMessage, onClose, formType, onFormData, formData, inline = false }: Props) {
   const [messages, setMessages] = useState<Message[]>([])
-  const [input, setInput]       = useState('')
-  const [loading, setLoading]   = useState(false)
-  const [ready, setReady]       = useState(false)
+  const [input, setInput] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [ready, setReady] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
-  const inputRef  = useRef<HTMLTextAreaElement>(null)
+  const messagesRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
 
   // Animate in + send initial query
   useEffect(() => {
@@ -220,7 +228,8 @@ export default function ChatModal({ initialQuery, onClose }: Props) {
 
   // Scroll to bottom
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    const container = messagesRef.current
+    if (container) container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' })
   }, [messages, loading])
 
   // Close on Escape
@@ -240,14 +249,21 @@ export default function ChatModal({ initialQuery, onClose }: Props) {
 
     try {
       const history = [...messages, userMsg].map(m => ({ role: m.role, content: m.content }))
-      const res  = await fetch('/api/dashboard/chat', {
+      const res = await fetch('/api/dashboard/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: history }),
+        body: JSON.stringify({ messages: history, formType, formData }),
       })
       const data = await res.json() as { text?: string; error?: string }
-      const raw  = data.text ?? data.error ?? 'Sin respuesta del servidor.'
-      const { content, pendingTitulo } = parseMessage(raw)
+      const raw = data.text ?? data.error ?? 'Sin respuesta del servidor.'
+      const formMatch = raw.match(/\[\[FORM_DATA:([\s\S]*?)\]\]/)
+      if (formMatch && onFormData) {
+        try {
+          onFormData(JSON.parse(formMatch[1]) as FormData)
+        } catch { }
+      }
+      const contentWithoutFormData = raw.replace(/\[\[FORM_DATA:[\s\S]*?\]\]/, '').trim()
+      const { content, pendingTitulo } = parseMessage(contentWithoutFormData)
 
       setMessages(prev => [...prev, {
         id: uid(), role: 'assistant', content,
@@ -320,8 +336,7 @@ export default function ChatModal({ initialQuery, onClose }: Props) {
         .confirm-btn:hover:not(:disabled) { opacity: 0.82; }
       `}</style>
 
-      {/* Overlay */}
-      <div
+      {!inline && <div
         onClick={onClose}
         style={{
           position: 'fixed', inset: 0,
@@ -329,21 +344,21 @@ export default function ChatModal({ initialQuery, onClose }: Props) {
           zIndex: 1000,
           animation: 'overlayIn 0.2s ease forwards',
         }}
-      />
+      />}
 
       {/* Panel */}
       <div style={{
-        position: 'fixed',
-        top: '50%', left: '50%',
-        transform: ready ? 'translate(-50%,-50%)' : 'translate(-50%, calc(-50% + 24px))',
+        position: inline ? 'relative' : 'fixed',
+        top: inline ? undefined : '50%', left: inline ? undefined : '50%',
+        transform: inline ? undefined : (ready ? 'translate(-50%,-50%)' : 'translate(-50%, calc(-50% + 24px))'),
         opacity: ready ? 1 : 0,
         transition: 'transform 0.3s ease, opacity 0.3s ease',
-        width: 'min(92vw, 900px)',
-        height: 'min(90vh, 860px)',
+        width: inline ? '100%' : 'min(92vw, 900px)',
+        height: inline ? 'min(58vh, 520px)' : 'min(90vh, 860px)',
         background: 'var(--paper)',
         border: '1px solid var(--line)',
         boxShadow: '0 24px 80px rgba(0,0,0,0.22)',
-        zIndex: 1001,
+        zIndex: inline ? undefined : 1001,
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
@@ -392,7 +407,7 @@ export default function ChatModal({ initialQuery, onClose }: Props) {
         </div>
 
         {/* Messages */}
-        <div style={{
+        <div ref={messagesRef} style={{
           flex: 1, overflowY: 'auto',
           padding: '20px 24px',
           display: 'flex', flexDirection: 'column', gap: '14px',
@@ -404,7 +419,7 @@ export default function ChatModal({ initialQuery, onClose }: Props) {
               textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--muted)',
               opacity: 0.5,
             }}>
-              Consultando a Arthur…
+              {welcomeMessage ?? 'Consultando a Arthur…'}
             </div>
           )}
 

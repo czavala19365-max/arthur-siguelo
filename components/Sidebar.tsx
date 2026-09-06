@@ -57,6 +57,13 @@ const IconPublicidad = () => (
   </svg>
 );
 
+const IconClipboard = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="2.5" width="10" height="12" rx="1" />
+    <path d="M6 2.5V1h4v1.5M6 6h4M6 9h4M6 12h2" />
+  </svg>
+);
+
 const IconPartidas = () => (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
     <circle cx="6.5" cy="6.5" r="4" />
@@ -93,6 +100,7 @@ export default function Sidebar({ observadosCount = 0 }: SidebarProps) {
   const router = useRouter();
   const [count, setCount] = useState(observadosCount);
   const [userEmail, setUserEmail] = useState('');
+  const [isAdmin, setIsAdmin] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [sigueloOpen, setSigueloOpen] = useState(false);
 
@@ -113,11 +121,15 @@ export default function Sidebar({ observadosCount = 0 }: SidebarProps) {
         setUserEmail(data.user?.email ?? '');
       })
       .catch(() => { });
+    fetch('/api/admin/access')
+      .then(response => response.ok ? response.json() : { isAdmin: false })
+      .then(data => setIsAdmin(data.isAdmin === true))
+      .catch(() => { });
   }, []);
 
   const links = [
     { href: '/dashboard', label: 'Inicio', hasAlert: false, Icon: IconHome },
-    { href: '/dashboard/publicidad-registral', label: 'Publicidad Registral', hasAlert: false, Icon: IconPublicidad },
+    { href: '/dashboard/publicidad-registral-2', label: 'Publicidad Registral', hasAlert: false, Icon: IconPublicidad },
     { href: '/dashboard/partidas-juridicas', label: 'Partidas - Personas Jurídicas', hasAlert: false, Icon: IconPartidas },
     { href: '/dashboard/agenda', label: 'Agenda de Plazos', hasAlert: false, Icon: IconCalendar },
     { href: '/dashboard/alertas', label: 'Alertas', hasAlert: false, Icon: IconBell },
@@ -403,6 +415,24 @@ export default function Sidebar({ observadosCount = 0 }: SidebarProps) {
               )}
             </Link>
           ))}
+          {isAdmin && (
+            <Link
+              href="/dashboard/publicidad-registral/solicitudes"
+              onClick={() => setMobileOpen(false)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '10px',
+                padding: '10px 16px', marginTop: '12px',
+                fontFamily: 'var(--font-body)', fontSize: '12px',
+                color: isActive('/dashboard/publicidad-registral/solicitudes') ? 'var(--sidebar-text)' : 'var(--sidebar-muted)',
+                background: isActive('/dashboard/publicidad-registral/solicitudes') ? 'var(--sidebar-active-bg)' : 'transparent',
+                borderRadius: '4px', textDecoration: 'none',
+                borderLeft: isActive('/dashboard/publicidad-registral/solicitudes') ? '2px solid var(--accent)' : '2px solid transparent',
+              }}
+            >
+              <IconClipboard />
+              Solicitudes recibidas
+            </Link>
+          )}
         </nav>
 
         {/* User section */}

@@ -15,6 +15,25 @@ export const legalStyles = {
     color: 'var(--muted)',
     marginBottom: 6,
   } satisfies CSSProperties,
+  // Small uppercase mono tag/label used for nav items, chips, badges and modal titles.
+  tag: {
+    fontFamily: 'var(--font-mono)',
+    fontSize: 10,
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.08em',
+  } satisfies CSSProperties,
+  // Small muted mono text used for timestamps, status lines and step counters.
+  meta: {
+    fontFamily: 'var(--font-mono)',
+    fontSize: 11,
+    color: 'var(--muted)',
+  } satisfies CSSProperties,
+  // Mono section heading used inside cards (e.g. "Accionistas", agenda item titles).
+  subheading: {
+    fontFamily: 'var(--font-mono)',
+    fontSize: 12,
+    fontWeight: 600,
+  } satisfies CSSProperties,
   input: {
     width: '100%',
     padding: '10px 12px',

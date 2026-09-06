@@ -274,7 +274,7 @@ export default function SelectModulePage() {
 
           <div
             style={cardBase}
-            onClick={() => router.push('/judicial')}
+            onClick={() => router.push('/judicial/chat')}
             onMouseOver={cardHoverIn}
             onMouseOut={cardHoverOut}
           >

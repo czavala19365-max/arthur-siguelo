@@ -5,6 +5,7 @@ export const runtime = 'nodejs'
 const SOAP_URL = 'https://sprl.sunarp.gob.pe/SunarpSoap3/SunarpInsSoapImplService'
 const SOAP_URL_LOOKUP = 'https://sprl.sunarp.gob.pe/SunarpSoap2/SunarpLstSoapImplService'
 const SOAP_NS = 'http://ws.sunarp.gob.pe/'
+const SOAP_TIMEOUT_MS = 15_000
 
 type CertificateConfig = {
   certificadoID: number
@@ -65,15 +66,8 @@ function buildEnvelope(operation: string, sessionId: string, innerXml: string) {
 }
 
 async function callSoapToUrl(url: string, operation: string, sessionId: string, innerXml: string, accessToken?: string, cookieHeader?: string) {
-
-  console.log("===== SOAP REQUEST =====");
-  console.log("URL:", url);
-  console.log("Operation:", operation);
-  console.log("Session:", sessionId);
-
   const envelope = buildEnvelope(operation, sessionId, innerXml);
-
-  console.log(envelope);
+  const startedAt = Date.now()
 
   const response = await fetch(url, {
     method: 'POST',
@@ -84,14 +78,15 @@ async function callSoapToUrl(url: string, operation: string, sessionId: string, 
       Referer: 'https://sprl.sunarp.gob.pe/sprl/main/sp-certificada',
     },
     body: envelope,
+    signal: AbortSignal.timeout(SOAP_TIMEOUT_MS),
   })
 
-  console.log("STATUS:", response.status);
-
   const xml = await response.text();
-
-  console.log("===== SOAP RESPONSE =====");
-  console.log(xml);
+  console.info('[sprl] SOAP request completed', {
+    operation,
+    status: response.status,
+    durationMs: Date.now() - startedAt,
+  })
   return { response, xml }
 }
 
@@ -315,6 +310,9 @@ export async function POST(request: NextRequest) {
       },
     })
   } catch (err) {
+    if (err instanceof DOMException && err.name === 'TimeoutError') {
+      return NextResponse.json({ ok: false, error: 'SUNARP tardó demasiado en responder.' }, { status: 504 })
+    }
     const message = err instanceof Error ? err.message : 'Error al registrar la solicitud'
     return NextResponse.json({ ok: false, error: message }, { status: 500 })
   }

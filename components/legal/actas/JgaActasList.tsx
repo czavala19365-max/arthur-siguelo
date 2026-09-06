@@ -101,7 +101,7 @@ export default function JgaActasList() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
             <div>
               <div style={{ fontSize: 16, marginBottom: 4 }}>{doc.nombre}</div>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--muted)' }}>
+              <div style={legalStyles.meta}>
                 {doc.estado} · {new Date(doc.created_at).toLocaleDateString('es-PE')}
               </div>
             </div>
@@ -114,11 +114,11 @@ export default function JgaActasList() {
 
       {selectedId && secciones.length > 0 && (
         <div style={{ marginTop: 24 }}>
-          <h2 style={{ fontFamily: 'var(--font-mono)', fontSize: 11, textTransform: 'uppercase' }}>{nombre}</h2>
+          <h2 style={legalStyles.subheading}>{nombre}</h2>
           {secciones.map((s, i) => (
             <div key={i} style={legalStyles.card}>
               {s.titulo && (
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, marginBottom: 8 }}>{s.titulo}</div>
+                <div style={{ ...legalStyles.subheading, marginBottom: 8 }}>{s.titulo}</div>
               )}
               <textarea
                 style={{ ...legalStyles.textarea, minHeight: 100, fontSize: 13 }}

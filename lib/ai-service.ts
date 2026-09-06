@@ -289,7 +289,7 @@ Criterios de urgencia:
   try {
     const judicialClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
     const response = await judicialClient.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-5',
       max_tokens: 300,
       messages: [{ role: 'user', content: prompt }]
     })
@@ -484,7 +484,7 @@ Si el documento está completo, termina con la línea:
         ]
 
   const response = await judicialClient.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-5',
     max_tokens: 3000,
     system: systemPrompt,
     messages,

@@ -60,7 +60,7 @@ export default function JudicialSidebar() {
       .then(({ data }) => {
         setUserEmail(data.user?.email ?? '');
       })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   useEffect(() => {
@@ -68,12 +68,12 @@ export default function JudicialSidebar() {
   }, [pathname]);
 
   const links = [
+    { href: '/judicial/chat', label: 'Chat IA', Icon: IconChat },
     { href: '/judicial', label: 'Mis Procesos', Icon: IconGrid },
     { href: '/judicial/archivados', label: 'Archivados', Icon: IconFolder },
     { href: '/judicial/papelera', label: 'Eliminados', Icon: IconTrash },
     { href: '/judicial/agenda', label: 'Agenda', Icon: IconCalendar },
     { href: '/judicial/alertas', label: 'Alertas', Icon: IconBell },
-    { href: '/judicial/chat', label: 'Chat IA', Icon: IconChat },
   ];
 
   const isActive = (href: string) => {

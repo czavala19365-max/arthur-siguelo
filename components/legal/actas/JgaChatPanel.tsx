@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { DatosJGA, SeccionActa } from '@/lib/document-intelligence/types'
 import type { CambioRealizado, ChatMessage } from '@/lib/legal/jga/chat-acta-service'
+import { legalStyles } from '@/lib/legal/styles'
 
 const QUICK_CHIPS = [
   'Agregar punto de agenda',
@@ -120,15 +121,7 @@ function JgaChatDrawerContent({ secciones, datos, onSeccionesUpdate, onClose }: 
           borderBottom: '1px solid rgba(201, 168, 76, 0.1)',
         }}
       >
-        <span
-          style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: 12,
-            textTransform: 'uppercase',
-            letterSpacing: '0.1em',
-            color: '#c9a84c',
-          }}
-        >
+        <span style={{ ...legalStyles.tag, color: '#c9a84c' }}>
           Chat IA
         </span>
         <button
@@ -203,16 +196,7 @@ function JgaChatDrawerContent({ secciones, datos, onSeccionesUpdate, onClose }: 
           </div>
         ))}
         {loading && (
-          <div
-            style={{
-              alignSelf: 'flex-start',
-              color: 'rgba(201, 168, 76, 0.75)',
-              fontFamily: 'var(--font-mono)',
-              fontSize: 11,
-              textTransform: 'uppercase',
-              letterSpacing: '0.06em',
-            }}
-          >
+          <div style={{ ...legalStyles.tag, alignSelf: 'flex-start', color: 'rgba(201, 168, 76, 0.75)' }}>
             Analizando...
           </div>
         )}
@@ -238,14 +222,11 @@ function JgaChatDrawerContent({ secciones, datos, onSeccionesUpdate, onClose }: 
             disabled={loading}
             onClick={() => setInput(prev => (prev ? `${prev} ${chip}` : chip))}
             style={{
+              ...legalStyles.tag,
               flexShrink: 0,
               background: 'transparent',
               border: '1px solid rgba(201, 168, 76, 0.2)',
               color: '#c9a84c',
-              fontFamily: 'var(--font-mono)',
-              fontSize: 10,
-              textTransform: 'uppercase',
-              letterSpacing: '0.04em',
               padding: '6px 12px',
               cursor: 'pointer',
               borderRadius: 0,
